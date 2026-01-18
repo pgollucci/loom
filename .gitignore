@@ -33,3 +33,7 @@ go.work.sum
 
 # Binary
 arbiter
+
+# Logs
+*.log
+nohup.out
