@@ -27,11 +27,16 @@ type Arbiter struct {
 
 // New creates a new Arbiter instance
 func New(cfg *config.Config) *Arbiter {
+	personaPath := cfg.Agents.DefaultPersonaPath
+	if personaPath == "" {
+		personaPath = "./personas"
+	}
+	
 	return &Arbiter{
 		config:          cfg,
 		agentManager:    agent.NewManager(cfg.Agents.MaxConcurrent),
 		projectManager:  project.NewManager(),
-		personaManager:  persona.NewManager(cfg.Agents.DefaultPersonaPath),
+		personaManager:  persona.NewManager(personaPath),
 		beadsManager:    beads.NewManager(cfg.Beads.BDPath),
 		decisionManager: decision.NewManager(),
 		fileLockManager: NewFileLockManager(cfg.Agents.FileLockTimeout),

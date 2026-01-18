@@ -23,7 +23,7 @@ beads:
 
 agents:
   max_concurrent: 10
-  default_persona_path: ./personas/examples/code-reviewer
+  default_persona_path: ./personas
   heartbeat_interval: 30s
   file_lock_timeout: 10m
 

@@ -120,7 +120,7 @@ func DefaultConfig() *Config {
 		},
 		Agents: AgentsConfig{
 			MaxConcurrent:      10,
-			DefaultPersonaPath: "./personas/examples/code-reviewer",
+			DefaultPersonaPath: "./personas",
 			HeartbeatInterval:  30 * time.Second,
 			FileLockTimeout:    10 * time.Minute,
 		},
