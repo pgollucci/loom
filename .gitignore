@@ -30,3 +30,13 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Arbiter binary
+arbiter
+arbiter-*
+
+# Database
+*.db
+
+# Web UI build artifacts
+web/dist/
