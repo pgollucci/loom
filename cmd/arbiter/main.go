@@ -1,141 +1,80 @@
 package main
 
 import (
-	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
-	"time"
+	"net/http"
+	"os"
+	"strings"
 
-	"github.com/jordanhubbard/arbiter/internal/agent"
-	"github.com/jordanhubbard/arbiter/internal/decision"
-	"github.com/jordanhubbard/arbiter/internal/dispatcher"
-	"github.com/jordanhubbard/arbiter/pkg/types"
+	"github.com/jordanhubbard/arbiter/internal/api"
+	"github.com/jordanhubbard/arbiter/internal/storage"
 )
 
+//go:embed web/*
+var webFiles embed.FS
+
 func main() {
-	fmt.Println("Arbiter - AI Coding Agent Orchestrator")
-	fmt.Println("======================================")
+	// Create storage
+	store := storage.New()
 
-	// Initialize decision maker
-	decisionMaker := decision.NewSimpleMaker()
+	// Create API handler
+	handler := api.NewHandler(store)
 
-	// Initialize dispatcher
-	disp := dispatcher.NewTaskDispatcher(decisionMaker)
+	// Setup HTTP routes
+	mux := http.NewServeMux()
 
-	// Register some example agents
-	registerExampleAgents(disp)
-
-	// Create and dispatch example tasks
-	ctx := context.Background()
-	runExampleTasks(ctx, disp)
-}
-
-func registerExampleAgents(disp *dispatcher.TaskDispatcher) {
-	// Register general purpose agent
-	generalAgent := &types.Agent{
-		ID:           "agent-1",
-		Name:         "General Agent 1",
-		Type:         types.AgentTypeGeneral,
-		Capabilities: []string{"coding", "documentation", "testing"},
-		Status:       types.AgentStatusIdle,
-	}
-	disp.RegisterAgent(generalAgent)
-
-	// Register specialist agent
-	specialistAgent := &types.Agent{
-		ID:           "agent-2",
-		Name:         "Python Specialist",
-		Type:         types.AgentTypeSpecialist,
-		Capabilities: []string{"python", "coding", "debugging"},
-		Status:       types.AgentStatusIdle,
-	}
-	disp.RegisterAgent(specialistAgent)
-
-	// Register reviewer agent
-	reviewerAgent := &types.Agent{
-		ID:           "agent-3",
-		Name:         "Code Reviewer",
-		Type:         types.AgentTypeReviewer,
-		Capabilities: []string{"review", "testing", "quality"},
-		Status:       types.AgentStatusIdle,
-	}
-	disp.RegisterAgent(reviewerAgent)
-
-	fmt.Printf("Registered %d agents\n\n", len(disp.GetAgents()))
-}
-
-func runExampleTasks(ctx context.Context, disp *dispatcher.TaskDispatcher) {
-	tasks := []*types.Task{
-		{
-			ID:          "task-1",
-			Description: "Fix urgent bug in Python code",
-			Priority:    8,
-			Status:      types.TaskStatusPending,
-			CreatedAt:   time.Now(),
-		},
-		{
-			ID:          "task-2",
-			Description: "Write documentation for API",
-			Priority:    3,
-			Status:      types.TaskStatusPending,
-			CreatedAt:   time.Now(),
-		},
-		{
-			ID:          "task-3",
-			Description: "Review code for quality issues",
-			Priority:    5,
-			Status:      types.TaskStatusPending,
-			CreatedAt:   time.Now(),
-		},
-	}
-
-	fmt.Println("Dispatching tasks:")
-	fmt.Println("------------------")
-
-	for _, task := range tasks {
-		// Evaluate priority
-		decisionMaker := decision.NewSimpleMaker()
-		evaluatedPriority := decisionMaker.EvaluatePriority(task)
-		task.Priority = evaluatedPriority
-
-		fmt.Printf("\nTask: %s\n", task.ID)
-		fmt.Printf("  Description: %s\n", task.Description)
-		fmt.Printf("  Priority: %d\n", task.Priority)
-
-		// Assign task to agent
-		assignedAgent, err := disp.AssignTask(ctx, task)
-		if err != nil {
-			log.Printf("  Error: Failed to assign task: %v\n", err)
-			continue
-		}
-
-		fmt.Printf("  Assigned to: %s (%s)\n", assignedAgent.Name, assignedAgent.Type)
-		fmt.Printf("  Agent capabilities: %v\n", assignedAgent.Capabilities)
-
-		// Simulate task execution
-		baseAgent := agent.NewBaseAgent(
-			assignedAgent.ID,
-			assignedAgent.Name,
-			assignedAgent.Type,
-			assignedAgent.Capabilities,
-		)
-
-		result, err := baseAgent.Execute(ctx, task)
-		if err != nil {
-			log.Printf("  Error: Task execution failed: %v\n", err)
-			task.Status = types.TaskStatusFailed
+	// API routes
+	mux.HandleFunc("/api/work", handler.ListWork)
+	mux.HandleFunc("/api/work/create", handler.CreateWork)
+	mux.HandleFunc("/api/agents", handler.ListAgents)
+	mux.HandleFunc("/api/services", handler.ListServices)
+	mux.HandleFunc("/api/services/preferred", handler.GetPreferredServices)
+	
+	// Service-specific routes (handle both costs and usage)
+	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if len(path) > len("/api/services/") {
+			// Determine which handler to use based on the path suffix
+			if strings.Contains(path, "/costs") {
+				if r.Method == http.MethodGet {
+					handler.GetServiceCosts(w, r)
+				} else if r.Method == http.MethodPut {
+					handler.UpdateServiceCosts(w, r)
+				} else {
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			} else if strings.Contains(path, "/usage") {
+				handler.SimulateUsage(w, r)
+			} else {
+				http.Error(w, "Not found", http.StatusNotFound)
+			}
 		} else {
-			task.Status = types.TaskStatusCompleted
-			task.Result = result
-			fmt.Printf("  Status: %s\n", task.Status)
-			fmt.Printf("  Result: %s\n", result.Message)
+			http.Error(w, "Not found", http.StatusNotFound)
 		}
+	})
 
-		// Reset agent status
-		assignedAgent.Status = types.AgentStatusIdle
-		assignedAgent.CurrentTask = nil
+	// Serve static web UI
+	webFS, err := fs.Sub(webFiles, "web")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(webFS)))
+
+	// Get port from environment or use default
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	fmt.Println("\n======================================")
-	fmt.Println("All tasks processed successfully!")
+	addr := fmt.Sprintf(":%s", port)
+	log.Printf("Starting arbiter service on %s", addr)
+	log.Printf("Web UI: http://localhost%s", addr)
+	log.Printf("API: http://localhost%s/api", addr)
+
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal(err)
+	}
 }
