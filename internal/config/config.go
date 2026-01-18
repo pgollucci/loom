@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
+
+	"golang.org/x/term"
 )
 
 // Config holds the arbiter configuration
@@ -47,14 +50,15 @@ func GetPassword() (string, error) {
 		return password, nil
 	}
 
-	// Prompt user for password
+	// Prompt user for password (hidden input)
 	fmt.Print("Enter password to unlock key store: ")
-	var password string
-	_, err := fmt.Scanln(&password)
+	passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println() // Print newline after password input
 	if err != nil {
 		return "", fmt.Errorf("failed to read password: %w", err)
 	}
 
+	password := string(passwordBytes)
 	if password == "" {
 		return "", fmt.Errorf("password cannot be empty")
 	}
