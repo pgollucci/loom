@@ -136,13 +136,7 @@ func DefaultConfig() *Config {
 			RefreshInterval: 5,
 		},
 	}
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/jordanhubbard/arbiter/pkg/secrets"
-)
+}
 
 const (
 	configFileName = ".arbiter.json"

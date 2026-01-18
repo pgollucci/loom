@@ -3,6 +3,7 @@ package arbiter
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jordanhubbard/arbiter/internal/agent"
@@ -59,6 +60,17 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 	}
 	if err := a.projectManager.LoadProjects(projects); err != nil {
 		return fmt.Errorf("failed to load projects: %w", err)
+	}
+
+	// Load beads from filesystem for each project
+	for _, p := range a.config.Projects {
+		if p.BeadsPath != "" {
+			a.beadsManager.SetBeadsPath(p.BeadsPath)
+			if err := a.beadsManager.LoadBeadsFromFilesystem(p.BeadsPath); err != nil {
+				// Log error but don't fail initialization
+				fmt.Fprintf(os.Stderr, "Warning: failed to load beads for project %s: %v\n", p.ID, err)
+			}
+		}
 	}
 
 	return nil
