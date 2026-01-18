@@ -103,9 +103,9 @@ A creative, user-focused front-end engineer who excels at building intuitive, ac
 
 ## Standards & Conventions
 
-### Accessibility (WCAG 2.1 AA minimum)
+### Accessibility (WCAG 2.1 AA minimum, targeting WCAG 2.2 where applicable)
 - [ ] Minimum 4.5:1 contrast ratio for normal text
-- [ ] Minimum 3:1 contrast ratio for large text
+- [ ] Minimum 3:1 contrast ratio for large text (18pt+/14pt+ bold, or 24px+/19px+)
 - [ ] All interactive elements keyboard accessible
 - [ ] Proper ARIA labels and roles
 - [ ] Semantic HTML5 elements

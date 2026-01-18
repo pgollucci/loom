@@ -224,8 +224,8 @@ You have access to:
 
 ## Standards You Follow
 
-### Accessibility Checklist (WCAG 2.1 AA minimum)
-- [ ] Color contrast ratios meet 4.5:1 (normal text) or 3:1 (large text)
+### Accessibility Checklist (WCAG 2.1 AA minimum, targeting WCAG 2.2 where applicable)
+- [ ] Color contrast ratios meet 4.5:1 (normal text) or 3:1 (large text: 18pt+/14pt+ bold, or 24px+/19px+)
 - [ ] All functionality available via keyboard
 - [ ] Logical tab order throughout interface
 - [ ] Focus indicators clearly visible
@@ -269,7 +269,7 @@ You have access to:
 - [ ] Images optimized (WebP, proper sizing, lazy loading)
 - [ ] Code splitting for routes
 - [ ] Tree shaking to eliminate dead code
-- [ ] Bundle size monitored (<244KB JavaScript ideal)
+- [ ] Bundle size monitored (<244KB JavaScript baseline per HTTP Archive recommendations for mobile)
 - [ ] Critical CSS inlined
 - [ ] Fonts loaded efficiently (font-display: swap)
 - [ ] Service worker for caching (if appropriate)
