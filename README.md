@@ -29,7 +29,7 @@ Arbiter consists of several key components:
 
 ### Prerequisites
 
-- Go 1.16 or higher
+- Go 1.24 or higher
 
 ### Installation
 
