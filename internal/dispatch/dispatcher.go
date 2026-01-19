@@ -76,8 +76,8 @@ func (d *Dispatcher) GetSystemStatus() SystemStatus {
 
 // DispatchOnce finds at most one ready bead and asks an idle agent to work on it.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*DispatchResult, error) {
-	if len(d.providers.List()) == 0 {
-		d.setStatus(StatusParked, "no providers registered")
+	if len(d.providers.ListActive()) == 0 {
+		d.setStatus(StatusParked, "no active providers registered")
 		return &DispatchResult{Dispatched: false, ProjectID: projectID}, nil
 	}
 
@@ -102,6 +102,20 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 
 	// Only auto-dispatch non-P0 task/epic beads.
 	idleAgents := d.agents.GetIdleAgentsByProject(projectID)
+	filteredAgents := make([]*models.Agent, 0, len(idleAgents))
+	for _, candidateAgent := range idleAgents {
+		if candidateAgent == nil {
+			continue
+		}
+		if candidateAgent.ProviderID == "" {
+			continue
+		}
+		if !d.providers.IsActive(candidateAgent.ProviderID) {
+			continue
+		}
+		filteredAgents = append(filteredAgents, candidateAgent)
+	}
+	idleAgents = filteredAgents
 	idleByID := make(map[string]*models.Agent, len(idleAgents))
 	for _, a := range idleAgents {
 		if a != nil {
@@ -157,7 +171,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		selectedProjectID = candidate.ProjectID
 	}
 	if ag == nil {
-		d.setStatus(StatusParked, "no idle agents")
+		d.setStatus(StatusParked, "no idle agents with active providers")
 		return &DispatchResult{Dispatched: false, ProjectID: selectedProjectID}, nil
 	}
 	if ag.ProviderID == "" {

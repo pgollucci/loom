@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"github.com/jordanhubbard/arbiter/internal/temporal"
 	temporalactivities "github.com/jordanhubbard/arbiter/internal/temporal/activities"
 	"github.com/jordanhubbard/arbiter/internal/temporal/eventbus"
+	"github.com/jordanhubbard/arbiter/internal/temporal/workflows"
 	"github.com/jordanhubbard/arbiter/pkg/config"
 	"github.com/jordanhubbard/arbiter/pkg/models"
 )
@@ -265,15 +267,18 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 				selected = p.ConfiguredModel
 			}
 			_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
-				ID:              p.ID,
-				Name:            p.Name,
-				Type:            p.Type,
-				Endpoint:        normalizeProviderEndpoint(p.Endpoint),
-				APIKey:          "",
-				Model:           selected,
-				ConfiguredModel: p.ConfiguredModel,
-				SelectedModel:   selected,
-				SelectedGPU:     p.SelectedGPU,
+				ID:                     p.ID,
+				Name:                   p.Name,
+				Type:                   p.Type,
+				Endpoint:               normalizeProviderEndpoint(p.Endpoint),
+				APIKey:                 "",
+				Model:                  selected,
+				ConfiguredModel:        p.ConfiguredModel,
+				SelectedModel:          selected,
+				SelectedGPU:            p.SelectedGPU,
+				Status:                 p.Status,
+				LastHeartbeatAt:        p.LastHeartbeatAt,
+				LastHeartbeatLatencyMs: p.LastHeartbeatLatencyMs,
 			})
 		}
 
@@ -294,7 +299,7 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 			ag.Persona = persona
 			// Ensure a provider exists.
 			if ag.ProviderID == "" {
-				providers := a.providerRegistry.List()
+				providers := a.providerRegistry.ListActive()
 				if len(providers) == 0 {
 					continue
 				}
@@ -322,12 +327,14 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 	// Start Temporal worker if configured
 	if a.temporalManager != nil {
 		a.temporalManager.RegisterActivity(temporalactivities.NewDispatchActivities(a.dispatcher))
+		a.temporalManager.RegisterActivity(temporalactivities.NewProviderActivities(a.providerRegistry, a.database, a.eventBus))
 		if err := a.temporalManager.Start(); err != nil {
 			return fmt.Errorf("failed to start temporal: %w", err)
 		}
 
 		// Start the Temporal-controlled dispatch loop for all projects.
 		_ = a.temporalManager.StartDispatcherWorkflow(ctx, "", 10*time.Second)
+		_ = a.startProviderHeartbeats(ctx)
 	}
 
 	return nil
@@ -423,7 +430,7 @@ func (a *Arbiter) ensureDefaultAgents(ctx context.Context, projectID string) err
 		return err
 	}
 
-	providers := a.providerRegistry.List()
+	providers := a.providerRegistry.ListActive()
 	if len(providers) == 0 {
 		return nil
 	}
@@ -480,6 +487,7 @@ func (a *Arbiter) ensureBootstrapProvider() error {
 		Type:     "local",
 		Endpoint: "http://localhost:8000/v1",
 		Model:    model,
+		Status:   "active",
 	}
 	if err := a.providerRegistry.Upsert(config); err != nil {
 		return fmt.Errorf("failed to register bootstrap provider: %w", err)
@@ -686,9 +694,9 @@ func (a *Arbiter) SpawnAgent(ctx context.Context, name, personaName, projectID s
 
 	// If no provider specified, pick the first registered provider.
 	if providerID == "" {
-		providers := a.providerRegistry.List()
+		providers := a.providerRegistry.ListActive()
 		if len(providers) == 0 {
-			return nil, fmt.Errorf("no providers registered")
+			return nil, fmt.Errorf("no active providers registered")
 		}
 		providerID = providers[0].Config.ID
 	}
@@ -784,14 +792,17 @@ func (a *Arbiter) RegisterProvider(ctx context.Context, p *internalmodels.Provid
 	}
 
 	_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
-		ID:              p.ID,
-		Name:            p.Name,
-		Type:            p.Type,
-		Endpoint:        p.Endpoint,
-		Model:           p.SelectedModel,
-		ConfiguredModel: p.ConfiguredModel,
-		SelectedModel:   p.SelectedModel,
-		SelectedGPU:     p.SelectedGPU,
+		ID:                     p.ID,
+		Name:                   p.Name,
+		Type:                   p.Type,
+		Endpoint:               p.Endpoint,
+		Model:                  p.SelectedModel,
+		ConfiguredModel:        p.ConfiguredModel,
+		SelectedModel:          p.SelectedModel,
+		SelectedGPU:            p.SelectedGPU,
+		Status:                 p.Status,
+		LastHeartbeatAt:        p.LastHeartbeatAt,
+		LastHeartbeatLatencyMs: p.LastHeartbeatLatencyMs,
 	})
 	if a.eventBus != nil {
 		_ = a.eventBus.Publish(&eventbus.Event{
@@ -806,6 +817,7 @@ func (a *Arbiter) RegisterProvider(ctx context.Context, p *internalmodels.Provid
 			},
 		})
 	}
+	_ = a.ensureProviderHeartbeat(ctx, p.ID)
 
 	return p, nil
 }
@@ -846,14 +858,17 @@ func (a *Arbiter) UpdateProvider(ctx context.Context, p *internalmodels.Provider
 	}
 
 	_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
-		ID:              p.ID,
-		Name:            p.Name,
-		Type:            p.Type,
-		Endpoint:        p.Endpoint,
-		Model:           p.SelectedModel,
-		ConfiguredModel: p.ConfiguredModel,
-		SelectedModel:   p.SelectedModel,
-		SelectedGPU:     p.SelectedGPU,
+		ID:                     p.ID,
+		Name:                   p.Name,
+		Type:                   p.Type,
+		Endpoint:               p.Endpoint,
+		Model:                  p.SelectedModel,
+		ConfiguredModel:        p.ConfiguredModel,
+		SelectedModel:          p.SelectedModel,
+		SelectedGPU:            p.SelectedGPU,
+		Status:                 p.Status,
+		LastHeartbeatAt:        p.LastHeartbeatAt,
+		LastHeartbeatLatencyMs: p.LastHeartbeatLatencyMs,
 	})
 	if a.eventBus != nil {
 		_ = a.eventBus.Publish(&eventbus.Event{
@@ -868,6 +883,7 @@ func (a *Arbiter) UpdateProvider(ctx context.Context, p *internalmodels.Provider
 			},
 		})
 	}
+	_ = a.ensureProviderHeartbeat(ctx, p.ID)
 
 	return p, nil
 }
@@ -892,6 +908,154 @@ func (a *Arbiter) DeleteProvider(ctx context.Context, providerID string) error {
 
 func (a *Arbiter) GetProviderModels(ctx context.Context, providerID string) ([]provider.Model, error) {
 	return a.providerRegistry.GetModels(ctx, providerID)
+}
+
+// ReplResult represents a CEO REPL response.
+type ReplResult struct {
+	ProviderID   string `json:"provider_id"`
+	ProviderName string `json:"provider_name"`
+	Model        string `json:"model"`
+	Response     string `json:"response"`
+	TokensUsed   int    `json:"tokens_used"`
+	LatencyMs    int64  `json:"latency_ms"`
+}
+
+// RunReplQuery sends a high-priority query through Temporal using the best provider.
+func (a *Arbiter) RunReplQuery(ctx context.Context, message string) (*ReplResult, error) {
+	if strings.TrimSpace(message) == "" {
+		return nil, fmt.Errorf("message is required")
+	}
+	if a.temporalManager == nil {
+		return nil, fmt.Errorf("temporal manager not configured")
+	}
+	if a.database == nil {
+		return nil, fmt.Errorf("database not configured")
+	}
+
+	providerRecord, err := a.selectBestProviderForRepl()
+	if err != nil {
+		return nil, err
+	}
+
+	systemPrompt := a.buildArbiterPersonaPrompt()
+	input := workflows.ProviderQueryWorkflowInput{
+		ProviderID:   providerRecord.ID,
+		SystemPrompt: systemPrompt,
+		Message:      message,
+		Temperature:  0.2,
+		MaxTokens:    1200,
+	}
+
+	result, err := a.temporalManager.RunProviderQueryWorkflow(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	model := result.Model
+	if model == "" {
+		model = providerRecord.SelectedModel
+	}
+	if model == "" {
+		model = providerRecord.Model
+	}
+	return &ReplResult{
+		ProviderID:   providerRecord.ID,
+		ProviderName: providerRecord.Name,
+		Model:        model,
+		Response:     result.Response,
+		TokensUsed:   result.TokensUsed,
+		LatencyMs:    result.LatencyMs,
+	}, nil
+}
+
+func (a *Arbiter) selectBestProviderForRepl() (*internalmodels.Provider, error) {
+	providers, err := a.database.ListProviders()
+	if err != nil {
+		return nil, err
+	}
+
+	var best *internalmodels.Provider
+	bestScore := -math.MaxFloat64
+	for _, p := range providers {
+		if p == nil || p.Status != "active" {
+			continue
+		}
+		score := a.scoreProviderForRepl(p)
+		if best == nil || score > bestScore {
+			best = p
+			bestScore = score
+		}
+	}
+
+	if best == nil {
+		return nil, fmt.Errorf("no active providers available")
+	}
+	return best, nil
+}
+
+func (a *Arbiter) scoreProviderForRepl(p *internalmodels.Provider) float64 {
+	quality := p.ModelScore
+	modelName := p.SelectedModel
+	if modelName == "" {
+		modelName = p.Model
+	}
+	if modelName == "" {
+		modelName = p.ConfiguredModel
+	}
+	if quality == 0 && a.modelCatalog != nil && modelName != "" {
+		spec := modelcatalog.ParseModelName(modelName)
+		spec.Name = modelName
+		quality = a.modelCatalog.Score(spec)
+	}
+	latency := p.LastHeartbeatLatencyMs
+	if latency <= 0 {
+		latency = 120000
+	}
+	return (quality * 1000) - float64(latency)
+}
+
+func (a *Arbiter) buildArbiterPersonaPrompt() string {
+	persona, err := a.personaManager.LoadPersona("arbiter")
+	if err != nil {
+		return "You are Arbiter, the orchestration system. Respond to the CEO with clear guidance and actionable next steps."
+	}
+
+	focus := strings.Join(persona.FocusAreas, ", ")
+	standards := strings.Join(persona.Standards, "; ")
+
+	return fmt.Sprintf(
+		"You are Arbiter, the orchestration system. Treat this as a high-priority CEO request.\n\nMission: %s\nCharacter: %s\nTone: %s\nFocus Areas: %s\nDecision Making: %s\nStandards: %s",
+		strings.TrimSpace(persona.Mission),
+		strings.TrimSpace(persona.Character),
+		strings.TrimSpace(persona.Tone),
+		strings.TrimSpace(focus),
+		strings.TrimSpace(persona.DecisionMaking),
+		strings.TrimSpace(standards),
+	)
+}
+
+func (a *Arbiter) startProviderHeartbeats(ctx context.Context) error {
+	if a.temporalManager == nil || a.database == nil {
+		return nil
+	}
+	providers, err := a.database.ListProviders()
+	if err != nil {
+		return err
+	}
+	for _, p := range providers {
+		if p == nil || p.ID == "" {
+			continue
+		}
+		_ = a.ensureProviderHeartbeat(ctx, p.ID)
+	}
+	return nil
+}
+
+func (a *Arbiter) ensureProviderHeartbeat(ctx context.Context, providerID string) error {
+	if a.temporalManager == nil || providerID == "" {
+		return nil
+	}
+	return a.temporalManager.StartProviderHeartbeatWorkflow(ctx, providerID, 30*time.Second)
 }
 
 // NegotiateProviderModel selects the best available model from the catalog for a provider.

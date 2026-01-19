@@ -90,6 +90,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Work (non-bead prompts)
 	mux.HandleFunc("/api/v1/work", s.handleWork)
 
+	// CEO REPL
+	mux.HandleFunc("/api/v1/repl", s.handleRepl)
+
 	// Configuration
 	mux.HandleFunc("/api/v1/config", s.handleConfig)
 	mux.HandleFunc("/api/v1/config/export.yaml", s.handleConfigExportYAML)

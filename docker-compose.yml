@@ -95,6 +95,22 @@ services:
       retries: 3
       start_period: 40s
 
+  arbiter-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: arbiter-test
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - TEMPORAL_REQUIRED=true
+    networks:
+      - arbiter-network
+    command: ["go", "test", "-v", "./..."]
+
 networks:
   arbiter-network:
     driver: bridge

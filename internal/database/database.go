@@ -69,6 +69,9 @@ func (d *Database) initSchema() error {
 		requires_key BOOLEAN NOT NULL DEFAULT 0,
 		key_id TEXT,
 		status TEXT NOT NULL DEFAULT 'active',
+		last_heartbeat_at DATETIME,
+		last_heartbeat_latency_ms INTEGER,
+		last_heartbeat_error TEXT,
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL
 	);
@@ -117,6 +120,9 @@ func (d *Database) initSchema() error {
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selection_reason TEXT")
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN model_score REAL")
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selected_gpu TEXT")
+	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN last_heartbeat_at DATETIME")
+	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN last_heartbeat_latency_ms INTEGER")
+	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN last_heartbeat_error TEXT")
 	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN is_sticky BOOLEAN")
 	_, _ = d.db.Exec("UPDATE projects SET is_sticky = 0 WHERE is_sticky IS NULL")
 	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN provider_id TEXT")
@@ -380,8 +386,8 @@ func (d *Database) CreateProvider(provider *internalmodels.Provider) error {
 	provider.UpdatedAt = time.Now()
 
 	query := `
-		INSERT INTO providers (id, name, type, endpoint, model, description, requires_key, key_id, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO providers (id, name, type, endpoint, model, description, requires_key, key_id, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := d.db.Exec(query,
@@ -394,6 +400,9 @@ func (d *Database) CreateProvider(provider *internalmodels.Provider) error {
 		provider.RequiresKey,
 		provider.KeyID,
 		provider.Status,
+		provider.LastHeartbeatAt,
+		provider.LastHeartbeatLatencyMs,
+		provider.LastHeartbeatError,
 		provider.CreatedAt,
 		provider.UpdatedAt,
 	)
@@ -416,8 +425,8 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 	provider.UpdatedAt = time.Now()
 
 	query := `
-		INSERT INTO providers (id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO providers (id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			type = excluded.type,
@@ -432,6 +441,9 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 			requires_key = excluded.requires_key,
 			key_id = excluded.key_id,
 			status = excluded.status,
+			last_heartbeat_at = excluded.last_heartbeat_at,
+			last_heartbeat_latency_ms = excluded.last_heartbeat_latency_ms,
+			last_heartbeat_error = excluded.last_heartbeat_error,
 			updated_at = excluded.updated_at
 	`
 
@@ -450,6 +462,9 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 		provider.RequiresKey,
 		provider.KeyID,
 		provider.Status,
+		provider.LastHeartbeatAt,
+		provider.LastHeartbeatLatencyMs,
+		provider.LastHeartbeatError,
 		provider.CreatedAt,
 		provider.UpdatedAt,
 	)
@@ -487,7 +502,7 @@ func (d *Database) DeleteAllAgents() error {
 // GetProvider retrieves a provider by ID
 func (d *Database) GetProvider(id string) (*internalmodels.Provider, error) {
 	query := `
-		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, status, created_at, updated_at
+		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, created_at, updated_at
 		FROM providers
 		WHERE id = ?
 	`
@@ -508,6 +523,9 @@ func (d *Database) GetProvider(id string) (*internalmodels.Provider, error) {
 		&provider.RequiresKey,
 		&provider.KeyID,
 		&provider.Status,
+		&provider.LastHeartbeatAt,
+		&provider.LastHeartbeatLatencyMs,
+		&provider.LastHeartbeatError,
 		&provider.CreatedAt,
 		&provider.UpdatedAt,
 	)
@@ -525,7 +543,7 @@ func (d *Database) GetProvider(id string) (*internalmodels.Provider, error) {
 // ListProviders retrieves all providers
 func (d *Database) ListProviders() ([]*internalmodels.Provider, error) {
 	query := `
-		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, status, created_at, updated_at
+		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, created_at, updated_at
 		FROM providers
 		ORDER BY created_at DESC
 	`
@@ -554,6 +572,9 @@ func (d *Database) ListProviders() ([]*internalmodels.Provider, error) {
 			&provider.RequiresKey,
 			&provider.KeyID,
 			&provider.Status,
+			&provider.LastHeartbeatAt,
+			&provider.LastHeartbeatLatencyMs,
+			&provider.LastHeartbeatError,
 			&provider.CreatedAt,
 			&provider.UpdatedAt,
 		)

@@ -16,6 +16,12 @@ This guide helps new users run Arbiter, register projects, and work with agents 
 docker-compose up -d
 ```
 
+For local development with the full container stack, you can also use:
+
+```bash
+make run
+```
+
 Once running, Arbiter serves the API on `:8080` and the Temporal UI on `:8088`.
 
 ## Project Registration
@@ -79,8 +85,37 @@ Key fields:
 4. Assign agents to projects and monitor progress.
 5. Use decisions/approvals for escalations (e.g., CEO workflow).
 
+## Testing
+
+Arbiter’s default `make test` runs the full Docker stack with Temporal:
+
+```bash
+make test
+```
+
+## Project Management UI
+
+The Projects section and Project Viewer both support CRUD operations:
+
+- **Add Project**: create a new project with repo, branch, and beads path.
+- **Edit Project**: update fields like branch, beads path, perpetual/sticky flags.
+- **Delete Project**: remove a project and its assignments.
+
+Changes are applied immediately and reflected across the UI.
+
+## CEO REPL
+
+The CEO REPL lets you send high-priority questions directly to Arbiter. It uses
+Temporal to route the request through the best available provider (quality and
+latency weighted) with the Arbiter persona context.
+
+1. Navigate to the **CEO REPL** section.
+2. Enter your question and click **Send**.
+3. Review the response and provider/model metadata.
+
 ## Troubleshooting
 
 - If beads fail to load, run `make lint-yaml` to validate YAML.
 - If providers are missing, register them in the Providers UI and re-negotiate models.
+- If providers show as disabled, check heartbeat errors and verify the provider endpoint.
 - If no work is dispatched, check the Project Viewer for blocked beads or missing agents.

@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
@@ -56,6 +57,8 @@ func NewManager(cfg *config.TemporalConfig) (*Manager, error) {
 	w.RegisterWorkflow(workflows.DecisionWorkflow)
 	w.RegisterWorkflow(workflows.DispatcherWorkflow)
 	w.RegisterWorkflow(eventbus.EventAggregatorWorkflow)
+	w.RegisterWorkflow(workflows.ProviderHeartbeatWorkflow)
+	w.RegisterWorkflow(workflows.ProviderQueryWorkflow)
 
 	// Register activities
 	if eventBus != nil {
@@ -238,6 +241,55 @@ func (m *Manager) StartDispatcherWorkflow(ctx context.Context, projectID string,
 		log.Printf("Started dispatcher workflow for project %s", projectID)
 	}
 	return nil
+}
+
+// StartProviderHeartbeatWorkflow starts or resumes a provider heartbeat workflow.
+func (m *Manager) StartProviderHeartbeatWorkflow(ctx context.Context, providerID string, interval time.Duration) error {
+	workflowID := fmt.Sprintf("provider-heartbeat-%s", providerID)
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                  workflowID,
+		TaskQueue:           m.config.TaskQueue,
+		WorkflowTaskTimeout: m.config.WorkflowTaskTimeout,
+		WorkflowRunTimeout:  0,
+	}
+
+	input := workflows.ProviderHeartbeatWorkflowInput{
+		ProviderID: providerID,
+		Interval:   interval,
+	}
+
+	_, err := m.client.ExecuteWorkflow(ctx, workflowOptions, workflows.ProviderHeartbeatWorkflow, input)
+	if err != nil {
+		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
+			return nil
+		}
+		return fmt.Errorf("failed to start provider heartbeat workflow: %w", err)
+	}
+
+	log.Printf("Started provider heartbeat workflow for %s", providerID)
+	return nil
+}
+
+// RunProviderQueryWorkflow executes a direct provider query workflow and waits for result.
+func (m *Manager) RunProviderQueryWorkflow(ctx context.Context, input workflows.ProviderQueryWorkflowInput) (*activities.ProviderQueryResult, error) {
+	workflowOptions := client.StartWorkflowOptions{
+		ID:                  fmt.Sprintf("repl-%d", time.Now().UTC().UnixNano()),
+		TaskQueue:           m.config.TaskQueue,
+		WorkflowTaskTimeout: m.config.WorkflowTaskTimeout,
+		WorkflowRunTimeout:  5 * time.Minute,
+	}
+
+	we, err := m.client.ExecuteWorkflow(ctx, workflowOptions, workflows.ProviderQueryWorkflow, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start provider query workflow: %w", err)
+	}
+
+	var result activities.ProviderQueryResult
+	if err := we.Get(ctx, &result); err != nil {
+		return nil, fmt.Errorf("failed to get provider query result: %w", err)
+	}
+
+	return &result, nil
 }
 
 // SignalAgentWorkflow sends a signal to an agent workflow

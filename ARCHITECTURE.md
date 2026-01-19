@@ -32,6 +32,8 @@ flowchart LR
     DISP[Dispatcher]
     WM[WorkerManager]
     PR[Provider Registry]
+    HB[Provider Heartbeats]
+    REPL[CEO REPL Handler]
     KM[Key Manager]
     CFG[Config DB (SQLite)]
     BM[Beads Manager (.beads)]
@@ -42,6 +44,8 @@ flowchart LR
   subgraph Temporal[Temporal (optional)]
     TW[Temporal Worker]
     TS[Temporal Server]
+    PHW[Provider Heartbeat WF]
+    PQW[Provider Query WF]
   end
 
   subgraph Providers[Model Providers]
@@ -59,17 +63,23 @@ flowchart LR
   API --> DM
   API --> WM
   API --> PR
+  API --> REPL
+  REPL -->|query| TW
   API --> KM
 
   DISP --> BM
   DISP --> WM
   WM --> PR
+  PR --> HB
   PR --> VLLM
   PR --> OAI
 
   EB -. signal .-> TW
   TW --> TS
   DISP -. activity .-> TW
+  HB -. activity .-> TW
+  TW --> PHW
+  TW --> PQW
 ```
 
 ```
@@ -156,6 +166,28 @@ Return agent, provider, and decrypted API key
 Use credentials to communicate with provider
 ```
 
+### 5. Provider Heartbeats
+```
+Temporal schedules provider heartbeat workflow
+  ↓
+Provider activity calls /models to validate responsiveness
+  ↓
+Provider status + latency persisted in DB
+  ↓
+Registry updated and dispatch skips disabled providers
+```
+
+### 6. CEO REPL Query
+```
+CEO submits REPL prompt
+  ↓
+API selects best active provider (quality + latency)
+  ↓
+Temporal runs provider query workflow
+  ↓
+Response returned with provider/model metadata
+```
+
 ## Security Model
 
 ### Encryption at Rest
@@ -201,10 +233,19 @@ CREATE TABLE providers (
     name TEXT NOT NULL,
     type TEXT NOT NULL,              -- openai, anthropic, local, etc.
     endpoint TEXT NOT NULL,          -- URL or path
+    model TEXT,
+    configured_model TEXT,
+    selected_model TEXT,
+    selection_reason TEXT,
+    model_score REAL,
+    selected_gpu TEXT,
     description TEXT,
     requires_key BOOLEAN NOT NULL,   -- Does it need credentials?
     key_id TEXT,                     -- Reference to key manager
     status TEXT NOT NULL,            -- active, inactive, etc.
+    last_heartbeat_at DATETIME,
+    last_heartbeat_latency_ms INTEGER,
+    last_heartbeat_error TEXT,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL
 );

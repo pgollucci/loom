@@ -4,19 +4,23 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // ProviderConfig represents the configuration for a provider
 type ProviderConfig struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Type     string `json:"type"` // openai, anthropic, local, etc.
-	Endpoint string `json:"endpoint"`
-	APIKey   string `json:"api_key,omitempty"`
-	Model          string `json:"model"` // effective model to use
-	ConfiguredModel string `json:"configured_model,omitempty"`
-	SelectedModel   string `json:"selected_model,omitempty"`
-	SelectedGPU     string `json:"selected_gpu,omitempty"`
+	ID                     string    `json:"id"`
+	Name                   string    `json:"name"`
+	Type                   string    `json:"type"` // openai, anthropic, local, etc.
+	Endpoint               string    `json:"endpoint"`
+	APIKey                 string    `json:"api_key,omitempty"`
+	Model                  string    `json:"model"` // effective model to use
+	ConfiguredModel        string    `json:"configured_model,omitempty"`
+	SelectedModel          string    `json:"selected_model,omitempty"`
+	SelectedGPU            string    `json:"selected_gpu,omitempty"`
+	Status                 string    `json:"status,omitempty"`
+	LastHeartbeatAt        time.Time `json:"last_heartbeat_at,omitempty"`
+	LastHeartbeatLatencyMs int64     `json:"last_heartbeat_latency_ms,omitempty"`
 }
 
 // Registry manages registered AI providers
@@ -49,6 +53,9 @@ func (r *Registry) Clear() {
 func (r *Registry) Register(config *ProviderConfig) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if config.Status == "" {
+		config.Status = "active"
+	}
 
 	// Check if provider already exists
 	if _, exists := r.providers[config.ID]; exists {
@@ -78,6 +85,9 @@ func (r *Registry) Register(config *ProviderConfig) error {
 func (r *Registry) Upsert(config *ProviderConfig) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if config.Status == "" {
+		config.Status = "active"
+	}
 
 	var protocol Protocol
 	switch config.Type {
@@ -130,11 +140,41 @@ func (r *Registry) List() []*RegisteredProvider {
 	return providers
 }
 
+// ListActive returns registered providers with active status.
+func (r *Registry) ListActive() []*RegisteredProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	providers := make([]*RegisteredProvider, 0, len(r.providers))
+	for _, provider := range r.providers {
+		if provider != nil && provider.Config != nil && provider.Config.Status == "active" {
+			providers = append(providers, provider)
+		}
+	}
+
+	return providers
+}
+
+// IsActive returns true if the provider is registered and active.
+func (r *Registry) IsActive(providerID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	provider, exists := r.providers[providerID]
+	if !exists || provider == nil || provider.Config == nil {
+		return false
+	}
+	return provider.Config.Status == "active"
+}
+
 // SendChatCompletion sends a chat completion request to a provider
 func (r *Registry) SendChatCompletion(ctx context.Context, providerID string, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	provider, err := r.Get(providerID)
 	if err != nil {
 		return nil, err
+	}
+	if provider.Config != nil && provider.Config.Status != "active" {
+		return nil, fmt.Errorf("provider %s is disabled", providerID)
 	}
 
 	// Use default model if not specified

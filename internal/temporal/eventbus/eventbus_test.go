@@ -1,6 +1,8 @@
 package eventbus
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -8,10 +10,13 @@ import (
 	"github.com/jordanhubbard/arbiter/pkg/config"
 )
 
-// TestEventBusCreation tests that event bus can be created
-func TestEventBusCreation(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
+func temporalTestConfig() *config.TemporalConfig {
+	host := os.Getenv("TEMPORAL_HOST")
+	if host == "" {
+		host = "localhost:7233"
+	}
+	return &config.TemporalConfig{
+		Host:                     host,
 		Namespace:                "test-namespace",
 		TaskQueue:                "test-queue",
 		WorkflowExecutionTimeout: 1 * time.Hour,
@@ -19,9 +24,22 @@ func TestEventBusCreation(t *testing.T) {
 		EnableEventBus:           true,
 		EventBufferSize:          100,
 	}
+}
+
+func temporalRequired() bool {
+	value := strings.ToLower(os.Getenv("TEMPORAL_REQUIRED"))
+	return value == "true" || value == "1" || value == "yes"
+}
+
+// TestEventBusCreation tests that event bus can be created
+func TestEventBusCreation(t *testing.T) {
+	cfg := temporalTestConfig()
 
 	temporalClient, err := client.New(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -36,18 +54,13 @@ func TestEventBusCreation(t *testing.T) {
 
 // TestEventPublishSubscribe tests basic pub/sub functionality
 func TestEventPublishSubscribe(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           true,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig()
 
 	temporalClient, err := client.New(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -96,18 +109,13 @@ func TestEventPublishSubscribe(t *testing.T) {
 
 // TestEventFilter tests event filtering
 func TestEventFilter(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           true,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig()
 
 	temporalClient, err := client.New(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -163,18 +171,13 @@ func TestEventFilter(t *testing.T) {
 
 // TestMultipleSubscribers tests multiple subscribers
 func TestMultipleSubscribers(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           true,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig()
 
 	temporalClient, err := client.New(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -223,18 +226,13 @@ func TestMultipleSubscribers(t *testing.T) {
 
 // TestEventTypes tests publishing different event types
 func TestEventTypes(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           true,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig()
 
 	temporalClient, err := client.New(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}

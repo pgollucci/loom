@@ -16,7 +16,7 @@ description: |
   - API supports the same CRUD operations with validation and persistence.
   - Project list and viewer stay in sync after CRUD actions.
 
-status: open
+status: closed
 priority: 0
 project_id: arbiter
 assigned_to: null
@@ -31,7 +31,7 @@ tags:
   - api
   - crud
 created_at: 2026-01-19T15:10:00Z
-updated_at: 2026-01-19T15:10:00Z
-closed_at: null
+updated_at: 2026-01-19T18:30:00Z
+closed_at: 2026-01-19T18:30:00Z
 context:
   source: user-request

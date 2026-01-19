@@ -116,6 +116,11 @@ function initUI() {
         uiState.project.selectedId = e.target.value || '';
         render();
     });
+
+    const replSend = document.getElementById('repl-send');
+    replSend?.addEventListener('click', () => {
+        sendReplQuery();
+    });
 }
 
 function setupNavActiveState() {
@@ -373,12 +378,17 @@ function renderProjectViewer() {
 
     details.innerHTML = `
         <div><strong>ID:</strong> ${escapeHtml(project.id)}</div>
+        <div><strong>Status:</strong> ${escapeHtml(project.status || '')}</div>
         <div><strong>Repo:</strong> ${escapeHtml(project.git_repo || '')}</div>
         <div><strong>Branch:</strong> ${escapeHtml(project.branch || '')}</div>
         <div><strong>Beads path:</strong> ${escapeHtml(project.beads_path || '')}</div>
+        <div><strong>Perpetual:</strong> ${project.is_perpetual ? 'Yes' : 'No'}</div>
+        <div><strong>Sticky:</strong> ${project.is_sticky ? 'Yes' : 'No'}</div>
         <div><strong>Agents assigned:</strong> ${(project.agents || []).length}</div>
         <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button type="button" class="secondary" onclick="assignAgentToProject('${escapeHtml(project.id)}')">Assign agent</button>
+            <button type="button" class="secondary" onclick="showEditProjectModal('${escapeHtml(project.id)}')">Edit project</button>
+            <button type="button" class="danger" onclick="deleteProject('${escapeHtml(project.id)}')">Delete project</button>
         </div>
     `;
 
@@ -523,6 +533,9 @@ function renderProviders() {
             const selectionReason = escapeHtml(p.selection_reason || '');
             const modelScore = p.model_score ?? null;
             const selectedGpu = escapeHtml(p.selected_gpu || '');
+            const status = escapeHtml(p.status || 'unknown');
+            const heartbeatLatency = p.last_heartbeat_latency_ms ?? null;
+            const heartbeatError = escapeHtml(p.last_heartbeat_error || '');
             const modelsKey = `providerModels:${id}`;
             const deleteKey = `deleteProvider:${id}`;
             const negotiateKey = `providerNegotiate:${id}`;
@@ -539,6 +552,9 @@ function renderProviders() {
                     <div class="small"><strong>Selection reason:</strong> ${selectionReason || '<em>pending</em>'}</div>
                     <div class="small"><strong>Model score:</strong> ${modelScore !== null ? escapeHtml(modelScore.toFixed(2)) : '<em>n/a</em>'}</div>
                     <div class="small"><strong>Selected GPU:</strong> ${selectedGpu || '<em>n/a</em>'}</div>
+                    <div class="small"><strong>Status:</strong> ${status}</div>
+                    <div class="small"><strong>Heartbeat latency:</strong> ${heartbeatLatency !== null && heartbeatLatency !== 0 ? `${escapeHtml(String(heartbeatLatency))}ms` : '<em>n/a</em>'}</div>
+                    ${heartbeatError ? `<div class="small"><strong>Heartbeat error:</strong> ${heartbeatError}</div>` : ''}
                     <div class="provider-actions">
                         <button type="button" class="secondary" onclick="fetchProviderModels('${id}')" ${isBusy(modelsKey) ? 'disabled' : ''}>${isBusy(modelsKey) ? 'Loading…' : 'Models'}</button>
                         <button type="button" class="secondary" onclick="renegotiateProvider('${id}')" ${isBusy(negotiateKey) ? 'disabled' : ''}>${isBusy(negotiateKey) ? 'Negotiating…' : 'Re-negotiate model'}</button>
@@ -662,18 +678,180 @@ function renderProjects() {
             </div>
             <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 <button type="button" class="secondary" onclick="viewProject('${escapeHtml(project.id)}')">View</button>
+                <button type="button" class="secondary" onclick="showEditProjectModal('${escapeHtml(project.id)}')">Edit</button>
+                <button type="button" class="danger" onclick="deleteProject('${escapeHtml(project.id)}')">Delete</button>
             </div>
         </div>
     `).join('');
     
     document.getElementById('project-list').innerHTML =
-        html || renderEmptyState('No projects configured', 'Add a project in config.yaml to get started.');
+        html || renderEmptyState('No projects configured', 'Add a project to get started.', '<button type="button" onclick="showCreateProjectModal()">Add Project</button>');
 }
 
 function viewProject(projectId) {
     uiState.project.selectedId = projectId;
     location.hash = '#project-viewer';
     render();
+}
+
+function projectFormFields(project = {}) {
+    return [
+        { id: 'name', label: 'Name', type: 'text', required: true, value: project.name || '' },
+        { id: 'git_repo', label: 'Git repo', type: 'text', required: true, value: project.git_repo || '' },
+        { id: 'branch', label: 'Branch', type: 'text', required: true, value: project.branch || 'main' },
+        { id: 'beads_path', label: 'Beads path', type: 'text', required: false, value: project.beads_path || '.beads' },
+        {
+            id: 'is_perpetual',
+            label: 'Perpetual project',
+            type: 'select',
+            required: false,
+            value: project.is_perpetual ? 'true' : 'false',
+            options: [
+                { value: 'false', label: 'No' },
+                { value: 'true', label: 'Yes' }
+            ]
+        },
+        {
+            id: 'is_sticky',
+            label: 'Sticky project',
+            type: 'select',
+            required: false,
+            value: project.is_sticky ? 'true' : 'false',
+            options: [
+                { value: 'false', label: 'No' },
+                { value: 'true', label: 'Yes' }
+            ]
+        }
+    ];
+}
+
+function parseBool(value) {
+    return value === 'true' || value === '1' || value === 'yes';
+}
+
+function buildProjectPayload(data) {
+    const payload = {
+        name: (data.name || '').trim(),
+        git_repo: (data.git_repo || '').trim(),
+        branch: (data.branch || '').trim(),
+        beads_path: (data.beads_path || '').trim(),
+        is_perpetual: parseBool(data.is_perpetual || 'false'),
+        is_sticky: parseBool(data.is_sticky || 'false')
+    };
+
+    if (!payload.name) delete payload.name;
+    if (!payload.git_repo) delete payload.git_repo;
+    if (!payload.branch) delete payload.branch;
+    if (!payload.beads_path) delete payload.beads_path;
+
+    return payload;
+}
+
+async function showCreateProjectModal() {
+    try {
+        const res = await formModal({
+            title: 'Add project',
+            submitText: 'Create',
+            fields: projectFormFields()
+        });
+        if (!res) return;
+
+        await apiCall('/projects', {
+            method: 'POST',
+            body: JSON.stringify(buildProjectPayload(res))
+        });
+
+        showToast('Project created', 'success');
+        await loadProjects();
+        render();
+    } catch (e) {
+        // handled
+    }
+}
+
+async function showEditProjectModal(projectId) {
+    const project = state.projects.find((p) => p.id === projectId);
+    if (!project) return;
+
+    try {
+        const res = await formModal({
+            title: `Edit project ${project.name}`,
+            submitText: 'Save',
+            fields: projectFormFields(project)
+        });
+        if (!res) return;
+
+        await apiCall(`/projects/${projectId}`, {
+            method: 'PUT',
+            body: JSON.stringify(buildProjectPayload(res))
+        });
+
+        showToast('Project updated', 'success');
+        await loadProjects();
+        render();
+    } catch (e) {
+        // handled
+    }
+}
+
+async function deleteProject(projectId) {
+    const project = state.projects.find((p) => p.id === projectId);
+    const ok = await confirmModal({
+        title: 'Delete project?',
+        body: `This will delete project ${project ? project.name : projectId}.`,
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        danger: true
+    });
+    if (!ok) return;
+
+    try {
+        await apiCall(`/projects/${projectId}`, { method: 'DELETE' });
+        showToast('Project deleted', 'success');
+        await loadProjects();
+        if (uiState.project.selectedId === projectId) {
+            uiState.project.selectedId = '';
+        }
+        render();
+    } catch (e) {
+        // handled
+    }
+}
+
+async function sendReplQuery() {
+    const input = document.getElementById('repl-input');
+    const responseEl = document.getElementById('repl-response');
+    const sendBtn = document.getElementById('repl-send');
+    if (!input || !responseEl || !sendBtn) return;
+
+    const message = (input.value || '').trim();
+    if (!message) {
+        showToast('Enter a question first.', 'error');
+        return;
+    }
+
+    try {
+        setBusy('repl', true);
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending…';
+        responseEl.textContent = 'Sending request…';
+
+        const res = await apiCall('/repl', {
+            method: 'POST',
+            body: JSON.stringify({ message })
+        });
+
+        responseEl.textContent = `${res.response || ''}`.trim() || 'No response returned.';
+        if (res.provider_id) {
+            responseEl.textContent = `${responseEl.textContent}\n\n— Provider: ${res.provider_name || res.provider_id} (${res.model || 'unknown'})${res.latency_ms ? `, ${res.latency_ms}ms` : ''}`;
+        }
+    } catch (e) {
+        responseEl.textContent = 'Request failed.';
+    } finally {
+        setBusy('repl', false);
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+    }
 }
 
 function renderPersonas() {
@@ -1328,15 +1506,31 @@ function formModal({ title, submitText = 'Submit', cancelText = 'Cancel', fields
                         const id = `field-${formId}-${f.id}`;
                         const required = f.required ? 'required' : '';
                         const placeholder = f.placeholder ? `placeholder="${escapeHtml(f.placeholder)}"` : '';
+                        const value = f.value !== undefined && f.value !== null ? String(f.value) : '';
                         if (f.type === 'textarea') {
                             return `
                                 <label for="${id}">${escapeHtml(f.label)}</label>
-                                <textarea id="${id}" name="${escapeHtml(f.id)}" ${required} ${placeholder}></textarea>
+                                <textarea id="${id}" name="${escapeHtml(f.id)}" ${required} ${placeholder}>${escapeHtml(value)}</textarea>
+                            `;
+                        }
+                        if (f.type === 'select') {
+                            const options = Array.isArray(f.options) ? f.options : [];
+                            return `
+                                <label for="${id}">${escapeHtml(f.label)}</label>
+                                <select id="${id}" name="${escapeHtml(f.id)}" ${required}>
+                                    ${options
+                                        .map((opt) => {
+                                            const optValue = String(opt.value ?? '');
+                                            const selected = optValue === value ? 'selected' : '';
+                                            return `<option value="${escapeHtml(optValue)}" ${selected}>${escapeHtml(opt.label ?? optValue)}</option>`;
+                                        })
+                                        .join('')}
+                                </select>
                             `;
                         }
                         return `
                             <label for="${id}">${escapeHtml(f.label)}</label>
-                            <input type="text" id="${id}" name="${escapeHtml(f.id)}" ${required} ${placeholder}>
+                            <input type="text" id="${id}" name="${escapeHtml(f.id)}" ${required} ${placeholder} value="${escapeHtml(value)}">
                         `;
                     })
                     .join('')}

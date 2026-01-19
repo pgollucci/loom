@@ -20,6 +20,7 @@
                 <li><a href="#decisions" aria-label="Jump to Decisions section">Decisions</a></li>
                 <li><a href="#personas" aria-label="Jump to Personas section">Personas</a></li>
                 <li><a href="#projects" aria-label="Jump to Projects section">Projects</a></li>
+                <li><a href="#repl" aria-label="Jump to CEO REPL section">CEO REPL</a></li>
             </ul>
         </nav>
     </header>
@@ -33,6 +34,9 @@
                     <div class="field">
                         <label for="project-view-select">Project</label>
                         <select id="project-view-select"></select>
+                    </div>
+                    <div class="field">
+                        <button type="button" class="secondary" id="project-view-add" onclick="showCreateProjectModal()" aria-haspopup="dialog">Add Project</button>
                     </div>
                 </div>
             </div>
@@ -173,6 +177,9 @@
         <!-- Projects Section -->
         <section id="projects">
             <h2><span aria-hidden="true">📁</span> Projects</h2>
+            <div class="controls">
+                <button type="button" onclick="showCreateProjectModal()" aria-haspopup="dialog">Add Project</button>
+            </div>
             <div id="project-list" class="project-container">
                 <!-- Projects will be loaded here -->
             </div>
@@ -183,6 +190,18 @@
             <h2><span aria-hidden="true">🎭</span> Personas</h2>
             <div id="persona-list" class="persona-container">
                 <!-- Personas will be loaded here -->
+            </div>
+        </section>
+
+        <section id="repl">
+            <h2><span aria-hidden="true">🧭</span> CEO REPL</h2>
+            <div class="repl-container">
+                <label for="repl-input">Ask Arbiter</label>
+                <textarea id="repl-input" rows="4" placeholder="Ask a high-priority question…"></textarea>
+                <div class="controls">
+                    <button type="button" id="repl-send">Send</button>
+                </div>
+                <div id="repl-response" class="repl-response" aria-live="polite"></div>
             </div>
         </section>
     </main>

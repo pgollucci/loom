@@ -61,9 +61,9 @@ all: build
 
 # Build the application
 build:
-	@echo "Building $(BINARY_NAME)..."
+	@echo "Building $(BINARY_NAME) containers..."
 	$(call run_with_failure_bead,build,go run ./cmd/yaml-lint)
-	$(call run_with_failure_bead,build,go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/arbiter)
+	$(call run_with_failure_bead,build,docker-compose build)
 
 # Build for multiple platforms
 build-all: lint-yaml
@@ -75,11 +75,11 @@ build-all: lint-yaml
 
 # Run the application
 run: build
-	$(call run_with_failure_bead,run,./$(BINARY_NAME) -config config.yaml)
+	$(call run_with_failure_bead,run,docker-compose up --build)
 
 # Run tests
 test:
-	$(call run_with_failure_bead,test,go test -v ./...)
+	$(call run_with_failure_bead,test,bash -c "docker-compose up -d --build && docker-compose run --rm arbiter-test; status=$$?; docker-compose down; exit $$status")
 
 # Run tests with coverage
 coverage:

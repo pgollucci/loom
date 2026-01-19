@@ -2,28 +2,46 @@ package temporal
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jordanhubbard/arbiter/pkg/config"
 )
 
-// TestTemporalManagerCreation tests that the Temporal manager can be created
-func TestTemporalManagerCreation(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
+func temporalTestConfig(enableEventBus bool) *config.TemporalConfig {
+	host := os.Getenv("TEMPORAL_HOST")
+	if host == "" {
+		host = "localhost:7233"
+	}
+	return &config.TemporalConfig{
+		Host:                     host,
 		Namespace:                "test-namespace",
 		TaskQueue:                "test-queue",
 		WorkflowExecutionTimeout: 1 * time.Hour,
 		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           true,
+		EnableEventBus:           enableEventBus,
 		EventBufferSize:          100,
 	}
+}
+
+func temporalRequired() bool {
+	value := strings.ToLower(os.Getenv("TEMPORAL_REQUIRED"))
+	return value == "true" || value == "1" || value == "yes"
+}
+
+// TestTemporalManagerCreation tests that the Temporal manager can be created
+func TestTemporalManagerCreation(t *testing.T) {
+	cfg := temporalTestConfig(true)
 
 	// This test will only pass if Temporal server is running
 	// For unit tests, we skip if Temporal is not available
 	manager, err := NewManager(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -44,18 +62,13 @@ func TestTemporalManagerCreation(t *testing.T) {
 
 // TestTemporalManagerWithoutEventBus tests manager creation without event bus
 func TestTemporalManagerWithoutEventBus(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           false,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig(false)
 
 	manager, err := NewManager(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -76,18 +89,13 @@ func TestTemporalManagerNilConfig(t *testing.T) {
 
 // TestTemporalClientCreation tests client creation
 func TestTemporalClientCreation(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           false,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig(false)
 
 	client, err := NewManager(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
@@ -104,18 +112,13 @@ func TestTemporalClientCreation(t *testing.T) {
 
 // TestWorkflowStarter tests starting a workflow
 func TestWorkflowStarter(t *testing.T) {
-	cfg := &config.TemporalConfig{
-		Host:                     "localhost:7233",
-		Namespace:                "test-namespace",
-		TaskQueue:                "test-queue",
-		WorkflowExecutionTimeout: 1 * time.Hour,
-		WorkflowTaskTimeout:      10 * time.Second,
-		EnableEventBus:           true,
-		EventBufferSize:          100,
-	}
+	cfg := temporalTestConfig(true)
 
 	manager, err := NewManager(cfg)
 	if err != nil {
+		if temporalRequired() {
+			t.Fatalf("Temporal server not available: %v", err)
+		}
 		t.Skipf("Temporal server not available: %v", err)
 		return
 	}
