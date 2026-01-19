@@ -1,6 +1,6 @@
 id: bd-020
 type: task
-title: P2 - Tests: model-name parsing + negotiation ranking + scoring
+title: "P2 - Tests: model-name parsing + negotiation ranking + scoring"
 description: |
   Add tests to prevent regressions in model parsing and selection.
 

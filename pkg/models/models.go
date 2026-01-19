@@ -72,6 +72,7 @@ type Project struct {
 	Context     map[string]string `json:"context"`      // Additional context for agents
 	Status      ProjectStatus     `json:"status"`       // Current project status
 	IsPerpetual bool              `json:"is_perpetual"` // If true, project never closes
+	IsSticky    bool              `json:"is_sticky"`    // If true, project auto-added on startup
 	Comments    []ProjectComment  `json:"comments"`     // Comments on project state
 	CreatedAt   time.Time         `json:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at"`

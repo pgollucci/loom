@@ -125,6 +125,34 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 		}
 		if len(storedProjects) > 0 {
 			projects = storedProjects
+			known := map[string]struct{}{}
+			for _, project := range storedProjects {
+				if project == nil {
+					continue
+				}
+				known[project.ID] = struct{}{}
+			}
+			for _, p := range a.config.Projects {
+				if !p.IsSticky {
+					continue
+				}
+				if _, ok := known[p.ID]; ok {
+					continue
+				}
+				proj := &models.Project{
+					ID:          p.ID,
+					Name:        p.Name,
+					GitRepo:     p.GitRepo,
+					Branch:      p.Branch,
+					BeadsPath:   p.BeadsPath,
+					IsPerpetual: p.IsPerpetual,
+					IsSticky:    p.IsSticky,
+					Context:     p.Context,
+					Status:      models.ProjectStatusOpen,
+				}
+				_ = a.database.UpsertProject(proj)
+				projects = append(projects, proj)
+			}
 		} else {
 			// Bootstrap from config.yaml into the configuration database.
 			for _, p := range a.config.Projects {
@@ -135,6 +163,7 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 					Branch:      p.Branch,
 					BeadsPath:   p.BeadsPath,
 					IsPerpetual: p.IsPerpetual,
+					IsSticky:    p.IsSticky,
 					Context:     p.Context,
 					Status:      models.ProjectStatusOpen,
 				}
@@ -151,6 +180,7 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 				Branch:      p.Branch,
 				BeadsPath:   p.BeadsPath,
 				IsPerpetual: p.IsPerpetual,
+				IsSticky:    p.IsSticky,
 				Context:     p.Context,
 				Status:      models.ProjectStatusOpen,
 			})

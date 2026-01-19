@@ -104,6 +104,7 @@ type ProjectConfig struct {
 	Branch      string            `yaml:"branch"`
 	BeadsPath   string            `yaml:"beads_path"`
 	IsPerpetual bool              `yaml:"is_perpetual" json:"is_perpetual,omitempty"`
+	IsSticky    bool              `yaml:"is_sticky" json:"is_sticky,omitempty"`
 	Context     map[string]string `yaml:"context"`
 }
 

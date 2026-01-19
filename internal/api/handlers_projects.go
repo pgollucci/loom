@@ -227,6 +227,7 @@ func (s *Server) handleProjectState(w http.ResponseWriter, r *http.Request, id s
 		"name":           project.Name,
 		"status":         project.Status,
 		"is_perpetual":   project.IsPerpetual,
+		"is_sticky":      project.IsSticky,
 		"open_beads":     len(openBeads),
 		"can_close":      canClose,
 		"created_at":     project.CreatedAt,

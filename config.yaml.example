@@ -53,6 +53,7 @@ projects:
     branch: main
     beads_path: .beads
     is_perpetual: true
+    is_sticky: true
     context:
       build_command: "go build"
       test_command: "go test ./..."

@@ -210,6 +210,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 			Branch    string            `json:"branch"`
 			BeadsPath string            `json:"beads_path"`
 			Context   map[string]string `json:"context"`
+			IsSticky  *bool             `json:"is_sticky"`
 		}
 		if err := s.parseJSON(r, &req); err != nil {
 			s.respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -225,6 +226,13 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.respondError(w, http.StatusInternalServerError, err.Error())
 			return
+		}
+		if req.IsSticky != nil {
+			updates := map[string]interface{}{"is_sticky": *req.IsSticky}
+			if err := s.arbiter.GetProjectManager().UpdateProject(project.ID, updates); err == nil {
+				s.arbiter.PersistProject(project.ID)
+				project, _ = s.arbiter.GetProjectManager().GetProject(project.ID)
+			}
 		}
 
 		s.respondJSON(w, http.StatusCreated, project)
@@ -266,6 +274,7 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 			Context     map[string]string `json:"context"`
 			Status      string            `json:"status"`
 			IsPerpetual *bool             `json:"is_perpetual"`
+			IsSticky    *bool             `json:"is_sticky"`
 		}
 		if err := s.parseJSON(r, &req); err != nil {
 			s.respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -292,6 +301,9 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.IsPerpetual != nil {
 			updates["is_perpetual"] = *req.IsPerpetual
+		}
+		if req.IsSticky != nil {
+			updates["is_sticky"] = *req.IsSticky
 		}
 
 		if err := s.arbiter.GetProjectManager().UpdateProject(id, updates); err != nil {

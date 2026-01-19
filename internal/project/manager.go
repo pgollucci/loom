@@ -49,6 +49,7 @@ func (m *Manager) CreateProject(name, gitRepo, branch, beadsPath string, context
 		Context:     context,
 		Status:      models.ProjectStatusOpen,
 		IsPerpetual: false,
+		IsSticky:    false,
 		Comments:    []models.ProjectComment{},
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -114,6 +115,9 @@ func (m *Manager) UpdateProject(id string, updates map[string]interface{}) error
 	}
 	if isPerpetual, ok := updates["is_perpetual"].(bool); ok {
 		project.IsPerpetual = isPerpetual
+	}
+	if isSticky, ok := updates["is_sticky"].(bool); ok {
+		project.IsSticky = isSticky
 	}
 	if status, ok := updates["status"].(string); ok {
 		project.Status = models.ProjectStatus(status)

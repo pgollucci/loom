@@ -19,19 +19,19 @@ Arbiter is a lightweight AI coding agent orchestration system that manages workf
 Default personas are available under `./personas/`:
 
 - `personas/arbiter` — Arbiter-specific system persona(s)
-- `personas/examples/ceo` — Human CEO decision maker (tie-breaks / approvals)
-- `personas/examples/project-manager` — Plans work, files beads, drives delivery
-- `personas/examples/product-manager` — Identifies feature gaps and writes PRDs for epics
-- `personas/examples/engineering-manager` — Reviews technical direction and feasibility
-- `personas/examples/code-reviewer` — Reviews patches for correctness and quality
-- `personas/examples/qa-engineer` — Testing strategy and verification
-- `personas/examples/devops-engineer` — Deployment/ops and infrastructure guidance
-- `personas/examples/documentation-manager` — Keeps docs accurate per doc policy
-- `personas/examples/decision-maker` — Resolves routine decisions (non-CEO)
-- `personas/examples/web-designer` — UX/UI guidance
-- `personas/examples/web-designer-engineer` — UX/UI + implementation guidance
-- `personas/examples/public-relations-manager` — Messaging/launch communication support
-- `personas/examples/housekeeping-bot` — Cleanup and hygiene tasks
+- `personas/default/ceo` — Human CEO decision maker (tie-breaks / approvals)
+- `personas/default/project-manager` — Plans work, files beads, drives delivery
+- `personas/default/product-manager` — Identifies feature gaps and writes PRDs for epics
+- `personas/default/engineering-manager` — Reviews technical direction and feasibility
+- `personas/default/code-reviewer` — Reviews patches for correctness and quality
+- `personas/default/qa-engineer` — Testing strategy and verification
+- `personas/default/devops-engineer` — Deployment/ops and infrastructure guidance
+- `personas/default/documentation-manager` — Keeps docs accurate per doc policy
+- `personas/default/decision-maker` — Resolves routine decisions (non-CEO)
+- `personas/default/web-designer` — UX/UI guidance
+- `personas/default/web-designer-engineer` — UX/UI + implementation guidance
+- `personas/default/public-relations-manager` — Messaging/launch communication support
+- `personas/default/housekeeping-bot` — Cleanup and hygiene tasks
 
 ## Project Registration
 

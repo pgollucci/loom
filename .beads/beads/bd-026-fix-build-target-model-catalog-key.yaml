@@ -1,6 +1,6 @@
 id: bd-026
 type: task
-title: P0 - Fix build failure: missing modelCatalogKey in arbiter
+title: "P0 - Fix build failure: missing modelCatalogKey in arbiter"
 description: |
   Fix the build failure when running make build due to an undefined
   modelCatalogKey symbol in internal/arbiter/arbiter.go.

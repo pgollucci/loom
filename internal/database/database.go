@@ -80,6 +80,7 @@ func (d *Database) initSchema() error {
 		branch TEXT NOT NULL,
 		beads_path TEXT NOT NULL,
 		is_perpetual BOOLEAN NOT NULL DEFAULT 0,
+		is_sticky BOOLEAN NOT NULL DEFAULT 0,
 		status TEXT NOT NULL DEFAULT 'open',
 		context_json TEXT,
 		created_at DATETIME NOT NULL,
@@ -116,6 +117,7 @@ func (d *Database) initSchema() error {
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selection_reason TEXT")
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN model_score REAL")
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selected_gpu TEXT")
+	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN is_sticky BOOLEAN")
 	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN provider_id TEXT")
 	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN role TEXT")
 
@@ -172,14 +174,15 @@ func (d *Database) UpsertProject(project *models.Project) error {
 	project.UpdatedAt = time.Now()
 
 	query := `
-		INSERT INTO projects (id, name, git_repo, branch, beads_path, is_perpetual, status, context_json, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO projects (id, name, git_repo, branch, beads_path, is_perpetual, is_sticky, status, context_json, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			git_repo = excluded.git_repo,
 			branch = excluded.branch,
 			beads_path = excluded.beads_path,
 			is_perpetual = excluded.is_perpetual,
+			is_sticky = excluded.is_sticky,
 			status = excluded.status,
 			context_json = excluded.context_json,
 			updated_at = excluded.updated_at
@@ -192,6 +195,7 @@ func (d *Database) UpsertProject(project *models.Project) error {
 		project.Branch,
 		project.BeadsPath,
 		project.IsPerpetual,
+		project.IsSticky,
 		string(project.Status),
 		contextJSON,
 		project.CreatedAt,
@@ -206,7 +210,7 @@ func (d *Database) UpsertProject(project *models.Project) error {
 
 func (d *Database) ListProjects() ([]*models.Project, error) {
 	query := `
-		SELECT id, name, git_repo, branch, beads_path, is_perpetual, status, context_json, created_at, updated_at
+		SELECT id, name, git_repo, branch, beads_path, is_perpetual, is_sticky, status, context_json, created_at, updated_at
 		FROM projects
 		ORDER BY created_at DESC
 	`
@@ -229,6 +233,7 @@ func (d *Database) ListProjects() ([]*models.Project, error) {
 			&p.Branch,
 			&p.BeadsPath,
 			&p.IsPerpetual,
+			&p.IsSticky,
 			&status,
 			&contextJSON,
 			&p.CreatedAt,

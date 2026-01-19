@@ -44,6 +44,7 @@ projects:
     branch: main
     beads_path: .beads
     is_perpetual: true
+    is_sticky: true
     context:
       build_command: "make build"
       test_command: "make test"

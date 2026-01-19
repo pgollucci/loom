@@ -1,4 +1,4 @@
-.PHONY: all build build-all run test coverage fmt vet deps clean install config dev-setup docker-build docker-run docker-stop docker-clean help lint
+.PHONY: all build build-all run test coverage fmt vet deps clean install config dev-setup docker-build docker-run docker-stop docker-clean help lint lint-yaml
 
 # Build variables
 BINARY_NAME=arbiter
@@ -8,12 +8,12 @@ LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 all: build
 
 # Build the application
-build:
+build: lint-yaml
 	@echo "Building $(BINARY_NAME)..."
 	go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/arbiter
 
 # Build for multiple platforms
-build-all:
+build-all: lint-yaml
 	@echo "Building for multiple platforms..."
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-linux-amd64 ./cmd/arbiter
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-amd64 ./cmd/arbiter
@@ -55,7 +55,10 @@ clean:
 	rm -f *.db
 
 # Run linters
-lint: fmt vet
+lint: fmt vet lint-yaml
+
+lint-yaml:
+	go run ./cmd/yaml-lint
 
 # Install the binary to $GOPATH/bin
 install: build
@@ -108,6 +111,7 @@ help:
 	@echo "  make fmt          - Format code"
 	@echo "  make vet          - Run go vet"
 	@echo "  make lint         - Run linters"
+	@echo "  make lint-yaml    - Validate YAML files"
 	@echo "  make deps         - Download and tidy dependencies"
 	@echo "  make clean        - Clean build artifacts"
 	@echo "  make install      - Install binary to GOPATH/bin"

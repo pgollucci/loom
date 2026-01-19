@@ -1,6 +1,6 @@
 id: bd-018
 type: task
-title: P2 - UI: show provider configured/selected model, score, and optional GPU
+title: "P2 - UI: show provider configured/selected model, score, and optional GPU"
 description: |
   Extend the Web UI to surface provider model negotiation state.
 
