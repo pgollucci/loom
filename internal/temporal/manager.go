@@ -350,3 +350,139 @@ func (m *Manager) QueryAgentWorkflow(ctx context.Context, agentID, queryType str
 
 	return result, nil
 }
+
+// DSL Operations
+
+// ExecuteTemporalDSL parses and executes Temporal DSL from agent instructions
+// Returns execution results and the cleaned text with DSL removed
+func (m *Manager) ExecuteTemporalDSL(ctx context.Context, agentID string, dslText string) (*TemporalDSLExecution, error) {
+	if dslText == "" {
+		return nil, fmt.Errorf("dsl text cannot be empty")
+	}
+
+	// Parse DSL instructions
+	instructions, _, err := ParseTemporalDSL(dslText)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse DSL: %w", err)
+	}
+
+	if len(instructions) == 0 {
+		return nil, fmt.Errorf("no temporal instructions found in DSL")
+	}
+
+	// Execute instructions
+	executor := NewDSLExecutor(m)
+	execution := executor.ExecuteInstructions(ctx, instructions, agentID)
+
+	return execution, nil
+}
+
+// ParseTemporalInstructions parses DSL without executing (for validation)
+func (m *Manager) ParseTemporalInstructions(text string) ([]TemporalInstruction, string, error) {
+	instructions, cleanedText, err := ParseTemporalDSL(text)
+	if err != nil {
+		return nil, text, err
+	}
+
+	// Validate all instructions
+	for _, instr := range instructions {
+		if err := ValidateInstruction(instr); err != nil {
+			log.Printf("Instruction validation failed: %v", err)
+		}
+	}
+
+	return instructions, cleanedText, nil
+}
+
+// StripTemporalDSL removes Temporal DSL blocks from text
+func (m *Manager) StripTemporalDSL(text string) (string, error) {
+	_, cleanedText, err := ParseTemporalDSL(text)
+	return cleanedText, err
+}
+
+// ScheduleWorkflow schedules a workflow with options
+func (m *Manager) ScheduleWorkflow(ctx context.Context, opts WorkflowOptions) (string, error) {
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        opts.ID,
+		TaskQueue: m.config.TaskQueue,
+	}
+
+	if opts.Timeout > 0 {
+		workflowOptions.WorkflowRunTimeout = opts.Timeout
+	}
+
+	// Retry policy
+	if opts.Retry > 0 {
+		// Note: RetryPolicy is per-activity, but we can set it for the workflow
+		workflowOptions.WorkflowRunTimeout = opts.Timeout
+	}
+
+	run, err := m.client.ExecuteWorkflow(ctx, workflowOptions, opts.Name, opts.Input)
+	if err != nil {
+		return "", fmt.Errorf("failed to schedule workflow: %w", err)
+	}
+
+	return run.GetID(), nil
+}
+
+// GetWorkflowResult waits for a workflow to complete and returns its result
+func (m *Manager) GetWorkflowResult(ctx context.Context, workflowID string) (interface{}, error) {
+	run := m.client.GetWorkflow(ctx, workflowID, "")
+	if run == nil {
+		return nil, fmt.Errorf("workflow not found: %s", workflowID)
+	}
+
+	var result interface{}
+	err := run.Get(ctx, &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workflow result: %w", err)
+	}
+
+	return result, nil
+}
+
+// ExecuteActivity executes an activity and waits for result
+func (m *Manager) ExecuteActivity(ctx context.Context, opts ActivityOptions) (interface{}, error) {
+	// For now, return error since direct activity execution from DSL is complex
+	// This would require spawning a temporary workflow to execute the activity
+	return nil, fmt.Errorf("direct activity execution not yet implemented")
+}
+
+// CreateSchedule creates a recurring schedule
+func (m *Manager) CreateSchedule(ctx context.Context, opts ScheduleOptions) (string, error) {
+	// Schedule creation is complex and requires special Temporal APIs
+	// For now, return error - this would be enhanced in future
+	return "", fmt.Errorf("schedule creation not yet implemented")
+}
+
+// QueryWorkflow queries a running workflow
+func (m *Manager) QueryWorkflow(ctx context.Context, opts QueryOptions) (interface{}, error) {
+	resp, err := m.client.QueryWorkflow(ctx, opts.WorkflowID, opts.RunID, opts.QueryType, opts.Args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query workflow: %w", err)
+	}
+
+	var result interface{}
+	if err := resp.Get(&result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal query result: %w", err)
+	}
+
+	return result, nil
+}
+
+// SignalWorkflow sends a signal to a running workflow
+func (m *Manager) SignalWorkflow(ctx context.Context, opts SignalOptions) error {
+	return m.client.SignalWorkflow(ctx, opts.WorkflowID, opts.RunID, opts.Name, opts.Data)
+}
+
+// CancelWorkflow cancels a running workflow
+func (m *Manager) CancelWorkflow(ctx context.Context, opts CancelOptions) error {
+	return m.client.CancelWorkflow(ctx, opts.WorkflowID, opts.RunID)
+}
+
+// ListWorkflows lists running workflows
+func (m *Manager) ListWorkflows(ctx context.Context) ([]map[string]interface{}, error) {
+	// This would require Temporal's list API
+	// For now, return empty list
+	return []map[string]interface{}{}, nil
+}

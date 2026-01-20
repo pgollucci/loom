@@ -30,7 +30,10 @@ type KeyEntry struct {
 
 // KeyStore represents the encrypted key storage
 type KeyStore struct {
-	Keys map[string]*KeyEntry `json:"keys"`
+	Version        string                 `json:"version"`        // Schema version
+	PasswordSalt   string                 `json:"password_salt"`  // Unencrypted salt for password validation
+	PasswordVerify string                 `json:"password_verify"` // Hash to verify password correctness
+	Keys           map[string]*KeyEntry   `json:"keys"`
 }
 
 // KeyManager manages secure storage and retrieval of provider credentials
@@ -72,7 +75,12 @@ func (km *KeyManager) Unlock(password string) error {
 		// If store doesn't exist, initialize a new one
 		if os.IsNotExist(err) {
 			km.store = &KeyStore{
-				Keys: make(map[string]*KeyEntry),
+				Version: "1.0",
+				Keys:    make(map[string]*KeyEntry),
+			}
+			// Generate and store password salt and verification hash
+			if err := km.initializePasswordSalt(); err != nil {
+				return fmt.Errorf("failed to initialize password: %w", err)
 			}
 			// Save the empty store
 			if err := km.saveStore(); err != nil {
@@ -83,7 +91,56 @@ func (km *KeyManager) Unlock(password string) error {
 		}
 	}
 
+	// Verify password if store already exists
+	if km.store.PasswordVerify != "" {
+		if err := km.verifyPassword(password); err != nil {
+			km.password = nil
+			return err
+		}
+	}
+
 	km.unlocked = true
+	return nil
+}
+
+// initializePasswordSalt creates a new password salt and verification hash
+func (km *KeyManager) initializePasswordSalt() error {
+	// Generate random salt
+	salt := make([]byte, saltSize)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return err
+	}
+
+	km.store.PasswordSalt = base64.StdEncoding.EncodeToString(salt)
+
+	// Create verification hash: PBKDF2(password, salt, iterations, 32 bytes)
+	verifyHash := pbkdf2.Key(km.password, salt, iterations, keySize, sha256.New)
+	km.store.PasswordVerify = base64.StdEncoding.EncodeToString(verifyHash)
+
+	return nil
+}
+
+// verifyPassword verifies that the provided password is correct
+func (km *KeyManager) verifyPassword(password string) error {
+	if km.store.PasswordSalt == "" || km.store.PasswordVerify == "" {
+		return errors.New("key store not initialized with password verification")
+	}
+
+	// Decode the stored salt
+	salt, err := base64.StdEncoding.DecodeString(km.store.PasswordSalt)
+	if err != nil {
+		return fmt.Errorf("failed to decode password salt: %w", err)
+	}
+
+	// Derive key from provided password using same salt
+	derivedHash := pbkdf2.Key([]byte(password), salt, iterations, keySize, sha256.New)
+	derivedHashStr := base64.StdEncoding.EncodeToString(derivedHash)
+
+	// Compare with stored hash (constant-time comparison)
+	if derivedHashStr != km.store.PasswordVerify {
+		return errors.New("invalid password")
+	}
+
 	return nil
 }
 
@@ -196,6 +253,62 @@ func (km *KeyManager) ListKeys() ([]*KeyEntry, error) {
 	}
 
 	return keys, nil
+}
+
+// ChangePassword changes the master password and re-encrypts all stored keys
+func (km *KeyManager) ChangePassword(oldPassword, newPassword string) error {
+	km.mu.Lock()
+	defer km.mu.Unlock()
+
+	if !km.unlocked {
+		return errors.New("key store is locked")
+	}
+
+	// Verify old password
+	if err := km.verifyPassword(oldPassword); err != nil {
+		return fmt.Errorf("old password is incorrect: %w", err)
+	}
+
+	// Store all decrypted keys temporarily using current password
+	decryptedKeys := make(map[string]string)
+	for id, entry := range km.store.Keys {
+		decryptedData, err := km.decrypt([]byte(entry.EncryptedData))
+		if err != nil {
+			return fmt.Errorf("failed to decrypt key %s: %w", id, err)
+		}
+		decrypted, err := base64.StdEncoding.DecodeString(string(decryptedData))
+		if err != nil {
+			return fmt.Errorf("failed to decode key %s: %w", id, err)
+		}
+		decryptedKeys[id] = string(decrypted)
+	}
+
+	// Change the password
+	km.password = []byte(newPassword)
+
+	// Generate new salt and verification hash
+	if err := km.initializePasswordSalt(); err != nil {
+		return fmt.Errorf("failed to initialize new password: %w", err)
+	}
+
+	// Re-encrypt all keys with new password
+	for id, plaintext := range decryptedKeys {
+		encryptedData, err := km.encrypt([]byte(plaintext))
+		if err != nil {
+			return fmt.Errorf("failed to re-encrypt key %s: %w", id, err)
+		}
+
+		entry := km.store.Keys[id]
+		entry.EncryptedData = base64.StdEncoding.EncodeToString(encryptedData)
+		entry.UpdatedAt = time.Now()
+	}
+
+	// Persist to disk
+	if err := km.saveStore(); err != nil {
+		return fmt.Errorf("failed to save key store: %w", err)
+	}
+
+	return nil
 }
 
 // Lock locks the key store and clears the password from memory

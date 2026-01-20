@@ -1429,6 +1429,58 @@ function viewDecision(decisionId) {
 }
 
 // Actions
+
+async function showChangePasswordModal() {
+    const values = await formModal({
+        title: 'Change Password',
+        submitText: 'Change',
+        fields: [
+            { id: 'old_password', label: 'Current Password', required: true, type: 'password', placeholder: 'Enter current password' },
+            { id: 'new_password', label: 'New Password', required: true, type: 'password', placeholder: 'Enter new password (min 8 chars)' },
+            { id: 'confirm_password', label: 'Confirm Password', required: true, type: 'password', placeholder: 'Re-enter new password' }
+        ]
+    });
+    
+    if (!values) return;
+    
+    const oldPwd = (values.old_password || '').trim();
+    const newPwd = (values.new_password || '').trim();
+    const confirmPwd = (values.confirm_password || '').trim();
+    
+    if (!oldPwd || !newPwd || !confirmPwd) {
+        showToast('All fields are required', 'error');
+        return;
+    }
+    
+    if (newPwd.length < 8) {
+        showToast('New password must be at least 8 characters', 'error');
+        return;
+    }
+    
+    if (newPwd !== confirmPwd) {
+        showToast('Passwords do not match', 'error');
+        return;
+    }
+    
+    if (oldPwd === newPwd) {
+        showToast('New password must be different from current password', 'error');
+        return;
+    }
+    
+    try {
+        await apiCall('/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({
+                old_password: oldPwd,
+                new_password: newPwd
+            })
+        });
+        showToast('Password changed successfully', 'success');
+    } catch (err) {
+        showToast(`Failed to change password: ${err.message || 'Unknown error'}`, 'error');
+    }
+}
+
 async function showRegisterProviderModal(preset = {}) {
     const values = await formModal({
         title: 'Register provider',

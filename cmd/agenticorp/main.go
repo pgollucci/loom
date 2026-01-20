@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -57,9 +58,20 @@ func main() {
 	// Initialize key manager for encrypted API keys
 	keyStorePath := filepath.Join(".", ".keys.json")
 	km := keymanager.NewKeyManager(keyStorePath)
-	// Use a default password for now (in production, this should be from env var or secure input)
-	if err := km.Unlock("agenticorp-default-password"); err != nil {
-		log.Printf("Warning: Failed to unlock key manager: %v", err)
+	
+	// Load password from environment or .env file
+	password := loadPassword()
+	if password == "" {
+		log.Printf("Warning: No password found. Using default password. Set AGENTICORP_PASSWORD environment variable or create .env file")
+		password = "agenticorp-default-password"
+	}
+	
+	if err := km.Unlock(password); err != nil {
+		// Try default password if the provided one failed
+		log.Printf("Password unlock failed: %v. Trying default password...", err)
+		if err := km.Unlock("agenticorp-default-password"); err != nil {
+			log.Fatalf("Failed to unlock key manager with both passwords: %v", err)
+		}
 	}
 
 	go arb.StartMaintenanceLoop(runCtx)
@@ -98,6 +110,33 @@ func main() {
 
 }
 
+func loadPassword() string {
+	// First, check environment variable
+	if pwd := os.Getenv("AGENTICORP_PASSWORD"); pwd != "" {
+		return pwd
+	}
+
+	// Second, try to load from .env file
+	if envData, err := os.ReadFile(".env"); err == nil {
+		lines := strings.Split(string(envData), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			// Skip comments and empty lines
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			// Look for AGENTICORP_PASSWORD=value
+			if strings.HasPrefix(line, "AGENTICORP_PASSWORD=") {
+				pwd := strings.TrimPrefix(line, "AGENTICORP_PASSWORD=")
+				pwd = strings.Trim(pwd, "\"'")
+				return pwd
+			}
+		}
+	}
+
+	return ""
+}
+
 func printHelp() {
 	fmt.Println("Usage: agenticorp [flags]")
 	fmt.Println()
@@ -105,4 +144,7 @@ func printHelp() {
 	fmt.Println("  -config   Path to configuration file (default: config.yaml)")
 	fmt.Println("  -version  Show version information")
 	fmt.Println("  -help     Show help message")
+	fmt.Println()
+	fmt.Println("Environment:")
+	fmt.Println("  AGENTICORP_PASSWORD  Master password for UI login and key encryption")
 }

@@ -9,7 +9,10 @@
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <header>
-        <h1><span aria-hidden="true">🤖</span> AgentiCorp - Agent Orchestration System</h1>
+        <div class="header-top">
+            <h1><span aria-hidden="true">🤖</span> AgentiCorp - Agent Orchestration System</h1>
+            <button type="button" class="icon-button" id="password-btn" onclick="showChangePasswordModal()" title="Change password" aria-label="Change password">🔐</button>
+        </div>
         <div id="system-status" class="system-status" aria-live="polite" aria-atomic="true"></div>
         <nav aria-label="Primary">
             <ul class="nav-list">

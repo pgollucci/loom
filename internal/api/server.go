@@ -53,6 +53,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Health check
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
 
+	// Authentication
+	mux.HandleFunc("/api/v1/auth/change-password", s.handleChangePassword)
+
 	// Personas
 	mux.HandleFunc("/api/v1/personas", s.handlePersonas)
 	mux.HandleFunc("/api/v1/personas/", s.handlePersona)

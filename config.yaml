@@ -50,6 +50,15 @@ projects:
       test_command: "make test"
       lint_command: "make lint"
 
+temporal:
+  host: temporal:7233
+  namespace: agenticorp-default
+  task_queue: agenticorp-tasks
+  workflow_execution_timeout: 24h
+  workflow_task_timeout: 10s
+  enable_event_bus: true
+  event_buffer_size: 1000
+
 web_ui:
   enabled: true
   static_path: ./web/static

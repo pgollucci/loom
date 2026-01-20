@@ -179,6 +179,11 @@ func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Persist to database
+		if s.agenticorp.GetDatabase() != nil {
+			_ = s.agenticorp.GetDatabase().UpsertAgent(agent)
+		}
+
 		s.respondJSON(w, http.StatusOK, agent)
 
 	case http.MethodDelete:
