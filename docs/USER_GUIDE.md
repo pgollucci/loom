@@ -13,7 +13,7 @@ This guide helps new users run Arbiter, register projects, and work with agents 
 ### Start Arbiter
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 For local development with the full container stack, you can also use:
@@ -80,7 +80,7 @@ Key fields:
 ## Operational Workflow
 
 1. Register projects in `config.yaml`.
-2. Start Arbiter (docker-compose or binary).
+2. Start Arbiter (docker compose or binary).
 3. Confirm beads are loaded in the UI and API.
 4. Assign agents to projects and monitor progress.
 5. Use decisions/approvals for escalations (e.g., CEO workflow).

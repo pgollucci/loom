@@ -12,7 +12,7 @@ description: |
   - internal/temporal/eventbus tests skipped for the same reason.
 
   Requirements
-  - Ensure Temporal is running during test execution (via docker-compose or
+  - Ensure Temporal is running during test execution (via docker compose or
     a test harness) so these tests run instead of skipping.
   - Update test setup to fail fast if Temporal is expected but not available.
 

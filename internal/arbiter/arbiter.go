@@ -323,7 +323,7 @@ func (a *Arbiter) Initialize(ctx context.Context) error {
 	// Start Temporal worker if configured
 	if a.temporalManager != nil {
 		a.temporalManager.RegisterActivity(temporalactivities.NewDispatchActivities(a.dispatcher))
-		a.temporalManager.RegisterActivity(temporalactivities.NewProviderActivities(a.providerRegistry, a.database, a.eventBus))
+		a.temporalManager.RegisterActivity(temporalactivities.NewProviderActivities(a.providerRegistry, a.database, a.eventBus, a.modelCatalog))
 		if err := a.temporalManager.Start(); err != nil {
 			return fmt.Errorf("failed to start temporal: %w", err)
 		}
@@ -732,9 +732,14 @@ func (a *Arbiter) RegisterProvider(ctx context.Context, p *internalmodels.Provid
 		p.Type = "local"
 	}
 	if p.Status == "" {
-		p.Status = "active"
+		p.Status = "pending"
 	}
-	p.Endpoint = normalizeProviderEndpoint(p.Endpoint)
+	// Endpoint is bootstrapped via heartbeats (port/protocol discovery), but keep the existing
+	// OpenAI default normalization for compatibility.
+	if p.Type != "ollama" {
+		p.Endpoint = normalizeProviderEndpoint(p.Endpoint)
+	}
+	p.LastHeartbeatError = ""
 	if p.ConfiguredModel == "" {
 		p.ConfiguredModel = p.Model
 	}
@@ -798,9 +803,13 @@ func (a *Arbiter) UpdateProvider(ctx context.Context, p *internalmodels.Provider
 		p.Type = "local"
 	}
 	if p.Status == "" {
-		p.Status = "active"
+		p.Status = "pending"
 	}
-	p.Endpoint = normalizeProviderEndpoint(p.Endpoint)
+	if p.Type != "ollama" {
+		p.Endpoint = normalizeProviderEndpoint(p.Endpoint)
+	}
+	// If the operator edits a provider, we treat it as needing re-validation.
+	p.LastHeartbeatError = ""
 	if p.ConfiguredModel == "" {
 		p.ConfiguredModel = p.Model
 	}
@@ -936,7 +945,7 @@ func (a *Arbiter) selectBestProviderForRepl() (*internalmodels.Provider, error) 
 	var best *internalmodels.Provider
 	bestScore := -math.MaxFloat64
 	for _, p := range providers {
-		if p == nil || p.Status != "active" {
+		if p == nil || !providerIsHealthy(p.Status) {
 			continue
 		}
 		score := a.scoreProviderForRepl(p)
@@ -971,6 +980,15 @@ func (a *Arbiter) scoreProviderForRepl(p *internalmodels.Provider) float64 {
 		latency = 120000
 	}
 	return (quality * 1000) - float64(latency)
+}
+
+func providerIsHealthy(status string) bool {
+	switch status {
+	case "healthy", "active":
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *Arbiter) buildArbiterPersonaPrompt() string {

@@ -7,7 +7,7 @@ description: |
   Temporal and any required services) so we are not running in a crippled mode.
 
   Requirements
-  - Update build/run/test targets to use docker-compose (or equivalent) to build
+  - Update build/run/test targets to use docker compose (or equivalent) to build
     and run the full container stack.
   - Ensure tests run with Temporal and other dependencies available.
   - Preserve developer convenience while making the default targets validate

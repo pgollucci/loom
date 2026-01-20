@@ -92,17 +92,17 @@ The Docker setup includes:
 - PostgreSQL database for Temporal
 
 ```bash
-# Build and run all services using docker-compose
-docker-compose up -d
+# Build and run all services using docker compose
+docker compose up -d
 
 # View logs
-docker-compose logs -f arbiter
+docker compose logs -f arbiter
 
 # View Temporal UI
 open http://localhost:8088
 
 # Stop all services
-docker-compose down
+docker compose down
 ```
 
 ### Using Make Commands
@@ -390,7 +390,7 @@ For local development with Temporal:
 
 1. Start Temporal server:
 ```bash
-docker-compose up -d temporal temporal-postgresql temporal-ui
+docker compose up -d temporal temporal-postgresql temporal-ui
 ```
 
 2. Build and run arbiter locally:
@@ -461,11 +461,11 @@ curl -N "http://localhost:8080/api/v1/events/stream?project_id=my-project"
 View service logs:
 ```bash
 # All services
-docker-compose logs -f
+docker compose logs -f
 
 # Specific service
-docker-compose logs -f arbiter
-docker-compose logs -f temporal
+docker compose logs -f arbiter
+docker compose logs -f temporal
 ```
 
 ## Troubleshooting
@@ -476,12 +476,12 @@ If arbiter can't connect to Temporal:
 
 1. Check Temporal is running:
 ```bash
-docker-compose ps temporal
+docker compose ps temporal
 ```
 
 2. Check Temporal logs:
 ```bash
-docker-compose logs temporal
+docker compose logs temporal
 ```
 
 3. Verify connectivity:
@@ -495,7 +495,7 @@ If workflows aren't starting:
 
 1. Check worker is running:
 ```bash
-docker-compose logs arbiter | grep "Temporal worker"
+docker compose logs arbiter | grep "Temporal worker"
 ```
 
 2. Verify task queue in Temporal UI
@@ -508,7 +508,7 @@ If event stream endpoint returns errors:
 1. Verify Temporal is enabled in config
 2. Check event bus initialization:
 ```bash
-docker-compose logs arbiter | grep "event bus"
+docker compose logs arbiter | grep "event bus"
 ```
 
 ## Development Guidelines

@@ -68,6 +68,8 @@ func (r *Registry) Register(config *ProviderConfig) error {
 	case "openai", "anthropic", "local", "custom":
 		// All use OpenAI-compatible protocol
 		protocol = NewOpenAIProvider(config.Endpoint, config.APIKey)
+	case "ollama":
+		protocol = NewOllamaProvider(config.Endpoint)
 	default:
 		return fmt.Errorf("unsupported provider type: %s", config.Type)
 	}
@@ -93,6 +95,8 @@ func (r *Registry) Upsert(config *ProviderConfig) error {
 	switch config.Type {
 	case "openai", "anthropic", "local", "custom":
 		protocol = NewOpenAIProvider(config.Endpoint, config.APIKey)
+	case "ollama":
+		protocol = NewOllamaProvider(config.Endpoint)
 	default:
 		return fmt.Errorf("unsupported provider type: %s", config.Type)
 	}

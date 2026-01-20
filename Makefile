@@ -63,7 +63,7 @@ all: build
 build:
 	@echo "Building $(BINARY_NAME) containers..."
 	$(call run_with_failure_bead,build,go run ./cmd/yaml-lint)
-	$(call run_with_failure_bead,build,docker-compose build)
+	$(call run_with_failure_bead,build,docker compose build)
 
 # Build for multiple platforms
 build-all: lint-yaml
@@ -75,11 +75,11 @@ build-all: lint-yaml
 
 # Run the application
 run: build
-	$(call run_with_failure_bead,run,docker-compose up --build)
+	$(call run_with_failure_bead,run,docker compose up --build)
 
 # Run tests
 test:
-	$(call run_with_failure_bead,test,bash -c "docker-compose up -d --build && docker-compose run --rm arbiter-test; status=$$?; docker-compose down; exit $$status")
+	$(call run_with_failure_bead,test,bash -c "docker compose up -d --build && docker compose run --rm arbiter-test; status=$$?; docker compose down; exit $$status")
 
 # Run tests with coverage
 coverage:
@@ -136,20 +136,20 @@ dev-setup: deps config
 docker-build:
 	docker build -t $(BINARY_NAME):$(VERSION) .
 
-# Run application in Docker using docker-compose
+# Run application in Docker using docker compose
 docker-run:
 	@echo "Starting arbiter in Docker..."
-	@docker-compose up -d
+	@docker compose up -d
 
 # Stop Docker containers
 docker-stop:
 	@echo "Stopping Docker containers..."
-	@docker-compose down
+	@docker compose down
 
 # Clean Docker resources
 docker-clean: docker-stop
 	@echo "Cleaning Docker resources..."
-	@docker-compose down -v
+	@docker compose down -v
 	@docker rmi $(BINARY_NAME):$(VERSION) || true
 
 help:

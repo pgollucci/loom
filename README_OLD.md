@@ -22,14 +22,14 @@ Arbiter is built with the following principles:
 ### Running with Docker (Recommended)
 
 ```bash
-# Build and run using docker-compose
+# Build and run using docker compose
 make docker-run
 
 # Or manually
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f arbiter
+docker compose logs -f arbiter
 
 # Stop the service
 make docker-stop
