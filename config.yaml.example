@@ -1,4 +1,4 @@
-# Arbiter Configuration
+# AgentiCorp Configuration
 
 server:
   http_port: 8080
@@ -13,7 +13,7 @@ server:
 
 database:
   type: sqlite
-  path: ./arbiter.db
+  path: ./agenticorp.db
 
 beads:
   bd_path: bd  # Path to bd executable
@@ -39,17 +39,17 @@ security:
 
 temporal:
   host: localhost:7233
-  namespace: arbiter-default
-  task_queue: arbiter-tasks
+  namespace: agenticorp-default
+  task_queue: agenticorp-tasks
   workflow_execution_timeout: 24h
   workflow_task_timeout: 10s
   enable_event_bus: true
   event_buffer_size: 1000
 
 projects:
-  - id: arbiter-self
-    name: Arbiter Self-Improvement
-    git_repo: https://github.com/jordanhubbard/arbiter
+  - id: agenticorp-self
+    name: AgentiCorp Self-Improvement
+    git_repo: https://github.com/jordanhubbard/AgentiCorp
     branch: main
     beads_path: .beads
     is_perpetual: true
@@ -57,7 +57,7 @@ projects:
     context:
       build_command: "go build"
       test_command: "go test ./..."
-      description: "The Arbiter project itself - perpetual self-improvement"
+      description: "The AgentiCorp project itself - perpetual self-improvement"
   - id: example-project
     name: Example Project
     git_repo: /path/to/repo
