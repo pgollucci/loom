@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/jordanhubbard/agenticorp/internal/api"
 	"github.com/jordanhubbard/agenticorp/internal/agenticorp"
+	"github.com/jordanhubbard/agenticorp/internal/keymanager"
 	"github.com/jordanhubbard/agenticorp/pkg/config"
 )
 
@@ -52,12 +54,20 @@ func main() {
 		log.Fatalf("failed to initialize agenticorp: %v", err)
 	}
 
+	// Initialize key manager for encrypted API keys
+	keyStorePath := filepath.Join(".", ".keys.json")
+	km := keymanager.NewKeyManager(keyStorePath)
+	// Use a default password for now (in production, this should be from env var or secure input)
+	if err := km.Unlock("agenticorp-default-password"); err != nil {
+		log.Printf("Warning: Failed to unlock key manager: %v", err)
+	}
+
 	go arb.StartMaintenanceLoop(runCtx)
 	if arb.GetTemporalManager() == nil {
 		go arb.StartDispatchLoop(runCtx, 10*time.Second)
 	}
 
-	apiServer := api.NewServer(arb, cfg)
+	apiServer := api.NewServer(arb, km, cfg)
 	handler := apiServer.SetupRoutes()
 
 	httpSrv := &http.Server{

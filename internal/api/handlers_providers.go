@@ -2,11 +2,23 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	internalmodels "github.com/jordanhubbard/agenticorp/internal/models"
 )
+
+// ProviderRequest is a request wrapper for provider registration with API key
+type ProviderRequest struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Endpoint    string `json:"endpoint"`
+	APIKey      string `json:"api_key"`
+	Model       string `json:"model"`
+	Description string `json:"description"`
+}
 
 // handleProviders handles GET/POST /api/v1/providers
 func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
@@ -20,12 +32,34 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 		s.respondJSON(w, http.StatusOK, providers)
 
 	case http.MethodPost:
-		var req internalmodels.Provider
+		var req ProviderRequest
 		if err := s.parseJSON(r, &req); err != nil {
 			s.respondError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
-		created, err := s.agenticorp.RegisterProvider(context.Background(), &req)
+		
+		provider := &internalmodels.Provider{
+			ID:          req.ID,
+			Name:        req.Name,
+			Type:        req.Type,
+			Endpoint:    req.Endpoint,
+			Model:       req.Model,
+			Description: req.Description,
+		}
+		
+		// Store API key if provided
+		if req.APIKey != "" {
+			keyID := fmt.Sprintf("%s-api-key", req.ID)
+			if s.keyManager != nil && s.keyManager.IsUnlocked() {
+				if err := s.keyManager.StoreKey(keyID, req.Name, fmt.Sprintf("API key for %s", req.Name), req.APIKey); err != nil {
+					s.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to store API key: %v", err))
+					return
+				}
+				provider.KeyID = keyID
+			}
+		}
+		
+		created, err := s.agenticorp.RegisterProvider(context.Background(), provider)
 		if err != nil {
 			s.respondError(w, http.StatusBadRequest, err.Error())
 			return

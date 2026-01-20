@@ -6,19 +6,22 @@ import (
 	"strings"
 
 	"github.com/jordanhubbard/agenticorp/internal/agenticorp"
+	"github.com/jordanhubbard/agenticorp/internal/keymanager"
 	"github.com/jordanhubbard/agenticorp/pkg/config"
 )
 
 // Server represents the HTTP API server
 type Server struct {
 	agenticorp *agenticorp.AgentiCorp
+	keyManager *keymanager.KeyManager
 	config  *config.Config
 }
 
 // NewServer creates a new API server
-func NewServer(arb *agenticorp.AgentiCorp, cfg *config.Config) *Server {
+func NewServer(arb *agenticorp.AgentiCorp, km *keymanager.KeyManager, cfg *config.Config) *Server {
 	return &Server{
 		agenticorp: arb,
+		keyManager: km,
 		config:  cfg,
 	}
 }

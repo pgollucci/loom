@@ -992,6 +992,7 @@ function renderProviders() {
             const status = escapeHtml(p.status || 'unknown');
             const heartbeatLatency = p.last_heartbeat_latency_ms ?? null;
             const heartbeatError = escapeHtml(p.last_heartbeat_error || '');
+            const hasApiKey = p.key_id ? '*'.repeat(8) : '<em>none</em>';
             const modelsKey = `providerModels:${id}`;
             const deleteKey = `deleteProvider:${id}`;
             const negotiateKey = `providerNegotiate:${id}`;
@@ -1003,6 +1004,7 @@ function renderProviders() {
                         <div><span class="badge">${escapeHtml(p.type || '')}</span></div>
                     </div>
                     <div class="small"><strong>Endpoint:</strong> ${endpoint}</div>
+                    <div class="small"><strong>API Key:</strong> ${hasApiKey}</div>
                     <div class="small"><strong>Configured model:</strong> ${configuredModel || '<em>unset</em>'}</div>
                     <div class="small"><strong>Selected model:</strong> ${selectedModel || '<em>unset</em>'}</div>
                     <div class="small"><strong>Selection reason:</strong> ${selectionReason || '<em>pending</em>'}</div>
@@ -1434,7 +1436,21 @@ async function showRegisterProviderModal(preset = {}) {
         fields: [
             { id: 'endpoint', label: 'Provider URL', required: true, placeholder: preset.endpoint || 'e.g. http://myvllmhost.local:8000' },
             { id: 'name', label: 'Display name (optional)', required: false, placeholder: preset.name || '' },
-            { id: 'type', label: 'Type (local/openai)', required: false, placeholder: preset.type || 'local' },
+            { 
+                id: 'type', 
+                label: 'Protocol', 
+                required: false, 
+                type: 'select',
+                options: [
+                    { value: 'local', label: 'Local (vLLM)' },
+                    { value: 'openai', label: 'OpenAI' },
+                    { value: 'anthropic', label: 'Anthropic' },
+                    { value: 'ollama', label: 'Ollama' },
+                    { value: 'custom', label: 'Custom' }
+                ],
+                value: preset.type || 'local'
+            },
+            { id: 'api_key', label: 'API Key (optional)', required: false, type: 'password', placeholder: 'Leave blank if not required' },
             { id: 'model', label: 'Default model', required: false, placeholder: preset.model || 'NVIDIA-Nemotron-3-Nano-30B-A3B-BF16' }
         ]
     });
@@ -1454,8 +1470,9 @@ async function showRegisterProviderModal(preset = {}) {
     const payload = {
         id: providerId,
         name: (values.name || '').trim() || providerId,
-        type: (values.type || '').trim(),
+        type: (values.type || '').trim() || 'local',
         endpoint: endpoint,
+        api_key: (values.api_key || '').trim() || '',
         model: (values.model || '').trim()
     };
 
