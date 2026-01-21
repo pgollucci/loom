@@ -130,6 +130,20 @@ function initUI() {
     replSend?.addEventListener('click', () => {
         sendReplQuery();
     });
+
+    // Streaming test controls
+    const streamTestSend = document.getElementById('stream-test-send');
+    streamTestSend?.addEventListener('click', () => {
+        sendStreamingTest();
+    });
+
+    const streamTestClear = document.getElementById('stream-test-clear');
+    streamTestClear?.addEventListener('click', () => {
+        const responseEl = document.getElementById('stream-test-response');
+        const statsEl = document.getElementById('stream-test-stats');
+        if (responseEl) responseEl.textContent = '';
+        if (statsEl) statsEl.textContent = '';
+    });
 }
 
 function setupNavActiveState() {
@@ -1106,9 +1120,131 @@ function renderKanban() {
             : renderEmptyState('No closed beads yet', 'Completed beads will appear here.');
 }
 
+async function sendStreamingTest() {
+    const providerSelect = document.getElementById('stream-test-provider');
+    const input = document.getElementById('stream-test-input');
+    const responseEl = document.getElementById('stream-test-response');
+    const statsEl = document.getElementById('stream-test-stats');
+    const sendBtn = document.getElementById('stream-test-send');
+    const streamToggle = document.getElementById('stream-test-streaming');
+    
+    if (!providerSelect || !input || !responseEl || !sendBtn) return;
+
+    const providerId = providerSelect.value;
+    const message = (input.value || '').trim();
+    const useStreaming = streamToggle ? streamToggle.checked : true;
+
+    if (!providerId) {
+        showToast('Please select a provider', 'error');
+        return;
+    }
+
+    if (!message) {
+        showToast('Please enter a message', 'error');
+        return;
+    }
+
+    try {
+        setBusy('streamTest', true);
+        sendBtn.disabled = true;
+        sendBtn.textContent = useStreaming ? 'Streaming…' : 'Sending…';
+        responseEl.textContent = '';
+        responseEl.classList.remove('complete');
+        statsEl.textContent = 'Starting...';
+
+        const startTime = Date.now();
+        let firstChunkTime = null;
+        let chunkCount = 0;
+        let totalChars = 0;
+
+        const requestBody = {
+            provider_id: providerId,
+            messages: [
+                { role: 'user', content: message }
+            ]
+        };
+
+        if (useStreaming) {
+            // Use streaming
+            responseEl.classList.add('streaming');
+            
+            await createStreamingRequest('/chat/completions', requestBody, {
+                useStreaming: true,
+                onChunk: (chunk, fullContent) => {
+                    if (firstChunkTime === null) {
+                        firstChunkTime = Date.now();
+                    }
+                    chunkCount++;
+                    totalChars += chunk.length;
+                    
+                    responseEl.textContent = fullContent;
+                    responseEl.scrollTop = responseEl.scrollHeight;
+                    
+                    const elapsed = Date.now() - startTime;
+                    const ttfb = firstChunkTime - startTime;
+                    statsEl.textContent = `Streaming... ${chunkCount} chunks, ${totalChars} chars, TTFB: ${ttfb}ms, Elapsed: ${elapsed}ms`;
+                },
+                onComplete: (fullContent) => {
+                    const totalTime = Date.now() - startTime;
+                    const ttfb = firstChunkTime ? firstChunkTime - startTime : 0;
+                    const charsPerSec = totalTime > 0 ? Math.round((totalChars / totalTime) * 1000) : 0;
+                    
+                    responseEl.classList.remove('streaming');
+                    responseEl.classList.add('complete');
+                    statsEl.textContent = `✓ Complete: ${chunkCount} chunks, ${totalChars} chars, TTFB: ${ttfb}ms, Total: ${totalTime}ms, Speed: ${charsPerSec} chars/sec`;
+                    showToast('Stream complete', 'success');
+                },
+                onError: (error) => {
+                    responseEl.classList.remove('streaming');
+                    responseEl.textContent += `\n\n[Error: ${error}]`;
+                    statsEl.textContent = `✗ Error: ${error}`;
+                }
+            });
+        } else {
+            // Use non-streaming
+            const res = await apiCall('/chat/completions', {
+                method: 'POST',
+                body: JSON.stringify(requestBody)
+            });
+
+            const totalTime = Date.now() - startTime;
+            
+            if (res.choices && res.choices[0] && res.choices[0].message) {
+                const content = res.choices[0].message.content || 'No response';
+                responseEl.textContent = content;
+                totalChars = content.length;
+            } else {
+                responseEl.textContent = 'No response returned.';
+            }
+            
+            responseEl.classList.add('complete');
+            statsEl.textContent = `✓ Complete (non-streaming): ${totalChars} chars, Total: ${totalTime}ms`;
+        }
+    } catch (e) {
+        responseEl.classList.remove('streaming');
+        responseEl.textContent = `Request failed: ${e.message || 'Unknown error'}`;
+        statsEl.textContent = `✗ Failed: ${e.message || 'Unknown error'}`;
+    } finally {
+        setBusy('streamTest', false);
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+    }
+}
+
 function renderProviders() {
     const container = document.getElementById('provider-list');
     if (!container) return;
+    
+    // Also populate streaming test provider dropdown
+    const streamTestSelect = document.getElementById('stream-test-provider');
+    if (streamTestSelect && state.providers) {
+        const activeProviders = state.providers.filter(p => p.status === 'active');
+        streamTestSelect.innerHTML = 
+            '<option value="">Select a provider...</option>' +
+            activeProviders.map(p => 
+                `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || p.id)} (${escapeHtml(p.model || 'unknown')})</option>`
+            ).join('');
+    }
 
     if (!state.providers || state.providers.length === 0) {
         container.innerHTML = renderEmptyState(
@@ -1417,10 +1553,118 @@ async function deleteProject(projectId) {
     }
 }
 
+// Streaming utilities
+function createStreamingRequest(endpoint, body, options = {}) {
+    const { onChunk, onComplete, onError, useStreaming = true } = options;
+    
+    if (!useStreaming || typeof EventSource === 'undefined') {
+        // Fallback to non-streaming
+        return apiCall(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+    }
+
+    return new Promise((resolve, reject) => {
+        // Use streaming endpoint
+        const streamEndpoint = endpoint + '/stream';
+        
+        fetch(`${API_BASE}${streamEndpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+            },
+            body: JSON.stringify(body)
+        }).then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullContent = '';
+
+            function processText(text) {
+                buffer += text;
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    
+                    if (line.startsWith('event: ')) {
+                        const eventType = line.substring(7).trim();
+                        continue; // Event type will be followed by data line
+                    }
+
+                    if (line.startsWith('data: ')) {
+                        const data = line.substring(6);
+                        
+                        try {
+                            const chunk = JSON.parse(data);
+                            
+                            // Handle different event types
+                            if (chunk.message) {
+                                // Connected or done event
+                                if (chunk.message.includes('complete')) {
+                                    if (onComplete) onComplete(fullContent);
+                                    resolve({ response: fullContent });
+                                }
+                                continue;
+                            }
+
+                            if (chunk.error) {
+                                if (onError) onError(chunk.error);
+                                reject(new Error(chunk.error));
+                                return;
+                            }
+
+                            // Extract content from streaming chunk
+                            if (chunk.choices && chunk.choices[0]) {
+                                const delta = chunk.choices[0].delta;
+                                if (delta && delta.content) {
+                                    fullContent += delta.content;
+                                    if (onChunk) onChunk(delta.content, fullContent);
+                                }
+                            }
+                        } catch (e) {
+                            // Ignore JSON parse errors for non-JSON data lines
+                        }
+                    }
+                }
+            }
+
+            function pump() {
+                reader.read().then(({ done, value }) => {
+                    if (done) {
+                        if (onComplete) onComplete(fullContent);
+                        resolve({ response: fullContent });
+                        return;
+                    }
+
+                    processText(decoder.decode(value, { stream: true }));
+                    pump();
+                }).catch(error => {
+                    if (onError) onError(error.message);
+                    reject(error);
+                });
+            }
+
+            pump();
+        }).catch(error => {
+            if (onError) onError(error.message);
+            reject(error);
+        });
+    });
+}
+
 async function sendReplQuery() {
     const input = document.getElementById('repl-input');
     const responseEl = document.getElementById('repl-response');
     const sendBtn = document.getElementById('repl-send');
+    const streamToggle = document.getElementById('repl-stream-toggle');
     if (!input || !responseEl || !sendBtn) return;
 
     const message = (input.value || '').trim();
@@ -1429,23 +1673,66 @@ async function sendReplQuery() {
         return;
     }
 
+    const useStreaming = streamToggle ? streamToggle.checked : true;
+
     try {
         setBusy('repl', true);
         sendBtn.disabled = true;
-        sendBtn.textContent = 'Sending…';
-        responseEl.textContent = 'Sending request…';
+        sendBtn.textContent = useStreaming ? 'Streaming…' : 'Sending…';
+        responseEl.textContent = '';
+        responseEl.classList.add('streaming');
 
-        const res = await apiCall('/repl', {
-            method: 'POST',
-            body: JSON.stringify({ message })
-        });
+        // Get active provider for the request
+        const activeProviders = (state.providers || []).filter(p => p.status === 'active');
+        if (activeProviders.length === 0) {
+            throw new Error('No active providers available');
+        }
+        const providerId = activeProviders[0].id;
 
-        responseEl.textContent = `${res.response || ''}`.trim() || 'No response returned.';
-        if (res.provider_id) {
-            responseEl.textContent = `${responseEl.textContent}\n\n— Provider: ${res.provider_name || res.provider_id} (${res.model || 'unknown'})${res.latency_ms ? `, ${res.latency_ms}ms` : ''}`;
+        const requestBody = {
+            provider_id: providerId,
+            messages: [
+                { role: 'system', content: 'You are the CEO of AgentiCorp. Respond concisely and helpfully.' },
+                { role: 'user', content: message }
+            ]
+        };
+
+        if (useStreaming) {
+            // Use streaming
+            await createStreamingRequest('/chat/completions', requestBody, {
+                useStreaming: true,
+                onChunk: (chunk, fullContent) => {
+                    responseEl.textContent = fullContent;
+                    // Auto-scroll to bottom
+                    responseEl.scrollTop = responseEl.scrollHeight;
+                },
+                onComplete: (fullContent) => {
+                    responseEl.classList.remove('streaming');
+                    responseEl.classList.add('complete');
+                },
+                onError: (error) => {
+                    responseEl.classList.remove('streaming');
+                    responseEl.textContent += `\n\n[Error: ${error}]`;
+                }
+            });
+        } else {
+            // Use non-streaming
+            const res = await apiCall('/chat/completions', {
+                method: 'POST',
+                body: JSON.stringify(requestBody)
+            });
+
+            if (res.choices && res.choices[0] && res.choices[0].message) {
+                responseEl.textContent = res.choices[0].message.content || 'No response';
+            } else {
+                responseEl.textContent = 'No response returned.';
+            }
+            responseEl.classList.remove('streaming');
+            responseEl.classList.add('complete');
         }
     } catch (e) {
-        responseEl.textContent = 'Request failed.';
+        responseEl.classList.remove('streaming');
+        responseEl.textContent = `Request failed: ${e.message || 'Unknown error'}`;
     } finally {
         setBusy('repl', false);
         sendBtn.disabled = false;

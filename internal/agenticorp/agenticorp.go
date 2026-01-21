@@ -118,10 +118,10 @@ func New(cfg *config.Config) (*AgentiCorp, error) {
 	}
 
 	arb.dispatcher = dispatch.NewDispatcher(arb.beadsManager, arb.projectManager, arb.agentManager, arb.providerRegistry, eb)
-	
+
 	// Setup provider metrics tracking
 	arb.setupProviderMetrics()
-	
+
 	return arb, nil
 }
 

@@ -154,7 +154,7 @@ The system includes:
 
 1. Ensure all code follows the architecture principles above
 2. All new features must be containerized
-3. **File a bead for your work** - See [BEADS_WORKFLOW.md](BEADS_WORKFLOW.md)
+3. **File a bead for your work** - See [BEADS_WORKFLOW.md](docs/BEADS_WORKFLOW.md)
 4. Update documentation for any new features or changes
 5. Run tests and linters before submitting changes
 

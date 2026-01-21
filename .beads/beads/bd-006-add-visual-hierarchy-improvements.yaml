@@ -32,7 +32,7 @@ project_id: agenticorp
 assigned_to: droid
 blocked_by: []
 blocks: []
-parent: null
+parent: bd-050
 children: []
 tags:
   - ux

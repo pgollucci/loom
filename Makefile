@@ -1,4 +1,4 @@
-.PHONY: all build build-all run restart test test-api coverage fmt vet deps clean distclean install config dev-setup docker-build docker-run docker-stop docker-clean help lint lint-yaml
+.PHONY: all build build-all run restart test test-api coverage fmt vet deps clean distclean install config dev-setup docker-build docker-run docker-stop docker-clean help lint lint-yaml lint-docs
 
 # Build variables
 BINARY_NAME=agenticorp
@@ -130,10 +130,14 @@ distclean: clean
 	@echo "Clean complete. Next build will start fresh."
 
 # Run linters
-lint: fmt vet lint-yaml
+lint: fmt vet lint-yaml lint-docs
 
 lint-yaml:
 	go run ./cmd/yaml-lint
+
+lint-docs:
+	@echo "Checking documentation structure..."
+	@bash scripts/check-docs-structure.sh
 
 # Install the binary to $GOPATH/bin
 install: build
@@ -187,8 +191,9 @@ help:
 	@echo "  make coverage     - Run tests with coverage report"
 	@echo "  make fmt          - Format code"
 	@echo "  make vet          - Run go vet"
-	@echo "  make lint         - Run linters"
+	@echo "  make lint         - Run all linters"
 	@echo "  make lint-yaml    - Validate YAML files"
+	@echo "  make lint-docs    - Check documentation structure"
 	@echo "  make deps         - Download and tidy dependencies"
 	@echo "  make clean        - Clean build artifacts"
 	@echo "  make distclean    - Deep clean: prune docker, remove all artifacts"

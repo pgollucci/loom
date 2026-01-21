@@ -20,6 +20,13 @@ type Protocol interface {
 	GetModels(ctx context.Context) ([]Model, error)
 }
 
+// StreamingProtocol extends Protocol with streaming support
+type StreamingProtocol interface {
+	Protocol
+	// CreateChatCompletionStream sends a streaming chat completion request
+	CreateChatCompletionStream(ctx context.Context, req *ChatCompletionRequest, handler StreamHandler) error
+}
+
 // ChatMessage represents a message in the chat
 type ChatMessage struct {
 	Role    string `json:"role"`    // system, user, assistant

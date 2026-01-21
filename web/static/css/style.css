@@ -730,7 +730,47 @@ textarea {
     border: 1px solid var(--border-color);
     padding: 1rem;
     min-height: 80px;
+    max-height: 400px;
+    overflow-y: auto;
     white-space: pre-wrap;
+    position: relative;
+    transition: border-color 0.3s ease;
+}
+
+.repl-response.streaming {
+    border-color: var(--primary-color);
+    animation: pulse-border 2s ease-in-out infinite;
+}
+
+.repl-response.streaming::after {
+    content: '▊';
+    animation: blink 1s step-end infinite;
+    color: var(--primary-color);
+    margin-left: 2px;
+}
+
+.repl-response.complete {
+    border-color: var(--secondary-color);
+}
+
+@keyframes pulse-border {
+    0%, 100% {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+    }
+    50% {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    }
+}
+
+@keyframes blink {
+    0%, 50% {
+        opacity: 1;
+    }
+    51%, 100% {
+        opacity: 0;
+    }
 }
 
 /* Footer */

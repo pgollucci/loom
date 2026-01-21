@@ -171,9 +171,9 @@ func TestValidateInstruction(t *testing.T) {
 		{
 			name: "valid query",
 			instr: TemporalInstruction{
-				Type:      InstructionTypeQuery,
+				Type:       InstructionTypeQuery,
 				WorkflowID: "wf-123",
-				QueryType: "status",
+				QueryType:  "status",
 			},
 			wantErr: false,
 		},

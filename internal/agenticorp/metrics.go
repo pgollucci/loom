@@ -12,33 +12,33 @@ func (a *AgentiCorp) setupProviderMetrics() {
 		if a.database == nil {
 			return
 		}
-		
+
 		// Load provider from database
 		provider, err := a.database.GetProvider(providerID)
 		if err != nil {
 			return
 		}
-		
+
 		// Record success or failure
 		if success {
 			provider.RecordSuccess(latencyMs, totalTokens)
 		} else {
 			provider.RecordFailure(latencyMs)
 		}
-		
+
 		// Persist updated metrics
 		_ = a.database.UpsertProvider(provider)
-		
+
 		// Emit event for real-time updates
 		if a.eventBus != nil {
 			a.eventBus.Publish(&eventbus.Event{
 				Type: "provider.updated",
 				Data: map[string]interface{}{
-					"provider_id":    providerID,
-					"success":        success,
-					"latency_ms":     latencyMs,
-					"total_tokens":   totalTokens,
-					"overall_score":  provider.GetScore(),
+					"provider_id":   providerID,
+					"success":       success,
+					"latency_ms":    latencyMs,
+					"total_tokens":  totalTokens,
+					"overall_score": provider.GetScore(),
 				},
 			})
 		}

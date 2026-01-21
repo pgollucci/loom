@@ -169,7 +169,7 @@ func (d *Database) initSchema() error {
 
 	// Best-effort migrations for existing databases.
 	// SQLite doesn't support IF NOT EXISTS on ADD COLUMN.
-	
+
 	// Provider migrations
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN model TEXT")
 	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN configured_model TEXT")

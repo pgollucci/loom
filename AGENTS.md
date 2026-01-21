@@ -48,7 +48,14 @@ is_sticky: true
 
 ### 4. Create Beads
 
-Create `.beads/beads/*.yaml` files in your git repo:
+Use the `bd` command to create beads:
+```bash
+bd create --type feature --title "New Feature" \
+  --description "Description of work" \
+  --project-id myapp --priority 4
+```
+
+Or create `.beads/beads/*.yaml` files in your git repo (they will be validated on load):
 ```yaml
 id: bd-001-feature
 type: feature
@@ -115,12 +122,67 @@ Or via API: `POST /api/v1/agents`
 
 **Project Viewer** shows agent status and current work.
 
-## Creating Work Items (Beads)
+## Working with Beads - Two Contexts
 
-Beads are YAML files defining work:
+AgentiCorp uses beads (YAML work items) in two contexts:
+
+### 1. AgentiCorp's Own Beads (Meta-Work)
+
+Located in **this repository** at `.beads/beads/*.yaml`, these track work ON AgentiCorp itself:
+
+- Features/bugs in AgentiCorp
+- Documentation updates  
+- Infrastructure work
+- CI/CD improvements
+
+**Managed via:**
+- `bd` CLI tool for developers
+- AgentiCorp's own API/UI
+- Direct YAML files (validated on load)
+
+### 2. Project Beads (Application Work)
+
+When you register a project with AgentiCorp, it:
+
+1. **Clones the project's git repository** into a work area
+2. **Loads beads** from that project's `.beads/beads/*.yaml` directory
+3. **Assigns agents** to work on those beads
+4. **Commits changes** back to the project's repository
+
+**Project registration** requires:
+```yaml
+id: myapp
+name: My Application
+git_repo: https://github.com/user/myapp
+branch: main
+beads_path: .beads
+```
+
+**Each project's beads live in its own repo**, not in AgentiCorp's repo.
+
+### Git Repository Management
+
+AgentiCorp runs in containers and proxies all git operations for managed projects:
+
+- **Clone**: Fetches project repos into isolated work areas (`/app/src/<project-id>`)
+- **Pull**: Keeps projects up-to-date with remote changes
+- **Commit**: Saves agent work with descriptive commit messages
+- **Push**: Publishes completed work back to origin
+- **SSH/Credentials**: Managed securely per project
+
+### Summary
+
+- **AgentiCorp beads**: Live in `.beads/beads/` in THIS repo (AgentiCorp itself)
+- **Project beads**: Live in `.beads/beads/` in EACH project's own repo
+- **Git proxying**: AgentiCorp manages git operations for all registered projects
+- **Isolation**: Each project gets its own work area and git workspace
+
+## Creating Agent Work Items (Beads)
+
+Agent beads are work items that AI agents pick up and execute. The YAML structure below shows their format:
 
 ```yaml
-# .beads/beads/bd-001-example.yaml
+# .beads/beads/bd-001-example.yaml (managed by `bd` command)
 
 id: bd-001-example
 type: feature
@@ -144,6 +206,8 @@ blocks:            # These can't start until this is done
 parent_id: null    # For sub-tasks
 children_ids: []   # Sub-tasks of this bead
 ```
+
+**Prefer using the AgentiCorp API or Web UI to create/update beads for agents.**
 
 ### Dependencies
 
@@ -288,3 +352,29 @@ Chain beads with dependencies, use signals to coordinate between agents.
 - **Issues**: Report via GitHub
 - **Questions**: Check documentation and architecture guides
 - **Contributions**: Follow repository rules above
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd sync
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds

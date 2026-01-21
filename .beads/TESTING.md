@@ -46,7 +46,7 @@ You can verify beads are loaded correctly by:
 - [x] `config.yaml` configured with agenticorp project
 - [x] Beads loading integrated into `agenticorp.Initialize()`
 - [x] Error logging added to LoadBeadsFromFilesystem
-- [x] Documentation created (BEADS_WORKFLOW.md)
+- [x] Documentation created (docs/BEADS_WORKFLOW.md)
 
 ### Expected Behavior
 

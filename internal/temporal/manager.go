@@ -276,7 +276,7 @@ func (m *Manager) StartAgentiCorpHeartbeatWorkflow(ctx context.Context, interval
 	if interval == 0 {
 		interval = 10 * time.Second
 	}
-	
+
 	workflowID := "agenticorp-heartbeat-master"
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                  workflowID,

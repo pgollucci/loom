@@ -79,7 +79,7 @@ git checkout -b feature/your-feature-name
 
 2. **File a bead for your work**
 
-See [BEADS_WORKFLOW.md](BEADS_WORKFLOW.md) for detailed instructions.
+See [BEADS_WORKFLOW.md](docs/BEADS_WORKFLOW.md) for detailed instructions.
 
 ```bash
 # Quick example - create a bead file in .beads/beads/

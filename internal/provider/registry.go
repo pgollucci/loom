@@ -186,10 +186,38 @@ func (r *Registry) SetMetricsCallback(callback MetricsCallback) {
 	r.metricsCallback = callback
 }
 
+// SendChatCompletionStream sends a streaming chat completion request to a provider
+func (r *Registry) SendChatCompletionStream(ctx context.Context, providerID string, req *ChatCompletionRequest, handler StreamHandler) error {
+	start := time.Now()
+
+	// Get provider
+	registered, err := r.Get(providerID)
+	if err != nil {
+		return err
+	}
+
+	// Check if provider supports streaming
+	streamProvider, ok := registered.Protocol.(StreamingProtocol)
+	if !ok {
+		return fmt.Errorf("provider %s does not support streaming", providerID)
+	}
+
+	// Send streaming request
+	err = streamProvider.CreateChatCompletionStream(ctx, req, handler)
+
+	// Record metrics
+	latencyMs := time.Since(start).Milliseconds()
+	if r.metricsCallback != nil {
+		r.metricsCallback(providerID, err == nil, latencyMs, 0)
+	}
+
+	return err
+}
+
 // SendChatCompletion sends a chat completion request to a provider
 func (r *Registry) SendChatCompletion(ctx context.Context, providerID string, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	startTime := time.Now()
-	
+
 	provider, err := r.Get(providerID)
 	if err != nil {
 		return nil, err
@@ -205,7 +233,7 @@ func (r *Registry) SendChatCompletion(ctx context.Context, providerID string, re
 
 	// Make the request
 	resp, err := provider.Protocol.CreateChatCompletion(ctx, req)
-	
+
 	// Record metrics
 	latencyMs := time.Since(startTime).Milliseconds()
 	success := err == nil
@@ -213,16 +241,16 @@ func (r *Registry) SendChatCompletion(ctx context.Context, providerID string, re
 	if resp != nil {
 		totalTokens = int64(resp.Usage.TotalTokens)
 	}
-	
+
 	// Call metrics callback if registered
 	r.mu.RLock()
 	callback := r.metricsCallback
 	r.mu.RUnlock()
-	
+
 	if callback != nil {
 		callback(providerID, success, latencyMs, totalTokens)
 	}
-	
+
 	return resp, err
 }
 

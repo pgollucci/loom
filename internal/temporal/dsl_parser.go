@@ -84,7 +84,7 @@ func parseTemporalInstruction(text string) (*TemporalInstruction, error) {
 	}
 
 	firstLine := strings.TrimSpace(lines[0])
-	
+
 	// Split on colon to handle "WORKFLOW: name" format
 	headerParts := strings.SplitN(firstLine, ":", 2)
 	if len(headerParts) < 2 {
@@ -95,9 +95,9 @@ func parseTemporalInstruction(text string) (*TemporalInstruction, error) {
 	name := strings.TrimSpace(headerParts[1])
 
 	instr := &TemporalInstruction{
-		Type: instrType,
-		Name: name,
-		Input: make(map[string]interface{}),
+		Type:       instrType,
+		Name:       name,
+		Input:      make(map[string]interface{}),
 		SignalData: make(map[string]interface{}),
 	}
 

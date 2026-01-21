@@ -8,32 +8,32 @@ import (
 type TemporalInstructionType string
 
 const (
-	InstructionTypeWorkflow  TemporalInstructionType = "WORKFLOW"
-	InstructionTypeSchedule  TemporalInstructionType = "SCHEDULE"
-	InstructionTypeQuery     TemporalInstructionType = "QUERY"
-	InstructionTypeSignal    TemporalInstructionType = "SIGNAL"
-	InstructionTypeActivity  TemporalInstructionType = "ACTIVITY"
-	InstructionTypeCancelWF  TemporalInstructionType = "CANCEL"
-	InstructionTypeListWF    TemporalInstructionType = "LIST"
+	InstructionTypeWorkflow TemporalInstructionType = "WORKFLOW"
+	InstructionTypeSchedule TemporalInstructionType = "SCHEDULE"
+	InstructionTypeQuery    TemporalInstructionType = "QUERY"
+	InstructionTypeSignal   TemporalInstructionType = "SIGNAL"
+	InstructionTypeActivity TemporalInstructionType = "ACTIVITY"
+	InstructionTypeCancelWF TemporalInstructionType = "CANCEL"
+	InstructionTypeListWF   TemporalInstructionType = "LIST"
 )
 
 // TemporalInstruction represents a parsed Temporal DSL instruction
 type TemporalInstruction struct {
-	Type          TemporalInstructionType  `json:"type"`
-	Name          string                   `json:"name"`                    // Workflow/Activity name
-	WorkflowID    string                   `json:"workflow_id,omitempty"`   // For QUERY, SIGNAL, CANCEL
-	Input         map[string]interface{}   `json:"input,omitempty"`         // Workflow/Activity input
-	Timeout       time.Duration            `json:"timeout,omitempty"`       // Execution timeout
-	Retry         int                      `json:"retry,omitempty"`         // Number of retries
-	Wait          bool                     `json:"wait,omitempty"`          // Wait for completion
-	Interval      time.Duration            `json:"interval,omitempty"`      // For SCHEDULE
-	QueryType     string                   `json:"query_type,omitempty"`    // For QUERY
-	SignalName    string                   `json:"signal_name,omitempty"`   // For SIGNAL
-	SignalData    map[string]interface{}   `json:"signal_data,omitempty"`   // For SIGNAL
-	RunID         string                   `json:"run_id,omitempty"`        // Optional run ID
-	Priority      int                      `json:"priority,omitempty"`      // Workflow priority
+	Type           TemporalInstructionType `json:"type"`
+	Name           string                  `json:"name"`                      // Workflow/Activity name
+	WorkflowID     string                  `json:"workflow_id,omitempty"`     // For QUERY, SIGNAL, CANCEL
+	Input          map[string]interface{}  `json:"input,omitempty"`           // Workflow/Activity input
+	Timeout        time.Duration           `json:"timeout,omitempty"`         // Execution timeout
+	Retry          int                     `json:"retry,omitempty"`           // Number of retries
+	Wait           bool                    `json:"wait,omitempty"`            // Wait for completion
+	Interval       time.Duration           `json:"interval,omitempty"`        // For SCHEDULE
+	QueryType      string                  `json:"query_type,omitempty"`      // For QUERY
+	SignalName     string                  `json:"signal_name,omitempty"`     // For SIGNAL
+	SignalData     map[string]interface{}  `json:"signal_data,omitempty"`     // For SIGNAL
+	RunID          string                  `json:"run_id,omitempty"`          // Optional run ID
+	Priority       int                     `json:"priority,omitempty"`        // Workflow priority
 	IdempotencyKey string                  `json:"idempotency_key,omitempty"` // Idempotency
-	Description   string                   `json:"description,omitempty"`   // Human readable description
+	Description    string                  `json:"description,omitempty"`     // Human readable description
 }
 
 // TemporalInstructionResult represents the result of executing a Temporal instruction
@@ -59,33 +59,33 @@ type TemporalDSLExecution struct {
 
 // WorkflowOptions represents options for scheduling a workflow
 type WorkflowOptions struct {
-	ID             string                 `json:"id"`
-	Name           string                 `json:"name"`
-	Input          interface{}            `json:"input"`
-	Timeout        time.Duration          `json:"timeout"`
-	Retry          int                    `json:"retry"`
-	Wait           bool                   `json:"wait"`
-	Priority       int                    `json:"priority"`
-	IdempotencyKey string                 `json:"idempotency_key"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	Input          interface{}   `json:"input"`
+	Timeout        time.Duration `json:"timeout"`
+	Retry          int           `json:"retry"`
+	Wait           bool          `json:"wait"`
+	Priority       int           `json:"priority"`
+	IdempotencyKey string        `json:"idempotency_key"`
 }
 
 // ActivityOptions represents options for executing an activity
 type ActivityOptions struct {
-	Name    string                 `json:"name"`
-	Input   interface{}            `json:"input"`
-	Timeout time.Duration          `json:"timeout"`
-	Retry   int                    `json:"retry"`
-	Wait    bool                   `json:"wait"`
+	Name    string        `json:"name"`
+	Input   interface{}   `json:"input"`
+	Timeout time.Duration `json:"timeout"`
+	Retry   int           `json:"retry"`
+	Wait    bool          `json:"wait"`
 }
 
 // ScheduleOptions represents options for creating a scheduled workflow
 type ScheduleOptions struct {
-	Name      string            `json:"name"`
-	Workflow  string            `json:"workflow"`
-	Input     interface{}       `json:"input"`
-	Interval  time.Duration     `json:"interval"`
-	Timeout   time.Duration     `json:"timeout"`
-	Retry     int               `json:"retry"`
+	Name     string        `json:"name"`
+	Workflow string        `json:"workflow"`
+	Input    interface{}   `json:"input"`
+	Interval time.Duration `json:"interval"`
+	Timeout  time.Duration `json:"timeout"`
+	Retry    int           `json:"retry"`
 }
 
 // QueryOptions represents options for querying a workflow

@@ -32,11 +32,11 @@ type Persona struct {
 }
 
 // VersionedEntity interface implementation for Persona
-func (p *Persona) GetEntityType() EntityType         { return EntityTypePersona }
-func (p *Persona) GetSchemaVersion() SchemaVersion   { return p.EntityMetadata.SchemaVersion }
-func (p *Persona) SetSchemaVersion(v SchemaVersion)  { p.EntityMetadata.SchemaVersion = v }
+func (p *Persona) GetEntityType() EntityType          { return EntityTypePersona }
+func (p *Persona) GetSchemaVersion() SchemaVersion    { return p.EntityMetadata.SchemaVersion }
+func (p *Persona) SetSchemaVersion(v SchemaVersion)   { p.EntityMetadata.SchemaVersion = v }
 func (p *Persona) GetEntityMetadata() *EntityMetadata { return &p.EntityMetadata }
-func (p *Persona) GetID() string                     { return p.Name }
+func (p *Persona) GetID() string                      { return p.Name }
 
 // Agent represents a running agent instance with a specific persona
 type Agent struct {
@@ -81,6 +81,17 @@ type ProjectComment struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// GitAuthMethod represents the authentication method for git operations
+type GitAuthMethod string
+
+const (
+	GitAuthNone      GitAuthMethod = "none"       // Public repos, no auth
+	GitAuthSSH       GitAuthMethod = "ssh"        // SSH key authentication
+	GitAuthToken     GitAuthMethod = "token"      // HTTPS with token (GitHub PAT, etc.)
+	GitAuthBasic     GitAuthMethod = "basic"      // HTTPS with username/password
+	GitAuthGitHelper GitAuthMethod = "git-helper" // Use git credential helper
+)
+
 // Project represents a project that agents work on
 type Project struct {
 	EntityMetadata `json:",inline"`
@@ -89,17 +100,25 @@ type Project struct {
 	Name        string            `json:"name"`
 	GitRepo     string            `json:"git_repo"`
 	Branch      string            `json:"branch"`
-	BeadsPath   string            `json:"beads_path"`   // Path to .beads directory
+	BeadsPath   string            `json:"beads_path"`          // Path to .beads directory
 	ParentID    string            `json:"parent_id,omitempty"` // For sub-projects
-	Context     map[string]string `json:"context"`      // Additional context for agents
-	Status      ProjectStatus     `json:"status"`       // Current project status
-	IsPerpetual bool              `json:"is_perpetual"` // If true, project never closes
-	IsSticky    bool              `json:"is_sticky"`    // If true, project auto-added on startup
-	Comments    []ProjectComment  `json:"comments"`     // Comments on project state
+	Context     map[string]string `json:"context"`             // Additional context for agents
+	Status      ProjectStatus     `json:"status"`              // Current project status
+	IsPerpetual bool              `json:"is_perpetual"`        // If true, project never closes
+	IsSticky    bool              `json:"is_sticky"`           // If true, project auto-added on startup
+	Comments    []ProjectComment  `json:"comments"`            // Comments on project state
 	CreatedAt   time.Time         `json:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at"`
 	ClosedAt    *time.Time        `json:"closed_at,omitempty"`
 	Agents      []string          `json:"agents"` // Agent IDs working on this project
+
+	// Git management fields
+	GitAuthMethod    GitAuthMethod     `json:"git_auth_method"`              // Authentication method
+	GitCredentialID  string            `json:"git_credential_id,omitempty"`  // Reference to stored credential
+	WorkDir          string            `json:"work_dir,omitempty"`           // Local path where repo is cloned
+	LastSyncAt       *time.Time        `json:"last_sync_at,omitempty"`       // Last git pull/fetch
+	LastCommitHash   string            `json:"last_commit_hash,omitempty"`   // Last known commit SHA
+	GitConfigOptions map[string]string `json:"git_config_options,omitempty"` // Custom git config for this project
 }
 
 // VersionedEntity interface implementation for Project

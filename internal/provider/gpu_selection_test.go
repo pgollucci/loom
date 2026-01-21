@@ -121,7 +121,7 @@ func TestSelectGPU(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gpuID, reason := SelectGPU(tt.modelSpec, tt.constraints, tt.availableGPUs)
-			
+
 			if tt.shouldSelect {
 				if gpuID == "" {
 					t.Errorf("Expected GPU selection but got empty ID. Reason: %s", reason)
@@ -182,7 +182,7 @@ func TestInferGPUConstraintsFromModel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			constraints := InferGPUConstraintsFromModel(tt.modelSpec)
-			
+
 			if tt.expectConstraints {
 				if constraints == nil {
 					t.Error("Expected constraints but got nil")

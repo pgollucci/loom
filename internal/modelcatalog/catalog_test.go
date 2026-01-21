@@ -10,14 +10,14 @@ import (
 // TestParseModelName tests extraction of metadata from model names
 func TestParseModelName(t *testing.T) {
 	tests := []struct {
-		name               string
-		input              string
-		expectedVendor     string
-		expectedFamily     string
-		expectedTotalB     float64
-		expectedActiveB    float64
-		expectedPrecision  string
-		expectedInstruct   bool
+		name              string
+		input             string
+		expectedVendor    string
+		expectedFamily    string
+		expectedTotalB    float64
+		expectedActiveB   float64
+		expectedPrecision string
+		expectedInstruct  bool
 	}{
 		{
 			name:              "Qwen 480B model with active params",
@@ -137,7 +137,7 @@ func TestScore(t *testing.T) {
 				TotalParamsB:  10,
 				Rank:          1,
 			},
-			expectedScore: 98.0,  // 100 + 10 (fast) - 10 (log10(11)*10) - 1 (rank)
+			expectedScore: 98.0, // 100 + 10 (fast) - 10 (log10(11)*10) - 1 (rank)
 			tolerance:     1.0,
 		},
 		{
@@ -147,7 +147,7 @@ func TestScore(t *testing.T) {
 				TotalParamsB:  10,
 				Rank:          1,
 			},
-			expectedScore: 93.0,  // 100 + 5 (medium) - 10 (log10(11)*10) - 1 (rank)
+			expectedScore: 93.0, // 100 + 5 (medium) - 10 (log10(11)*10) - 1 (rank)
 			tolerance:     1.0,
 		},
 		{
@@ -157,7 +157,7 @@ func TestScore(t *testing.T) {
 				TotalParamsB:  10,
 				Rank:          1,
 			},
-			expectedScore: 83.0,  // 100 - 5 (slow) - 10 (log10(11)*10) - 1 (rank)
+			expectedScore: 83.0, // 100 - 5 (slow) - 10 (log10(11)*10) - 1 (rank)
 			tolerance:     1.0,
 		},
 		{
@@ -167,7 +167,7 @@ func TestScore(t *testing.T) {
 				TotalParamsB:  480,
 				Rank:          1,
 			},
-			expectedScore: 82.0,  // 100 + 10 (fast) - ~27 (log10(481)*10) - 1 (rank)
+			expectedScore: 82.0, // 100 + 10 (fast) - ~27 (log10(481)*10) - 1 (rank)
 			tolerance:     1.0,
 		},
 		{
@@ -177,7 +177,7 @@ func TestScore(t *testing.T) {
 				TotalParamsB:  7,
 				Rank:          5,
 			},
-			expectedScore: 95.97,  // 100 + 10 (fast) - ~9 (log10(8)*10) - 5 (rank)
+			expectedScore: 95.97, // 100 + 10 (fast) - ~9 (log10(8)*10) - 5 (rank)
 			tolerance:     0.1,
 		},
 	}
@@ -240,11 +240,11 @@ func TestSelectBest(t *testing.T) {
 		{
 			name: "Multiple recommended models - picks highest score",
 			available: []string{
-				"Qwen2.5-Coder-7B-Instruct",          // Rank 5 but high score (fast+small)
-				"Qwen/Qwen3-Coder-30B-A3B-Instruct",  // Rank 2, medium score
+				"Qwen2.5-Coder-7B-Instruct",                 // Rank 5 but high score (fast+small)
+				"Qwen/Qwen3-Coder-30B-A3B-Instruct",         // Rank 2, medium score
 				"nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8", // Rank 3, good score (fast)
 			},
-			expectedModel: "Qwen2.5-Coder-7B-Instruct",  // Highest score wins (fast+small beats rank)
+			expectedModel: "Qwen2.5-Coder-7B-Instruct", // Highest score wins (fast+small beats rank)
 			shouldFind:    true,
 		},
 		{
@@ -275,9 +275,9 @@ func TestSelectBest(t *testing.T) {
 		{
 			name: "Case insensitive matching",
 			available: []string{
-				"qwen/qwen3-coder-30b-a3b-instruct",  // lowercase
+				"qwen/qwen3-coder-30b-a3b-instruct", // lowercase
 			},
-			expectedModel: "Qwen/Qwen3-Coder-30B-A3B-Instruct",  // Should match despite case difference
+			expectedModel: "Qwen/Qwen3-Coder-30B-A3B-Instruct", // Should match despite case difference
 			shouldFind:    true,
 		},
 	}

@@ -1,0 +1,21 @@
+name: Lint Documentation Structure
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+  push:
+    branches:
+      - main
+    paths:
+      - '**.md'
+
+jobs:
+  check-docs-structure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check documentation structure
+        run: bash scripts/check-docs-structure.sh

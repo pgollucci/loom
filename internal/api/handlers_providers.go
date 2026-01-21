@@ -37,7 +37,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 			s.respondError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
-		
+
 		provider := &internalmodels.Provider{
 			ID:          req.ID,
 			Name:        req.Name,
@@ -46,7 +46,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 			Model:       req.Model,
 			Description: req.Description,
 		}
-		
+
 		// Store API key if provided
 		if req.APIKey != "" {
 			keyID := fmt.Sprintf("%s-api-key", req.ID)
@@ -58,7 +58,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 				provider.KeyID = keyID
 			}
 		}
-		
+
 		created, err := s.agenticorp.RegisterProvider(context.Background(), provider)
 		if err != nil {
 			s.respondError(w, http.StatusBadRequest, err.Error())

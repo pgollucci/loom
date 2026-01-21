@@ -17,10 +17,10 @@ import (
 
 // Server represents the HTTP API server
 type Server struct {
-	agenticorp  *agenticorp.AgentiCorp
-	keyManager  *keymanager.KeyManager
-	authManager *auth.Manager
-	config      *config.Config
+	agenticorp     *agenticorp.AgentiCorp
+	keyManager     *keymanager.KeyManager
+	authManager    *auth.Manager
+	config         *config.Config
 	apiFailureMu   sync.Mutex
 	apiFailureLast map[string]time.Time
 }
@@ -28,10 +28,10 @@ type Server struct {
 // NewServer creates a new API server
 func NewServer(arb *agenticorp.AgentiCorp, km *keymanager.KeyManager, am *auth.Manager, cfg *config.Config) *Server {
 	return &Server{
-		agenticorp:  arb,
-		keyManager:  km,
-		authManager: am,
-		config:      cfg,
+		agenticorp:     arb,
+		keyManager:     km,
+		authManager:    am,
+		config:         cfg,
 		apiFailureLast: make(map[string]time.Time),
 	}
 }
@@ -126,6 +126,10 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// CEO REPL
 	mux.HandleFunc("/api/v1/repl", s.handleRepl)
+
+	// Chat completions (with streaming support)
+	mux.HandleFunc("/api/v1/chat/completions/stream", s.handleStreamChatCompletion)
+	mux.HandleFunc("/api/v1/chat/completions", s.handleChatCompletion)
 
 	// Configuration
 	mux.HandleFunc("/api/v1/config", s.handleConfig)
@@ -283,6 +287,8 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			r.URL.Path == "/" ||
 			r.URL.Path == "/api/openapi.yaml" ||
 			r.URL.Path == "/api/v1/events/stream" ||
+			r.URL.Path == "/api/v1/chat/completions/stream" ||
+			r.URL.Path == "/api/v1/chat/completions" ||
 			strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return

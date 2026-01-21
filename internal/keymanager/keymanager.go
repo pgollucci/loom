@@ -30,10 +30,10 @@ type KeyEntry struct {
 
 // KeyStore represents the encrypted key storage
 type KeyStore struct {
-	Version        string                 `json:"version"`        // Schema version
-	PasswordSalt   string                 `json:"password_salt"`  // Unencrypted salt for password validation
-	PasswordVerify string                 `json:"password_verify"` // Hash to verify password correctness
-	Keys           map[string]*KeyEntry   `json:"keys"`
+	Version        string               `json:"version"`         // Schema version
+	PasswordSalt   string               `json:"password_salt"`   // Unencrypted salt for password validation
+	PasswordVerify string               `json:"password_verify"` // Hash to verify password correctness
+	Keys           map[string]*KeyEntry `json:"keys"`
 }
 
 // KeyManager manages secure storage and retrieval of provider credentials

@@ -1,0 +1,41 @@
+id: bd-066
+type: feature
+title: Add API key authentication for REST endpoints
+description: |
+  Implement API key authentication to secure REST endpoints and enable basic
+  access control.
+  
+  Tasks:
+  - Design API key schema and storage
+  - Implement key generation and validation
+  - Add authentication middleware
+  - Secure all API endpoints
+  - Add API key management endpoints
+  
+  Acceptance:
+  - API keys can be generated and revoked
+  - All endpoints require valid API key
+  - Invalid keys return 401 Unauthorized
+  - Keys stored securely (hashed)
+  - Key management API functional
+
+status: open
+priority: 1
+project_id: agenticorp
+assigned_to: null
+blocked_by: []
+blocks:
+  - bd-067
+  - bd-068
+parent: bd-052
+children: []
+tags:
+  - feature
+  - authentication
+  - security
+  - p1
+created_at: 2026-01-20T00:00:00Z
+updated_at: 2026-01-20T00:00:00Z
+context:
+  source: product-manager future goals
+  epic: bd-052

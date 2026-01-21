@@ -119,7 +119,7 @@ func (e *EntityMetadata) SetAttribute(key string, value any) {
 	if e.Attributes == nil {
 		e.Attributes = make(map[string]any)
 	}
-	e.Attributes[key]= value
+	e.Attributes[key] = value
 }
 
 // DeleteAttribute removes an attribute

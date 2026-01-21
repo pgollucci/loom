@@ -1,0 +1,41 @@
+id: bd-068
+type: feature
+title: Implement role-based access control (admin, user, read-only)
+description: |
+  Add RBAC system with granular permissions for different user roles.
+  
+  Tasks:
+  - Define role schema (admin, user, read-only)
+  - Implement permission checking middleware
+  - Add role assignment to users
+  - Protect endpoints based on roles
+  - Add role management API
+  
+  Acceptance:
+  - Three roles implemented (admin, user, read-only)
+  - Endpoints protected by role requirements
+  - Admins can manage user roles
+  - Unauthorized actions return 403 Forbidden
+  - Role changes take effect immediately
+
+status: open
+priority: 1
+project_id: agenticorp
+assigned_to: null
+blocked_by:
+  - bd-066
+  - bd-067
+blocks:
+  - bd-069
+parent: bd-052
+children: []
+tags:
+  - feature
+  - authorization
+  - rbac
+  - p1
+created_at: 2026-01-20T00:00:00Z
+updated_at: 2026-01-20T00:00:00Z
+context:
+  source: product-manager future goals
+  epic: bd-052

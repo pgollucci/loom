@@ -21,10 +21,10 @@ func NewDSLExecutor(manager *Manager) *DSLExecutor {
 // ExecuteInstructions executes a list of temporal instructions
 func (e *DSLExecutor) ExecuteInstructions(ctx context.Context, instructions []TemporalInstruction, agentID string) *TemporalDSLExecution {
 	execution := &TemporalDSLExecution{
-		AgentID:       agentID,
-		Instructions:  instructions,
-		Results:       []TemporalInstructionResult{},
-		ExecutedAt:    time.Now(),
+		AgentID:      agentID,
+		Instructions: instructions,
+		Results:      []TemporalInstructionResult{},
+		ExecutedAt:   time.Now(),
 	}
 
 	startTime := time.Now()
