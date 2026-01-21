@@ -50,21 +50,11 @@ is_sticky: true
 
 Use the `bd` command to create beads:
 ```bash
-bd create --type feature --title "New Feature" \
-  --description "Description of work" \
-  --project-id myapp --priority 4
+bd create "New Feature" --type feature --priority 4 \
+  --description "Description of work"
 ```
 
-Or create `.beads/beads/*.yaml` files in your git repo (they will be validated on load):
-```yaml
-id: bd-001-feature
-type: feature
-title: New Feature
-description: Description of work
-project_id: myapp
-status: open
-priority: 4
-```
+All beads are stored in `.beads/issues.jsonl` and managed via the `bd` CLI tool.
 
 ### 5. Assign Agents
 
@@ -124,11 +114,11 @@ Or via API: `POST /api/v1/agents`
 
 ## Working with Beads - Two Contexts
 
-AgentiCorp uses beads (YAML work items) in two contexts:
+AgentiCorp uses the **Beads** CLI tool for issue tracking in two contexts:
 
 ### 1. AgentiCorp's Own Beads (Meta-Work)
 
-Located in **this repository** at `.beads/beads/*.yaml`, these track work ON AgentiCorp itself:
+Located in **this repository** at `.beads/issues.jsonl`, these track work ON AgentiCorp itself:
 
 - Features/bugs in AgentiCorp
 - Documentation updates  
@@ -136,16 +126,16 @@ Located in **this repository** at `.beads/beads/*.yaml`, these track work ON Age
 - CI/CD improvements
 
 **Managed via:**
-- `bd` CLI tool for developers
-- AgentiCorp's own API/UI
-- Direct YAML files (validated on load)
+- `bd` CLI tool exclusively
+- JSONL format (not YAML files)
+- Git-native sync with `bd sync`
 
 ### 2. Project Beads (Application Work)
 
 When you register a project with AgentiCorp, it:
 
 1. **Clones the project's git repository** into a work area
-2. **Loads beads** from that project's `.beads/beads/*.yaml` directory
+2. **Loads beads** from that project's `.beads/issues.jsonl` file
 3. **Assigns agents** to work on those beads
 4. **Commits changes** back to the project's repository
 
@@ -172,50 +162,63 @@ AgentiCorp runs in containers and proxies all git operations for managed project
 
 ### Summary
 
-- **AgentiCorp beads**: Live in `.beads/beads/` in THIS repo (AgentiCorp itself)
-- **Project beads**: Live in `.beads/beads/` in EACH project's own repo
+- **AgentiCorp beads**: Live in `.beads/issues.jsonl` in THIS repo (AgentiCorp itself)
+- **Project beads**: Live in `.beads/issues.jsonl` in EACH project's own repo
+- **Beads CLI**: All bead operations use the `bd` command
 - **Git proxying**: AgentiCorp manages git operations for all registered projects
 - **Isolation**: Each project gets its own work area and git workspace
 
 ## Creating Agent Work Items (Beads)
 
-Agent beads are work items that AI agents pick up and execute. The YAML structure below shows their format:
+Agent beads are work items that AI agents pick up and execute. Use the `bd` CLI to manage them:
 
-```yaml
-# .beads/beads/bd-001-example.yaml (managed by `bd` command)
+```bash
+# Create a new bead
+bd create "Implement Feature X" \
+  --type feature \
+  --priority 2 \
+  --description "Detailed description of the work"
 
-id: bd-001-example
-type: feature
-title: Implement Feature X
-description: |
-  Detailed description of the work.
-  Can span multiple lines.
+# Update status
+bd update bd-001 --status in_progress
 
-project_id: myapp
-assigned_to: null  # null = auto-routed to available agent
+# Add dependencies
+bd update bd-002 --deps "blocked-by:bd-001"
 
-status: open       # open, in_progress, blocked, done
-priority: 4        # 1-5 scale
+# Close when done
+bd update bd-001 --status closed
 
-blocked_by:        # Block until these are done
-  - bd-001-dependencies
+# View all beads
+bd list
 
-blocks:            # These can't start until this is done
-  - bd-002-downstream
-
-parent_id: null    # For sub-tasks
-children_ids: []   # Sub-tasks of this bead
+# View open beads
+bd list open
 ```
+
+**Priority Levels**:
+- P0 (0): Critical, blocking work
+- P1 (1): High priority
+- P2 (2): Normal priority (default)
+- P3 (3): Low priority, nice-to-have
 
 **Prefer using the AgentiCorp API or Web UI to create/update beads for agents.**
 
 ### Dependencies
 
-- **blocked_by**: Can't progress if these aren't done
-- **blocks**: Prevents other beads from starting
-- **parent/children**: Sub-task relationships
+Beads support dependency relationships:
 
-Circular dependencies are detected and reported at load time.
+```bash
+# Create a dependency (bd-002 is blocked by bd-001)
+bd update bd-002 --deps "blocked-by:bd-001"
+
+# Create a blocks relationship
+bd update bd-001 --deps "blocks:bd-002"
+
+# Parent-child relationships
+bd create "Sub-task" --parent bd-050
+```
+
+Circular dependencies are automatically detected by the `bd` CLI.
 
 ## Using Temporal DSL in Agents
 
