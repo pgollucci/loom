@@ -143,6 +143,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/analytics/logs", s.handleGetLogs)
 	mux.HandleFunc("/api/v1/analytics/stats", s.handleGetLogStats)
 	mux.HandleFunc("/api/v1/analytics/export", s.handleExportLogs)
+	mux.HandleFunc("/api/v1/analytics/export-stats", s.handleExportStats)
 	mux.HandleFunc("/api/v1/analytics/costs", s.handleGetCostReport)
 
 	// Configuration

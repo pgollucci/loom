@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -230,35 +232,158 @@ func (s *Server) handleGetCostReport(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(costReport)
 }
 
+// handleExportStats handles GET /api/v1/analytics/export-stats
+func (s *Server) handleExportStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := auth.GetUserIDFromRequest(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse query parameters
+	filter := &analytics.LogFilter{
+		UserID: userID,
+	}
+
+	if startTime := r.URL.Query().Get("start_time"); startTime != "" {
+		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
+			filter.StartTime = t
+		}
+	}
+
+	if endTime := r.URL.Query().Get("end_time"); endTime != "" {
+		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
+			filter.EndTime = t
+		}
+	}
+
+	// Admin can see all stats
+	role := auth.GetRoleFromRequest(r)
+	if role == "admin" {
+		filter.UserID = ""
+		if queryUserID := r.URL.Query().Get("user_id"); queryUserID != "" {
+			filter.UserID = queryUserID
+		}
+	}
+
+	stats, err := s.analyticsLogger.GetStats(r.Context(), filter)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Export format
+	format := r.URL.Query().Get("format")
+	switch format {
+	case "csv":
+		exportStatsAsCSV(w, stats, filter)
+	default:
+		// JSON export
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"agenticorp-stats-"+time.Now().Format("2006-01-02")+".json\"")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"exported_at":   time.Now().Format(time.RFC3339),
+			"time_range": map[string]string{
+				"start": filter.StartTime.Format(time.RFC3339),
+				"end":   filter.EndTime.Format(time.RFC3339),
+			},
+			"summary": map[string]interface{}{
+				"total_requests": stats.TotalRequests,
+				"total_tokens":   stats.TotalTokens,
+				"total_cost_usd": stats.TotalCostUSD,
+				"avg_latency_ms": stats.AvgLatencyMs,
+				"error_rate":     stats.ErrorRate,
+			},
+			"cost_by_provider":     stats.CostByProvider,
+			"cost_by_user":         stats.CostByUser,
+			"requests_by_provider": stats.RequestsByProvider,
+			"requests_by_user":     stats.RequestsByUser,
+		})
+	}
+}
+
+// exportStatsAsCSV exports stats summary in CSV format
+func exportStatsAsCSV(w http.ResponseWriter, stats *analytics.LogStats, filter *analytics.LogFilter) {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"agenticorp-stats-"+time.Now().Format("2006-01-02")+".csv\"")
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	// Summary section
+	writer.Write([]string{"Summary", "", "", ""})
+	writer.Write([]string{"Metric", "Value", "", ""})
+	writer.Write([]string{"Total Requests", fmt.Sprintf("%d", stats.TotalRequests), "", ""})
+	writer.Write([]string{"Total Tokens", fmt.Sprintf("%d", stats.TotalTokens), "", ""})
+	writer.Write([]string{"Total Cost (USD)", fmt.Sprintf("%.4f", stats.TotalCostUSD), "", ""})
+	writer.Write([]string{"Avg Latency (ms)", fmt.Sprintf("%.2f", stats.AvgLatencyMs), "", ""})
+	writer.Write([]string{"Error Rate", fmt.Sprintf("%.2f%%", stats.ErrorRate*100), "", ""})
+	writer.Write([]string{""})
+
+	// Cost by Provider
+	writer.Write([]string{"Cost by Provider", "", "", ""})
+	writer.Write([]string{"Provider ID", "Requests", "Cost (USD)", ""})
+	for provider, cost := range stats.CostByProvider {
+		requests := stats.RequestsByProvider[provider]
+		writer.Write([]string{provider, fmt.Sprintf("%d", requests), fmt.Sprintf("%.4f", cost), ""})
+	}
+	writer.Write([]string{""})
+
+	// Cost by User
+	writer.Write([]string{"Cost by User", "", "", ""})
+	writer.Write([]string{"User ID", "Requests", "Cost (USD)", ""})
+	for user, cost := range stats.CostByUser {
+		requests := stats.RequestsByUser[user]
+		writer.Write([]string{user, fmt.Sprintf("%d", requests), fmt.Sprintf("%.4f", cost), ""})
+	}
+}
+
 // exportLogsAsCSV exports logs in CSV format
 func exportLogsAsCSV(w http.ResponseWriter, logs []*analytics.RequestLog) {
-	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", "attachment; filename=\"logs.csv\"")
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"agenticorp-logs-"+time.Now().Format("2006-01-02")+".csv\"")
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
 
 	// Write CSV header
-	w.Write([]byte("timestamp,user_id,method,path,provider_id,model,tokens,latency_ms,cost_usd,status\n"))
+	writer.Write([]string{
+		"Timestamp",
+		"User ID",
+		"Method",
+		"Path",
+		"Provider ID",
+		"Model",
+		"Prompt Tokens",
+		"Completion Tokens",
+		"Total Tokens",
+		"Latency (ms)",
+		"Status Code",
+		"Cost (USD)",
+		"Error Message",
+	})
 
 	// Write data rows
 	for _, log := range logs {
-		w.Write([]byte(log.Timestamp.Format(time.RFC3339)))
-		w.Write([]byte(","))
-		w.Write([]byte(log.UserID))
-		w.Write([]byte(","))
-		w.Write([]byte(log.Method))
-		w.Write([]byte(","))
-		w.Write([]byte(log.Path))
-		w.Write([]byte(","))
-		w.Write([]byte(log.ProviderID))
-		w.Write([]byte(","))
-		w.Write([]byte(log.ModelName))
-		w.Write([]byte(","))
-		w.Write([]byte(string(rune(log.TotalTokens))))
-		w.Write([]byte(","))
-		w.Write([]byte(string(rune(log.LatencyMs))))
-		w.Write([]byte(","))
-		w.Write([]byte(string(rune(int(log.CostUSD * 100)))))
-		w.Write([]byte(","))
-		w.Write([]byte(string(rune(log.StatusCode))))
-		w.Write([]byte("\n"))
+		writer.Write([]string{
+			log.Timestamp.Format(time.RFC3339),
+			log.UserID,
+			log.Method,
+			log.Path,
+			log.ProviderID,
+			log.ModelName,
+			fmt.Sprintf("%d", log.PromptTokens),
+			fmt.Sprintf("%d", log.CompletionTokens),
+			fmt.Sprintf("%d", log.TotalTokens),
+			fmt.Sprintf("%d", log.LatencyMs),
+			fmt.Sprintf("%d", log.StatusCode),
+			fmt.Sprintf("%.4f", log.CostUSD),
+			log.ErrorMessage,
+		})
 	}
 }

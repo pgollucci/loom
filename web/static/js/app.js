@@ -2973,3 +2973,87 @@ document.querySelectorAll('.view-tab').forEach(tab => {
         }
     };
 });
+
+// Export analytics data
+async function exportAnalytics(type, format) {
+    const timeRange = document.getElementById('analytics-time-range').value;
+    let startTime, endTime;
+    
+    const now = new Date();
+    endTime = now.toISOString();
+    
+    switch (timeRange) {
+        case '1h':
+            startTime = new Date(now - 60 * 60 * 1000).toISOString();
+            break;
+        case '24h':
+            startTime = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+            break;
+        case '7d':
+            startTime = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+            break;
+        case '30d':
+            startTime = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+            break;
+        case 'custom':
+            startTime = document.getElementById('analytics-start-time').value;
+            endTime = document.getElementById('analytics-end-time').value;
+            break;
+    }
+    
+    try {
+        const params = new URLSearchParams();
+        if (startTime) params.append('start_time', startTime);
+        if (endTime) params.append('end_time', endTime);
+        if (format) params.append('format', format);
+        
+        const endpoint = type === 'logs' ? '/api/v1/analytics/export' : '/api/v1/analytics/export-stats';
+        const url = `${endpoint}?${params}`;
+        
+        // Create a temporary link to trigger download
+        const a = document.createElement('a');
+        a.href = url;
+        a.setAttribute('download', '');
+        a.style.display = 'none';
+        
+        // Add authorization header via fetch and create blob URL
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${state.token}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Export failed: ' + response.statusText);
+        }
+        
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        a.href = blobUrl;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Clean up blob URL after a short delay
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+        
+        showToast('Export started. Your download should begin shortly.', 'success');
+    } catch (error) {
+        console.error('Error exporting analytics:', error);
+        showToast('Failed to export: ' + error.message, 'error');
+    }
+}
+
+// Event listeners for export buttons
+document.getElementById('export-stats-json-btn')?.addEventListener('click', () => {
+    exportAnalytics('stats', 'json');
+});
+
+document.getElementById('export-stats-csv-btn')?.addEventListener('click', () => {
+    exportAnalytics('stats', 'csv');
+});
+
+document.getElementById('export-logs-csv-btn')?.addEventListener('click', () => {
+    exportAnalytics('logs', 'csv');
+});
