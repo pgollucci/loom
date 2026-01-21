@@ -1,6 +1,6 @@
 # AgentiCorp Architecture Guide
 
-**Last Updated**: January 20, 2026
+**Last Updated**: January 21, 2026
 
 This document describes the architecture of AgentiCorp, the Agent Orchestration System for managing distributed AI workflows.
 
@@ -13,6 +13,9 @@ AgentiCorp is a comprehensive agent orchestration platform that:
 - Uses Temporal for reliable workflow orchestration
 - Persists all state to a SQLite database
 - Provides a real-time web UI for monitoring and control
+- **NEW (v1.0)**: Multi-user authentication with role-based access control
+- **NEW (v1.0)**: Intelligent provider routing with cost and latency optimization
+- **NEW (v1.0)**: Server-sent events for real-time streaming responses
 
 ## Core Components
 
@@ -63,11 +66,12 @@ AgentiCorp is a comprehensive agent orchestration platform that:
 
 ### 3. Provider System
 
-**Purpose**: Interface with external LLM providers (vLLM, Ollama, OpenAI, etc.)
+**Purpose**: Interface with external LLM providers with intelligent routing and cost optimization
 
 **Key Files**:
 - `pkg/provider/provider.go`
 - `internal/models/provider.go`
+- `internal/routing/router.go` (NEW v1.0)
 - `internal/agenticorp/agenticorp.go` (provider management)
 
 **Concepts**:
@@ -75,15 +79,99 @@ AgentiCorp is a comprehensive agent orchestration platform that:
 - **Endpoint**: Network address for provider communication
 - **Model**: LLM served by the provider (e.g., Nemotron, GPT-4)
 - **Status**: `pending`, `active`, `error`
+- **Cost Metadata** (NEW v1.0): Cost per million tokens for optimization
+- **Capabilities** (NEW v1.0): Context window, function calling, vision support
+- **Routing Policy** (NEW v1.0): Selection strategy (cost, latency, quality, balanced)
 
 **Workflow**:
-1. Providers are registered via UI with endpoint and model info
+1. Providers are registered via UI with endpoint, model, and cost info
 2. Immediate health check validates provider availability
 3. Provider heartbeat workflow monitors health (30s interval)
 4. On status change, agents resume or pause accordingly
-5. Dispatcher routes work to healthy providers
+5. **Router selects optimal provider** based on policy and requirements (NEW v1.0)
+6. Automatic failover if selected provider fails
 
-**Database**: `providers` table with endpoint, status, and heartbeat tracking
+**Database**: `providers` table with endpoint, status, cost, capabilities, and heartbeat tracking
+
+### 3.1 Provider Routing System (NEW v1.0)
+
+**Purpose**: Intelligently select providers based on cost, latency, quality, and capabilities
+
+**Key Files**:
+- `internal/routing/router.go`
+- `internal/routing/router_test.go`
+- `internal/api/handlers_routing.go`
+
+**Routing Policies**:
+1. **minimize_cost**: Select cheapest provider (30%+ savings)
+2. **minimize_latency**: Select fastest provider (<1ms routing)
+3. **maximize_quality**: Select provider with best capabilities
+4. **balanced** (default): Balance cost (30%), latency (30%), quality (40%)
+
+**Provider Requirements**:
+- `MaxCostPerMToken`: Maximum acceptable cost
+- `MaxLatencyMs`: Maximum acceptable latency
+- `MinContextWindow`: Minimum context window size
+- `RequiresFunction`: Must support function calling
+- `RequiresVision`: Must support vision/multimodal
+- `RequiredTags`: Custom capability tags
+
+**Automatic Failover**:
+- Health criteria: status, heartbeat recency, success rate
+- Circuit breaker pattern prevents cascading failures
+- Transparent failover to backup providers
+- Excluded providers list for retry logic
+
+**API Endpoints**:
+- `POST /api/v1/routing/select` - Select provider with policy
+- `GET /api/v1/routing/policies` - List available policies
+
+### 3.2 Authentication & Authorization System (NEW v1.0)
+
+**Purpose**: Secure multi-user deployments with role-based access control
+
+**Key Files**:
+- `internal/auth/manager.go`
+- `internal/auth/middleware.go`
+- `internal/auth/handlers.go`
+- `internal/auth/models.go`
+
+**Authentication Methods**:
+1. **JWT Bearer Tokens**: For user sessions (24h expiration)
+2. **API Keys**: For service-to-service integrations
+
+**User Roles**:
+- `admin`: Full system access (*:* permissions)
+- `user`: Read/write access to most resources
+- `viewer`: Read-only access
+- `service`: Custom permissions per API key
+
+**Permissions**:
+Format: `<resource>:<action>` (e.g., `agents:read`, `beads:write`)
+- Resources: agents, beads, providers, projects, decisions, repl, system
+- Actions: read, write, delete, admin
+- Wildcards: `*:*`, `agents:*`
+
+**Per-User Provider Isolation**:
+- Providers have `owner_id` and `is_shared` fields
+- Users see only their providers + shared providers
+- Query: `WHERE owner_id = ? OR is_shared = 1 OR owner_id IS NULL`
+
+**User Management UI**:
+- Admin-only "Users" tab for user CRUD
+- Role assignment with visual badges
+- API key generation with one-time display
+- Secure key revocation
+
+**API Endpoints**:
+- `POST /api/v1/auth/login` - Get JWT token
+- `POST /api/v1/auth/api-keys` - Create API key
+- `GET /api/v1/auth/api-keys` - List user's keys
+- `DELETE /api/v1/auth/api-keys/{id}` - Revoke key
+- `POST /api/v1/auth/users` - Create user (admin only)
+- `GET /api/v1/auth/users` - List users (admin only)
+
+**Database**: `users` and `api_keys` managed in-memory by auth.Manager
 
 ### 4. Project System
 
