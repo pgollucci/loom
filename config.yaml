@@ -13,7 +13,7 @@ server:
 
 database:
   type: sqlite
-  path: ./agenticorp.db
+  path: /app/data/agenticorp.db  # Persisted volume mount
 
 beads:
   bd_path: bd  # Path to bd executable

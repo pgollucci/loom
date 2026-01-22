@@ -90,6 +90,8 @@ services:
     volumes:
       # Mount entire source directory for hot-reload and bead access
       - .:/app/src:rw
+      # Persist SQLite database across container restarts
+      - agenticorp-db:/app/data
       # Mount SSH keys for git operations (read-only)
       - ~/.ssh/id_ecdsa:/home/agenticorp/.ssh/id_ecdsa:ro
       - ~/.ssh/id_ecdsa.pub:/home/agenticorp/.ssh/id_ecdsa.pub:ro
@@ -123,3 +125,4 @@ networks:
 
 volumes:
   temporal-db-data:
+  agenticorp-db:
