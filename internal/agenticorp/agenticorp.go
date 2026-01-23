@@ -339,22 +339,6 @@ func (a *AgentiCorp) Initialize(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to load providers: %w", err)
 		}
-		// Bootstrap a mock provider when none are configured to keep the system runnable.
-		if len(providers) == 0 {
-			mock := &internalmodels.Provider{
-				ID:              "mock-local",
-				Name:            "Local Mock Provider",
-				Type:            "mock",
-				Endpoint:        "mock://local",
-				Status:          "active",
-				ConfiguredModel: "mock-model",
-				SelectedModel:   "mock-model",
-				Model:           "mock-model",
-				LastHeartbeatAt: time.Now(),
-			}
-			_ = a.database.UpsertProvider(mock)
-			providers = append(providers, mock)
-		}
 		for _, p := range providers {
 			selected := p.SelectedModel
 			if selected == "" {
@@ -2077,31 +2061,24 @@ func (a *AgentiCorp) attachProviderToPausedAgents(ctx context.Context, providerI
 			continue
 		}
 		
-		// If agent already has a provider but is still paused, just update the status
+		// If agent already has a provider, check if we should upgrade it
 		if ag.ProviderID != "" {
-			if ag.Status == "paused" {
-				log.Printf("Agent %s (%s) has provider %s but is still paused - updating to idle", ag.ID, ag.Name, ag.ProviderID)
-				ag.Status = "idle"
-				
-				// Update database
-				if err := a.database.UpsertAgent(ag); err != nil {
-					log.Printf("Failed to update agent %s status in database: %v", ag.ID, err)
-					continue
-				}
-				
-				// Update in-memory agent status
-				if err := a.agentManager.UpdateAgentStatus(ag.ID, "idle"); err != nil {
-					log.Printf("Failed to update agent %s status in memory: %v", ag.ID, err)
-					continue
-				}
-				
-				updatedCount++
-				log.Printf("Updated agent %s (%s) status from paused to idle (DB + memory)", ag.ID, ag.Name)
-			} else {
-				log.Printf("Skipping agent %s (%s) - already has provider %s and status %s", ag.ID, ag.Name, ag.ProviderID, ag.Status)
+			// Check if current provider is healthy
+			if a.providerRegistry.IsActive(ag.ProviderID) {
+				// Current provider is healthy - skip this agent
+				log.Printf("Skipping agent %s (%s) - already has healthy provider %s (status: %s)", ag.ID, ag.Name, ag.ProviderID, ag.Status)
 				skippedCount++
+				continue
 			}
-			continue
+			
+			// Current provider is unhealthy/failed - upgrade to new healthy provider
+			log.Printf("Agent %s (%s) has unhealthy provider %s - upgrading to healthy provider %s", ag.ID, ag.Name, ag.ProviderID, providerID)
+			
+			// If agent is paused, also update status to idle
+			if ag.Status == "paused" {
+				ag.Status = "idle"
+			}
+			// Don't continue here - fall through to attach the new provider
 		}
 		
 		// Attach persona for prompt context

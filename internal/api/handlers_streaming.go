@@ -159,6 +159,13 @@ func (s *Server) handleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get provider directly (bypass health check for testing)
+	registeredProvider, err := providerReg.Get(req.ProviderID)
+	if err != nil {
+		s.respondError(w, http.StatusNotFound, fmt.Sprintf("Provider not found: %s", req.ProviderID))
+		return
+	}
+
 	// Create provider request
 	providerReq := &provider.ChatCompletionRequest{
 		Model:       req.Model,
@@ -168,10 +175,15 @@ func (s *Server) handleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		Stream:      false,
 	}
 
-	// Send chat completion request
-	resp, err := providerReg.SendChatCompletion(r.Context(), req.ProviderID, providerReq)
+	// Use default model if not specified
+	if providerReq.Model == "" && registeredProvider.Config != nil {
+		providerReq.Model = registeredProvider.Config.Model
+	}
+
+	// Call provider directly (testing endpoint - skip health checks)
+	resp, err := registeredProvider.Protocol.CreateChatCompletion(r.Context(), providerReq)
 	if err != nil {
-		s.respondError(w, http.StatusInternalServerError, err.Error())
+		s.respondError(w, http.StatusBadGateway, fmt.Sprintf("Provider error: %v", err))
 		return
 	}
 
