@@ -10,23 +10,23 @@ import (
 
 // RequestLog represents a logged API request
 type RequestLog struct {
-	ID              string    `json:"id"`
-	Timestamp       time.Time `json:"timestamp"`
-	UserID          string    `json:"user_id"`
-	Method          string    `json:"method"`
-	Path            string    `json:"path"`
-	ProviderID      string    `json:"provider_id"`
-	ModelName       string    `json:"model_name"`
-	PromptTokens    int64     `json:"prompt_tokens"`
-	CompletionTokens int64    `json:"completion_tokens"`
-	TotalTokens     int64     `json:"total_tokens"`
-	LatencyMs       int64     `json:"latency_ms"`
-	StatusCode      int       `json:"status_code"`
-	CostUSD         float64   `json:"cost_usd"`
-	ErrorMessage    string    `json:"error_message,omitempty"`
-	RequestBody     string    `json:"request_body,omitempty"`      // Redacted if privacy enabled
-	ResponseBody    string    `json:"response_body,omitempty"`     // Redacted if privacy enabled
-	Metadata        map[string]string `json:"metadata,omitempty"`
+	ID               string            `json:"id"`
+	Timestamp        time.Time         `json:"timestamp"`
+	UserID           string            `json:"user_id"`
+	Method           string            `json:"method"`
+	Path             string            `json:"path"`
+	ProviderID       string            `json:"provider_id"`
+	ModelName        string            `json:"model_name"`
+	PromptTokens     int64             `json:"prompt_tokens"`
+	CompletionTokens int64             `json:"completion_tokens"`
+	TotalTokens      int64             `json:"total_tokens"`
+	LatencyMs        int64             `json:"latency_ms"`
+	StatusCode       int               `json:"status_code"`
+	CostUSD          float64           `json:"cost_usd"`
+	ErrorMessage     string            `json:"error_message,omitempty"`
+	RequestBody      string            `json:"request_body,omitempty"`  // Redacted if privacy enabled
+	ResponseBody     string            `json:"response_body,omitempty"` // Redacted if privacy enabled
+	Metadata         map[string]string `json:"metadata,omitempty"`
 }
 
 // PrivacyConfig controls what data is logged
@@ -82,15 +82,15 @@ type LogFilter struct {
 
 // LogStats provides aggregate statistics
 type LogStats struct {
-	TotalRequests    int64   `json:"total_requests"`
-	TotalTokens      int64   `json:"total_tokens"`
-	TotalCostUSD     float64 `json:"total_cost_usd"`
-	AvgLatencyMs     float64 `json:"avg_latency_ms"`
-	ErrorRate        float64 `json:"error_rate"`
-	RequestsByUser   map[string]int64 `json:"requests_by_user"`
-	RequestsByProvider map[string]int64 `json:"requests_by_provider"`
-	CostByProvider   map[string]float64 `json:"cost_by_provider"`
-	CostByUser       map[string]float64 `json:"cost_by_user"` // Cost tracking per user
+	TotalRequests      int64              `json:"total_requests"`
+	TotalTokens        int64              `json:"total_tokens"`
+	TotalCostUSD       float64            `json:"total_cost_usd"`
+	AvgLatencyMs       float64            `json:"avg_latency_ms"`
+	ErrorRate          float64            `json:"error_rate"`
+	RequestsByUser     map[string]int64   `json:"requests_by_user"`
+	RequestsByProvider map[string]int64   `json:"requests_by_provider"`
+	CostByProvider     map[string]float64 `json:"cost_by_provider"`
+	CostByUser         map[string]float64 `json:"cost_by_user"` // Cost tracking per user
 }
 
 // NewLogger creates a new request logger
@@ -189,7 +189,7 @@ func SanitizeForLogging(data interface{}) string {
 	}
 
 	str := string(bytes)
-	
+
 	// Redact common sensitive fields
 	sensitiveKeys := []string{"password", "api_key", "token", "secret", "authorization"}
 	for _, key := range sensitiveKeys {

@@ -26,17 +26,17 @@ type Entry struct {
 // Config defines cache configuration
 type Config struct {
 	Enabled       bool          `json:"enabled"`
-	DefaultTTL    time.Duration `json:"default_ttl"`     // Default time-to-live for cache entries
-	MaxSize       int           `json:"max_size"`        // Maximum number of entries
-	MaxMemoryMB   int           `json:"max_memory_mb"`   // Maximum memory usage (approximate)
-	CleanupPeriod time.Duration `json:"cleanup_period"`  // How often to run cleanup
+	DefaultTTL    time.Duration `json:"default_ttl"`    // Default time-to-live for cache entries
+	MaxSize       int           `json:"max_size"`       // Maximum number of entries
+	MaxMemoryMB   int           `json:"max_memory_mb"`  // Maximum memory usage (approximate)
+	CleanupPeriod time.Duration `json:"cleanup_period"` // How often to run cleanup
 }
 
 // DefaultConfig returns sensible defaults for caching
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:       true,
-		DefaultTTL:    1 * time.Hour,  // 1 hour default
+		DefaultTTL:    1 * time.Hour,   // 1 hour default
 		MaxSize:       10000,           // 10K entries
 		MaxMemoryMB:   500,             // 500MB max
 		CleanupPeriod: 5 * time.Minute, // Cleanup every 5 minutes
@@ -67,14 +67,14 @@ type Cache struct {
 
 // Stats tracks cache performance
 type Stats struct {
-	Hits           int64   `json:"hits"`
-	Misses         int64   `json:"misses"`
-	Evictions      int64   `json:"evictions"`
-	TotalEntries   int64   `json:"total_entries"`
-	HitRate        float64 `json:"hit_rate"`
-	TokensSaved    int64   `json:"tokens_saved"`
-	CostSavedUSD   float64 `json:"cost_saved_usd"`
-	AvgLatencySavedMs int64 `json:"avg_latency_saved_ms"`
+	Hits              int64   `json:"hits"`
+	Misses            int64   `json:"misses"`
+	Evictions         int64   `json:"evictions"`
+	TotalEntries      int64   `json:"total_entries"`
+	HitRate           float64 `json:"hit_rate"`
+	TokensSaved       int64   `json:"tokens_saved"`
+	CostSavedUSD      float64 `json:"cost_saved_usd"`
+	AvgLatencySavedMs int64   `json:"avg_latency_saved_ms"`
 }
 
 // New creates a new in-memory cache instance
@@ -178,14 +178,14 @@ func (c *Cache) Set(ctx context.Context, key string, response interface{}, ttl t
 	}
 
 	entry := &Entry{
-		Key:        key,
-		Response:   response,
-		Metadata:   metadata,
-		CachedAt:   time.Now(),
-		ExpiresAt:  time.Now().Add(ttl),
-		Hits:       0,
-		ProviderID: getStringFromMap(metadata, "provider_id"),
-		ModelName:  getStringFromMap(metadata, "model_name"),
+		Key:         key,
+		Response:    response,
+		Metadata:    metadata,
+		CachedAt:    time.Now(),
+		ExpiresAt:   time.Now().Add(ttl),
+		Hits:        0,
+		ProviderID:  getStringFromMap(metadata, "provider_id"),
+		ModelName:   getStringFromMap(metadata, "model_name"),
 		TokensSaved: getInt64FromMap(metadata, "total_tokens"),
 	}
 

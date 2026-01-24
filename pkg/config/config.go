@@ -101,7 +101,7 @@ type TemporalConfig struct {
 // CacheConfig configures response caching
 type CacheConfig struct {
 	Enabled       bool          `yaml:"enabled" json:"enabled"`
-	Backend       string        `yaml:"backend" json:"backend"`             // "memory" or "redis"
+	Backend       string        `yaml:"backend" json:"backend"` // "memory" or "redis"
 	DefaultTTL    time.Duration `yaml:"default_ttl" json:"default_ttl"`
 	MaxSize       int           `yaml:"max_size" json:"max_size"`
 	MaxMemoryMB   int           `yaml:"max_memory_mb" json:"max_memory_mb"`

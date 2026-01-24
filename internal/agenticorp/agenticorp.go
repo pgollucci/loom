@@ -19,6 +19,7 @@ import (
 	"github.com/jordanhubbard/agenticorp/internal/decision"
 	"github.com/jordanhubbard/agenticorp/internal/dispatch"
 	"github.com/jordanhubbard/agenticorp/internal/executor"
+	"github.com/jordanhubbard/agenticorp/internal/files"
 	"github.com/jordanhubbard/agenticorp/internal/gitops"
 	"github.com/jordanhubbard/agenticorp/internal/logging"
 	"github.com/jordanhubbard/agenticorp/internal/modelcatalog"
@@ -160,6 +161,8 @@ func New(cfg *config.Config) (*AgentiCorp, error) {
 		Beads:     arb,
 		Escalator: arb,
 		Commands:  arb,
+		Files:     files.NewManager(gitopsMgr),
+		Git:       gitopsMgr,
 		Logger:    arb,
 		BeadType:  "task",
 		DefaultP0: true,
@@ -1254,28 +1257,28 @@ func (a *AgentiCorp) RunReplQuery(ctx context.Context, message string) (*ReplRes
 
 	// Extract persona hint and clean message if "persona: message" format is used
 	personaHint, cleanMessage := extractPersonaFromMessage(message)
-	
+
 	// Create a P0 bead for this CEO query
 	beadTitle := "CEO Query"
 	if personaHint != "" {
 		beadTitle = fmt.Sprintf("CEO Query for %s", personaHint)
 	}
-	
+
 	// Truncate message for title if it's short
 	if len(cleanMessage) < 80 {
 		beadTitle = fmt.Sprintf("CEO: %s", cleanMessage)
 	}
-	
+
 	bead, err := a.beadsManager.CreateBead(beadTitle, cleanMessage, models.BeadPriorityP0, "task", "agenticorp-self")
 	if err != nil {
 		// If bead creation fails, continue anyway but log it
 		log.Printf("Warning: Failed to create CEO query bead: %v", err)
 	}
-	
+
 	var beadID string
 	if bead != nil {
 		beadID = bead.ID
-		
+
 		// If persona hint was provided, add it to the bead description
 		if personaHint != "" {
 			updatedDesc := fmt.Sprintf("Persona: %s\n\n%s", personaHint, cleanMessage)
@@ -1283,11 +1286,11 @@ func (a *AgentiCorp) RunReplQuery(ctx context.Context, message string) (*ReplRes
 				"description": updatedDesc,
 			})
 		}
-		
+
 		// Add CEO context
 		_ = a.beadsManager.UpdateBead(beadID, map[string]interface{}{
 			"context": map[string]string{
-				"source": "ceo-repl",
+				"source":     "ceo-repl",
 				"created_by": "ceo",
 			},
 		})
@@ -1313,9 +1316,9 @@ func (a *AgentiCorp) RunReplQuery(ctx context.Context, message string) (*ReplRes
 		if beadID != "" {
 			_ = a.beadsManager.UpdateBead(beadID, map[string]interface{}{
 				"context": map[string]string{
-					"source": "ceo-repl",
+					"source":     "ceo-repl",
 					"created_by": "ceo",
-					"error": err.Error(),
+					"error":      err.Error(),
 				},
 			})
 		}
@@ -1344,12 +1347,12 @@ func (a *AgentiCorp) RunReplQuery(ctx context.Context, message string) (*ReplRes
 		actionsJSON, _ := json.Marshal(actionResults)
 		_ = a.beadsManager.UpdateBead(beadID, map[string]interface{}{
 			"context": map[string]string{
-				"source": "ceo-repl",
-				"created_by": "ceo",
-				"response": result.Response,
-				"actions": string(actionsJSON),
+				"source":      "ceo-repl",
+				"created_by":  "ceo",
+				"response":    result.Response,
+				"actions":     string(actionsJSON),
 				"provider_id": providerRecord.ID,
-				"model": result.Model,
+				"model":       result.Model,
 				"tokens_used": fmt.Sprintf("%d", result.TokensUsed),
 			},
 			"status": models.BeadStatusClosed,
@@ -1378,7 +1381,7 @@ func (a *AgentiCorp) RunReplQuery(ctx context.Context, message string) (*ReplRes
 // Returns (personaHint, cleanMessage)
 func extractPersonaFromMessage(message string) (string, string) {
 	message = strings.TrimSpace(message)
-	
+
 	// Check for "persona: rest of message" format
 	if idx := strings.Index(message, ":"); idx > 0 && idx < 50 {
 		potentialPersona := strings.TrimSpace(message[:idx])
@@ -1388,7 +1391,7 @@ func extractPersonaFromMessage(message string) (string, string) {
 			return potentialPersona, restOfMessage
 		}
 	}
-	
+
 	return "", message
 }
 
@@ -2027,7 +2030,7 @@ func (a *AgentiCorp) checkProviderHealthAndActivate(providerID string) {
 		log.Printf("Provider %s returned no models", providerID)
 		return
 	}
-	
+
 	log.Printf("Provider %s is healthy, activating (models: %d)", providerID, len(models))
 	// Update provider status to active in both database and registry
 	if dbProvider, err := a.database.GetProvider(providerID); err == nil && dbProvider != nil {
@@ -2080,13 +2083,13 @@ func (a *AgentiCorp) ResumeAgentsWaitingForProvider(ctx context.Context, provide
 		// Resume the paused agent
 		agent.Status = "idle"
 		agent.LastActive = time.Now()
-		
+
 		// Write-through: Update database first
 		if err := a.database.UpsertAgent(agent); err != nil {
 			fmt.Printf("Warning: failed to resume agent %s: %v\n", agent.ID, err)
 			continue
 		}
-		
+
 		// Write-through: Update in-memory cache
 		if err := a.agentManager.UpdateAgentStatus(agent.ID, "idle"); err != nil {
 			fmt.Printf("Warning: failed to update agent %s status in memory: %v\n", agent.ID, err)
@@ -2125,7 +2128,7 @@ func (a *AgentiCorp) attachProviderToPausedAgents(ctx context.Context, providerI
 		if ag == nil {
 			continue
 		}
-		
+
 		// If agent already has a provider, check if we should upgrade it
 		if ag.ProviderID != "" {
 			// Check if current provider is healthy
@@ -2135,17 +2138,17 @@ func (a *AgentiCorp) attachProviderToPausedAgents(ctx context.Context, providerI
 				skippedCount++
 				continue
 			}
-			
+
 			// Current provider is unhealthy/failed - upgrade to new healthy provider
 			log.Printf("Agent %s (%s) has unhealthy provider %s - upgrading to healthy provider %s", ag.ID, ag.Name, ag.ProviderID, providerID)
-			
+
 			// If agent is paused, also update status to idle
 			if ag.Status == "paused" {
 				ag.Status = "idle"
 			}
 			// Don't continue here - fall through to attach the new provider
 		}
-		
+
 		// Attach persona for prompt context
 		if ag.Persona == nil && ag.PersonaName != "" {
 			persona, err := a.personaManager.LoadPersona(ag.PersonaName)
@@ -2155,24 +2158,24 @@ func (a *AgentiCorp) attachProviderToPausedAgents(ctx context.Context, providerI
 			}
 			ag.Persona = persona
 		}
-		
+
 		// Update agent with provider
 		ag.ProviderID = providerID
 		ag.Status = "idle"
 		ag.LastActive = time.Now()
-		
+
 		// Write-through cache: Update database first (source of truth)
 		if err := a.database.UpsertAgent(ag); err != nil {
 			log.Printf("Failed to upsert agent %s with provider %s: %v", ag.ID, providerID, err)
 			continue
 		}
-		
+
 		// Write-through cache: Update in-memory cache (RestoreAgentWorker handles both new and existing agents)
 		if _, err := a.agentManager.RestoreAgentWorker(ctx, ag); err != nil {
 			log.Printf("Failed to restore/update agent worker %s: %v", ag.ID, err)
 			continue
 		}
-		
+
 		if ag.ProjectID != "" {
 			_ = a.projectManager.AddAgentToProject(ag.ProjectID, ag.ID)
 		}
@@ -2180,7 +2183,7 @@ func (a *AgentiCorp) attachProviderToPausedAgents(ctx context.Context, providerI
 		log.Printf("Successfully attached provider %s to agent %s (%s)", providerID, ag.ID, ag.Name)
 	}
 	if attachedCount > 0 || updatedCount > 0 {
-		log.Printf("Provider %s: attached to %d agent(s), updated status for %d agent(s), skipped %d agent(s)", 
+		log.Printf("Provider %s: attached to %d agent(s), updated status for %d agent(s), skipped %d agent(s)",
 			providerID, attachedCount, updatedCount, skippedCount)
 	}
 }

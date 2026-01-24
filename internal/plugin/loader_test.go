@@ -113,9 +113,9 @@ func TestDiscoverPlugins(t *testing.T) {
 
 func TestValidateManifest(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		manifest *PluginManifest
-		wantErr bool
+		wantErr  bool
 	}{
 		{
 			name: "valid manifest",

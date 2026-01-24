@@ -227,9 +227,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/cache/invalidate", s.handleInvalidateCache)
 
 	// Health check endpoints
-	mux.HandleFunc("/health", s.handleHealthDetail)       // Detailed health
-	mux.HandleFunc("/health/live", s.handleHealthLive)     // Liveness probe
-	mux.HandleFunc("/health/ready", s.handleHealthReady)   // Readiness probe
+	mux.HandleFunc("/health", s.handleHealthDetail)      // Detailed health
+	mux.HandleFunc("/health/live", s.handleHealthLive)   // Liveness probe
+	mux.HandleFunc("/health/ready", s.handleHealthReady) // Readiness probe
 
 	// Configuration
 	mux.HandleFunc("/api/v1/config", s.handleConfig)

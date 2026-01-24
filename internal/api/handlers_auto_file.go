@@ -11,14 +11,14 @@ import (
 
 // AutoFileBugRequest represents an automatically filed bug report
 type AutoFileBugRequest struct {
-	Title       string                 `json:"title"`       // User-provided or auto-generated title
-	Source      string                 `json:"source"`      // "frontend" or "backend"
-	ErrorType   string                 `json:"error_type"`  // e.g., "javascript_error", "api_error", "panic"
-	Message     string                 `json:"message"`     // Error message
-	StackTrace  string                 `json:"stack_trace"` // Stack trace if available
-	Context     map[string]interface{} `json:"context"`     // Additional context (URL, user agent, etc.)
-	Severity    string                 `json:"severity"`    // "critical", "high", "medium", "low"
-	OccurredAt  time.Time              `json:"occurred_at"` // When the error occurred
+	Title      string                 `json:"title"`       // User-provided or auto-generated title
+	Source     string                 `json:"source"`      // "frontend" or "backend"
+	ErrorType  string                 `json:"error_type"`  // e.g., "javascript_error", "api_error", "panic"
+	Message    string                 `json:"message"`     // Error message
+	StackTrace string                 `json:"stack_trace"` // Stack trace if available
+	Context    map[string]interface{} `json:"context"`     // Additional context (URL, user agent, etc.)
+	Severity   string                 `json:"severity"`    // "critical", "high", "medium", "low"
+	OccurredAt time.Time              `json:"occurred_at"` // When the error occurred
 }
 
 // HandleAutoFileBug handles automatic bug report filing
@@ -47,7 +47,7 @@ func (s *Server) HandleAutoFileBug(w http.ResponseWriter, r *http.Request) {
 
 	// Create bead with [auto-filed] prefix
 	title := fmt.Sprintf("[auto-filed] [%s] %s", req.Source, req.Title)
-	
+
 	// Build description
 	description := fmt.Sprintf(`## Auto-Filed Bug Report
 
@@ -123,8 +123,8 @@ func (s *Server) HandleAutoFileBug(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.respondJSON(w, http.StatusCreated, map[string]interface{}{
-		"bead_id": bead.ID,
-		"message": "Bug report filed automatically",
+		"bead_id":     bead.ID,
+		"message":     "Bug report filed automatically",
 		"assigned_to": "qa-engineer",
 	})
 }
@@ -140,7 +140,7 @@ func (s *Server) assignToQAEngineer(beadID, projectID string) error {
 	if agentManager == nil {
 		return fmt.Errorf("agent manager not available")
 	}
-	
+
 	agents := agentManager.ListAgents()
 
 	// Find QA Engineer for this project
@@ -150,11 +150,11 @@ func (s *Server) assignToQAEngineer(beadID, projectID string) error {
 			updates := map[string]interface{}{
 				"assigned_to": agent.ID,
 			}
-			
+
 			if _, err := s.agenticorp.UpdateBead(beadID, updates); err != nil {
 				return fmt.Errorf("failed to assign bead: %w", err)
 			}
-			
+
 			return nil
 		}
 	}

@@ -14,6 +14,12 @@ const (
 	ActionRunCommand  = "run_command"
 	ActionCreateBead  = "create_bead"
 	ActionEscalateCEO = "escalate_ceo"
+	ActionReadFile    = "read_file"
+	ActionReadTree    = "read_tree"
+	ActionSearchText  = "search_text"
+	ActionApplyPatch  = "apply_patch"
+	ActionGitStatus   = "git_status"
+	ActionGitDiff     = "git_diff"
 )
 
 type ActionEnvelope struct {
@@ -26,8 +32,11 @@ type Action struct {
 
 	Question string `json:"question,omitempty"`
 
-	Path  string `json:"path,omitempty"`
-	Patch string `json:"patch,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Patch    string `json:"patch,omitempty"`
+	Query    string `json:"query,omitempty"`
+	MaxDepth int    `json:"max_depth,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
 
 	Command    string `json:"command,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
@@ -99,6 +108,23 @@ func validateAction(action Action) error {
 		if action.Path == "" || action.Patch == "" {
 			return errors.New("edit_code requires path and patch")
 		}
+	case ActionReadFile:
+		if action.Path == "" {
+			return errors.New("read_file requires path")
+		}
+	case ActionReadTree:
+		if action.Path == "" {
+			return errors.New("read_tree requires path")
+		}
+	case ActionSearchText:
+		if action.Query == "" {
+			return errors.New("search_text requires query")
+		}
+	case ActionApplyPatch:
+		if action.Patch == "" {
+			return errors.New("apply_patch requires patch")
+		}
+	case ActionGitStatus, ActionGitDiff:
 	case ActionRunCommand:
 		if action.Command == "" {
 			return errors.New("run_command requires command")

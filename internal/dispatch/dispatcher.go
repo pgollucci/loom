@@ -43,11 +43,11 @@ type DispatchResult struct {
 // Dispatcher is responsible for selecting ready work and executing it using agents/providers.
 // For now it focuses on turning beads into LLM tasks and storing the output back into bead context.
 type Dispatcher struct {
-	beads         *beads.Manager
-	projects      *project.Manager
-	agents        *agent.WorkerManager
-	providers     *provider.Registry
-	eventBus      *eventbus.EventBus
+	beads          *beads.Manager
+	projects       *project.Manager
+	agents         *agent.WorkerManager
+	providers      *provider.Registry
+	eventBus       *eventbus.EventBus
 	personaMatcher *PersonaMatcher
 
 	mu     sync.RWMutex
@@ -92,7 +92,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		d.setStatus(StatusParked, "failed to list ready beads")
 		return nil, err
 	}
-	
+
 	log.Printf("[Dispatcher] GetReadyBeads returned %d beads for project %s", len(ready), projectID)
 
 	sort.SliceStable(ready, func(i, j int) bool {
@@ -192,7 +192,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		candidate = b
 		break
 	}
-	
+
 	if len(skippedReasons) > 0 {
 		log.Printf("[Dispatcher] Skipped beads: %+v", skippedReasons)
 	}

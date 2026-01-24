@@ -11,18 +11,18 @@ import (
 
 // HealthStatus represents the overall health status.
 type HealthStatus struct {
-	Status      string                 `json:"status"` // "healthy", "degraded", "unhealthy"
-	Timestamp   time.Time              `json:"timestamp"`
-	InstanceID  string                 `json:"instance_id,omitempty"`
-	Uptime      int64                  `json:"uptime_seconds"`
-	Version     string                 `json:"version,omitempty"`
-	Dependencies map[string]DepHealth  `json:"dependencies"`
-	Metrics     map[string]interface{} `json:"metrics,omitempty"`
+	Status       string                 `json:"status"` // "healthy", "degraded", "unhealthy"
+	Timestamp    time.Time              `json:"timestamp"`
+	InstanceID   string                 `json:"instance_id,omitempty"`
+	Uptime       int64                  `json:"uptime_seconds"`
+	Version      string                 `json:"version,omitempty"`
+	Dependencies map[string]DepHealth   `json:"dependencies"`
+	Metrics      map[string]interface{} `json:"metrics,omitempty"`
 }
 
 // DepHealth represents the health of a dependency.
 type DepHealth struct {
-	Status  string `json:"status"`  // "healthy", "unhealthy", "unknown"
+	Status  string `json:"status"` // "healthy", "unhealthy", "unknown"
 	Message string `json:"message,omitempty"`
 	Latency int64  `json:"latency_ms,omitempty"`
 }
@@ -123,11 +123,11 @@ func (s *Server) handleHealthDetail(w http.ResponseWriter, r *http.Request) {
 	runtime.ReadMemStats(&mem)
 
 	metrics := map[string]interface{}{
-		"goroutines":    runtime.NumGoroutine(),
-		"memory_alloc":  mem.Alloc,
-		"memory_sys":    mem.Sys,
-		"gc_runs":       mem.NumGC,
-		"cpu_cores":     runtime.NumCPU(),
+		"goroutines":   runtime.NumGoroutine(),
+		"memory_alloc": mem.Alloc,
+		"memory_sys":   mem.Sys,
+		"gc_runs":      mem.NumGC,
+		"cpu_cores":    runtime.NumCPU(),
 	}
 
 	// Add cache stats if available

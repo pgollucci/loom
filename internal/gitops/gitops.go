@@ -170,6 +170,32 @@ func (m *Manager) PushChanges(ctx context.Context, project *models.Project) erro
 	return nil
 }
 
+// Status returns git status for a project workdir.
+func (m *Manager) Status(ctx context.Context, projectID string) (string, error) {
+	workDir := m.GetProjectWorkDir(projectID)
+	if _, err := os.Stat(filepath.Join(workDir, ".git")); os.IsNotExist(err) {
+		return "", fmt.Errorf("project %s not cloned", projectID)
+	}
+	output, err := m.runGitCommandWithOutput(ctx, workDir, "status", "-sb")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// Diff returns git diff for a project workdir.
+func (m *Manager) Diff(ctx context.Context, projectID string) (string, error) {
+	workDir := m.GetProjectWorkDir(projectID)
+	if _, err := os.Stat(filepath.Join(workDir, ".git")); os.IsNotExist(err) {
+		return "", fmt.Errorf("project %s not cloned", projectID)
+	}
+	output, err := m.runGitCommandWithOutput(ctx, workDir, "diff")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
 // GetCurrentCommit returns the current commit SHA
 func (m *Manager) GetCurrentCommit(workDir string) (string, error) {
 	cmd := exec.Command("git", "rev-parse", "HEAD")
@@ -248,6 +274,17 @@ func (m *Manager) runGitCommand(ctx context.Context, workDir string, args ...str
 	}
 
 	return nil
+}
+
+func (m *Manager) runGitCommandWithOutput(ctx context.Context, workDir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = workDir
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s failed: %w\nOutput: %s", strings.Join(args, " "), err, string(output))
+	}
+	return string(output), nil
 }
 
 // Helper to create time pointer

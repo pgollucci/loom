@@ -10,9 +10,9 @@ import (
 // AlertConfig defines alerting thresholds and settings
 type AlertConfig struct {
 	UserID              string  `json:"user_id"`
-	DailyBudgetUSD      float64 `json:"daily_budget_usd"`      // Alert if daily spend exceeds
-	MonthlyBudgetUSD    float64 `json:"monthly_budget_usd"`    // Alert if monthly spend exceeds
-	AnomalyThreshold    float64 `json:"anomaly_threshold"`     // Alert if spend is X times normal (e.g., 2.0 = 2x)
+	DailyBudgetUSD      float64 `json:"daily_budget_usd"`   // Alert if daily spend exceeds
+	MonthlyBudgetUSD    float64 `json:"monthly_budget_usd"` // Alert if monthly spend exceeds
+	AnomalyThreshold    float64 `json:"anomaly_threshold"`  // Alert if spend is X times normal (e.g., 2.0 = 2x)
 	EnableEmailAlerts   bool    `json:"enable_email_alerts"`
 	EnableWebhookAlerts bool    `json:"enable_webhook_alerts"`
 	WebhookURL          string  `json:"webhook_url"`
@@ -21,15 +21,15 @@ type AlertConfig struct {
 
 // Alert represents a triggered alert
 type Alert struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	Type        string    `json:"type"`        // "budget_exceeded", "anomaly_detected"
-	Severity    string    `json:"severity"`    // "info", "warning", "critical"
-	Message     string    `json:"message"`
-	CurrentCost float64   `json:"current_cost"`
-	Threshold   float64   `json:"threshold"`
-	TriggeredAt time.Time `json:"triggered_at"`
-	Acknowledged bool     `json:"acknowledged"`
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	Type         string    `json:"type"`     // "budget_exceeded", "anomaly_detected"
+	Severity     string    `json:"severity"` // "info", "warning", "critical"
+	Message      string    `json:"message"`
+	CurrentCost  float64   `json:"current_cost"`
+	Threshold    float64   `json:"threshold"`
+	TriggeredAt  time.Time `json:"triggered_at"`
+	Acknowledged bool      `json:"acknowledged"`
 }
 
 // AlertChecker monitors spending and triggers alerts
@@ -206,10 +206,10 @@ func (ac *AlertChecker) notify(alert *Alert) {
 // DefaultAlertConfig provides sensible defaults
 func DefaultAlertConfig(userID string) *AlertConfig {
 	return &AlertConfig{
-		UserID:           userID,
-		DailyBudgetUSD:   100.0,  // $100/day default
-		MonthlyBudgetUSD: 2000.0, // $2000/month default
-		AnomalyThreshold: 2.0,    // Alert if 2x normal spending
+		UserID:              userID,
+		DailyBudgetUSD:      100.0,  // $100/day default
+		MonthlyBudgetUSD:    2000.0, // $2000/month default
+		AnomalyThreshold:    2.0,    // Alert if 2x normal spending
 		EnableEmailAlerts:   false,
 		EnableWebhookAlerts: false,
 	}

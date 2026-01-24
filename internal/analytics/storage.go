@@ -218,10 +218,10 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 	}
 
 	stats := &LogStats{
-		RequestsByUser:   make(map[string]int64),
+		RequestsByUser:     make(map[string]int64),
 		RequestsByProvider: make(map[string]int64),
-		CostByProvider:   make(map[string]float64),
-		CostByUser:       make(map[string]float64),
+		CostByProvider:     make(map[string]float64),
+		CostByUser:         make(map[string]float64),
 	}
 
 	var errorCount int64
@@ -248,7 +248,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 		WHERE 1=1 %s AND user_id IS NOT NULL AND user_id != ''
 		GROUP BY user_id
 	`, buildWhereClause(filter))
-	
+
 	rows, err := s.db.QueryContext(ctx, userQuery, buildWhereArgs(filter)...)
 	if err == nil {
 		defer rows.Close()
@@ -270,7 +270,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 		WHERE 1=1 %s AND provider_id IS NOT NULL AND provider_id != ''
 		GROUP BY provider_id
 	`, buildWhereClause(filter))
-	
+
 	rows, err = s.db.QueryContext(ctx, providerQuery, buildWhereArgs(filter)...)
 	if err == nil {
 		defer rows.Close()

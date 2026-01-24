@@ -28,12 +28,12 @@ func NewShellExecutor(db *sql.DB) *ShellExecutor {
 
 // ExecuteCommandRequest represents a shell command execution request
 type ExecuteCommandRequest struct {
-	AgentID    string            `json:"agent_id"`
-	BeadID     string            `json:"bead_id"`
-	ProjectID  string            `json:"project_id"`
-	Command    string            `json:"command"`
-	WorkingDir string            `json:"working_dir"`
-	Timeout    int               `json:"timeout_seconds"` // Optional timeout in seconds (default: 300)
+	AgentID    string                 `json:"agent_id"`
+	BeadID     string                 `json:"bead_id"`
+	ProjectID  string                 `json:"project_id"`
+	Command    string                 `json:"command"`
+	WorkingDir string                 `json:"working_dir"`
+	Timeout    int                    `json:"timeout_seconds"` // Optional timeout in seconds (default: 300)
 	Context    map[string]interface{} `json:"context"`
 }
 
@@ -88,7 +88,7 @@ func (e *ShellExecutor) ExecuteCommand(ctx context.Context, req ExecuteCommandRe
 
 	// Execute command
 	log.Printf("[ShellExecutor] Executing command for agent=%s bead=%s: %s", req.AgentID, req.BeadID, req.Command)
-	
+
 	cmd := exec.CommandContext(cmdCtx, "/bin/sh", "-c", req.Command)
 	cmd.Dir = workingDir
 
@@ -164,10 +164,10 @@ func (e *ShellExecutor) ExecuteCommand(ctx context.Context, req ExecuteCommandRe
 // GetCommandLogs retrieves command logs with optional filters
 func (e *ShellExecutor) GetCommandLogs(filters map[string]interface{}, limit int) ([]*models.CommandLog, error) {
 	var logs []*models.CommandLog
-	
+
 	query := "SELECT * FROM command_logs WHERE 1=1"
 	args := []interface{}{}
-	
+
 	if agentID, ok := filters["agent_id"].(string); ok && agentID != "" {
 		query += " AND agent_id = ?"
 		args = append(args, agentID)
@@ -180,24 +180,24 @@ func (e *ShellExecutor) GetCommandLogs(filters map[string]interface{}, limit int
 		query += " AND project_id = ?"
 		args = append(args, projectID)
 	}
-	
+
 	if limit <= 0 {
 		limit = 100
 	}
-	
+
 	query += " ORDER BY created_at DESC LIMIT ?"
 	args = append(args, limit)
-	
+
 	rows, err := e.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var cmdLog models.CommandLog
 		var contextJSON sql.NullString
-		
+
 		err := rows.Scan(
 			&cmdLog.ID, &cmdLog.AgentID, &cmdLog.BeadID, &cmdLog.ProjectID,
 			&cmdLog.Command, &cmdLog.WorkingDir, &cmdLog.ExitCode,
@@ -207,24 +207,24 @@ func (e *ShellExecutor) GetCommandLogs(filters map[string]interface{}, limit int
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if contextJSON.Valid {
 			json.Unmarshal([]byte(contextJSON.String), &cmdLog.Context)
 		}
-		
+
 		logs = append(logs, &cmdLog)
 	}
-	
+
 	return logs, nil
 }
 
 // GetCommandLog retrieves a single command log by ID
 func (e *ShellExecutor) GetCommandLog(id string) (*models.CommandLog, error) {
 	query := "SELECT * FROM command_logs WHERE id = ?"
-	
+
 	var cmdLog models.CommandLog
 	var contextJSON sql.NullString
-	
+
 	err := e.db.QueryRow(query, id).Scan(
 		&cmdLog.ID, &cmdLog.AgentID, &cmdLog.BeadID, &cmdLog.ProjectID,
 		&cmdLog.Command, &cmdLog.WorkingDir, &cmdLog.ExitCode,
@@ -234,10 +234,10 @@ func (e *ShellExecutor) GetCommandLog(id string) (*models.CommandLog, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if contextJSON.Valid {
 		json.Unmarshal([]byte(contextJSON.String), &cmdLog.Context)
 	}
-	
+
 	return &cmdLog, nil
 }

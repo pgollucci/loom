@@ -55,7 +55,7 @@ func (bp *BasePlugin) GetConfigInt(key string) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	
+
 	switch v := val.(type) {
 	case int:
 		return v, true
@@ -84,7 +84,7 @@ func (bp *BasePlugin) GetConfigFloat(key string) (float64, bool) {
 	if !ok {
 		return 0, false
 	}
-	
+
 	switch v := val.(type) {
 	case float64:
 		return v, true

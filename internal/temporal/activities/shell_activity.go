@@ -24,6 +24,6 @@ func (a *ShellActivity) ExecuteCommand(ctx context.Context, req executor.Execute
 	if a.executor == nil {
 		return nil, fmt.Errorf("shell executor not initialized")
 	}
-	
+
 	return a.executor.ExecuteCommand(ctx, req)
 }

@@ -199,19 +199,19 @@ func (s *Server) handleBead(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPatch:
 		var req struct {
-			Title       *string            `json:"title"`
-			Type        *string            `json:"type"`
-			Status      *string            `json:"status"`
-			Priority    *int               `json:"priority"`
-			ProjectID   *string            `json:"project_id"`
-			AssignedTo  *string            `json:"assigned_to"`
-			Description *string            `json:"description"`
-			Parent      *string            `json:"parent"`
-			Tags        *[]string          `json:"tags"`
-			BlockedBy   *[]string          `json:"blocked_by"`
-			Blocks      *[]string          `json:"blocks"`
-			RelatedTo   *[]string          `json:"related_to"`
-			Children    *[]string          `json:"children"`
+			Title       *string           `json:"title"`
+			Type        *string           `json:"type"`
+			Status      *string           `json:"status"`
+			Priority    *int              `json:"priority"`
+			ProjectID   *string           `json:"project_id"`
+			AssignedTo  *string           `json:"assigned_to"`
+			Description *string           `json:"description"`
+			Parent      *string           `json:"parent"`
+			Tags        *[]string         `json:"tags"`
+			BlockedBy   *[]string         `json:"blocked_by"`
+			Blocks      *[]string         `json:"blocks"`
+			RelatedTo   *[]string         `json:"related_to"`
+			Children    *[]string         `json:"children"`
 			Context     map[string]string `json:"context"`
 		}
 		if err := s.parseJSON(r, &req); err != nil {

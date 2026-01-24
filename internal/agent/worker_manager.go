@@ -226,14 +226,14 @@ func (m *WorkerManager) RestoreAgentWorker(ctx context.Context, agent *models.Ag
 		if existing.Persona == nil && agent.Persona != nil {
 			existing.Persona = agent.Persona
 		}
-		
+
 		// Ensure worker exists for this agent with the correct provider
 		if agent.ProviderID != "" {
 			if _, err := m.workerPool.SpawnWorker(existing, existing.ProviderID); err != nil {
 				log.Printf("Warning: Failed to spawn/update worker for agent %s: %v", existing.ID, err)
 			}
 		}
-		
+
 		m.persistAgent(existing)
 		log.Printf("Updated existing agent %s with provider %s, status %s", existing.Name, existing.ProviderID, existing.Status)
 		return existing, nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jordanhubbard/agenticorp/internal/executor"
+	"github.com/jordanhubbard/agenticorp/internal/files"
 	"github.com/jordanhubbard/agenticorp/pkg/models"
 )
 
@@ -18,6 +19,18 @@ type BeadEscalator interface {
 
 type CommandExecutor interface {
 	ExecuteCommand(ctx context.Context, req executor.ExecuteCommandRequest) (*executor.ExecuteCommandResult, error)
+}
+
+type FileManager interface {
+	ReadFile(ctx context.Context, projectID, path string) (*files.FileResult, error)
+	ReadTree(ctx context.Context, projectID, path string, maxDepth, limit int) ([]files.TreeEntry, error)
+	SearchText(ctx context.Context, projectID, path, query string, limit int) ([]files.SearchMatch, error)
+	ApplyPatch(ctx context.Context, projectID, patch string) (*files.PatchResult, error)
+}
+
+type GitOperator interface {
+	Status(ctx context.Context, projectID string) (string, error)
+	Diff(ctx context.Context, projectID string) (string, error)
 }
 
 type ActionLogger interface {
@@ -38,13 +51,15 @@ type Result struct {
 }
 
 type Router struct {
-	Beads      BeadCreator
-	Escalator  BeadEscalator
-	Commands   CommandExecutor
-	Logger     ActionLogger
-	BeadType   string
-	BeadTags   []string
-	DefaultP0  bool
+	Beads     BeadCreator
+	Escalator BeadEscalator
+	Commands  CommandExecutor
+	Files     FileManager
+	Git       GitOperator
+	Logger    ActionLogger
+	BeadType  string
+	BeadTags  []string
+	DefaultP0 bool
 }
 
 func (r *Router) Execute(ctx context.Context, env *ActionEnvelope, actx ActionContext) ([]Result, error) {
@@ -97,6 +112,106 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		return r.createBeadFromAction("Read code", action.Path, actx)
 	case ActionEditCode:
 		return r.createBeadFromAction("Edit code", fmt.Sprintf("%s\n\nPatch:\n%s", action.Path, action.Patch), actx)
+	case ActionReadFile:
+		if r.Files == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
+		}
+		res, err := r.Files.ReadFile(ctx, actx.ProjectID, action.Path)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+		}
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "file read",
+			Metadata: map[string]interface{}{
+				"path":    res.Path,
+				"content": res.Content,
+				"size":    res.Size,
+			},
+		}
+	case ActionReadTree:
+		if r.Files == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
+		}
+		path := action.Path
+		if path == "" {
+			path = "."
+		}
+		res, err := r.Files.ReadTree(ctx, actx.ProjectID, path, action.MaxDepth, action.Limit)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+		}
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "tree read",
+			Metadata:   map[string]interface{}{"entries": res},
+		}
+	case ActionSearchText:
+		if r.Files == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
+		}
+		path := action.Path
+		if path == "" {
+			path = "."
+		}
+		res, err := r.Files.SearchText(ctx, actx.ProjectID, path, action.Query, action.Limit)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+		}
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "search completed",
+			Metadata:   map[string]interface{}{"matches": res},
+		}
+	case ActionApplyPatch:
+		if r.Files == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
+		}
+		res, err := r.Files.ApplyPatch(ctx, actx.ProjectID, action.Patch)
+		if err != nil {
+			message := err.Error()
+			if res != nil && res.Output != "" {
+				message = fmt.Sprintf("%s: %s", message, res.Output)
+			}
+			return Result{ActionType: action.Type, Status: "error", Message: message}
+		}
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "patch applied",
+			Metadata:   map[string]interface{}{"output": res.Output},
+		}
+	case ActionGitStatus:
+		if r.Git == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
+		}
+		out, err := r.Git.Status(ctx, actx.ProjectID)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+		}
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "git status",
+			Metadata:   map[string]interface{}{"output": out},
+		}
+	case ActionGitDiff:
+		if r.Git == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
+		}
+		out, err := r.Git.Diff(ctx, actx.ProjectID)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+		}
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "git diff",
+			Metadata:   map[string]interface{}{"output": out},
+		}
 	case ActionRunCommand:
 		if r.Commands == nil {
 			return r.createBeadFromAction("Run command", action.Command, actx)

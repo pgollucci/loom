@@ -14,8 +14,8 @@ func TestCacheBasicOperations(t *testing.T) {
 	key := "test-key-1"
 	response := map[string]interface{}{"result": "test response"}
 	metadata := map[string]interface{}{
-		"provider_id": "provider-1",
-		"model_name":  "gpt-4",
+		"provider_id":  "provider-1",
+		"model_name":   "gpt-4",
 		"total_tokens": int64(100),
 	}
 
@@ -64,7 +64,7 @@ func TestCacheExpiration(t *testing.T) {
 
 	key := "test-expire"
 	response := map[string]interface{}{"result": "expires soon"}
-	
+
 	// Set with 100ms TTL
 	err := c.Set(ctx, key, response, 100*time.Millisecond, nil)
 	if err != nil {

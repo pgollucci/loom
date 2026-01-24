@@ -50,7 +50,7 @@ func TestLogRequest_PrivacyDefaults(t *testing.T) {
 	}
 
 	saved := storage.logs[0]
-	
+
 	// With default privacy config, bodies should not be logged
 	if saved.RequestBody != "" {
 		t.Error("Request body should be empty with default privacy config")
@@ -58,12 +58,12 @@ func TestLogRequest_PrivacyDefaults(t *testing.T) {
 	if saved.ResponseBody != "" {
 		t.Error("Response body should be empty with default privacy config")
 	}
-	
+
 	// ID should be auto-generated
 	if saved.ID == "" {
 		t.Error("Log ID should be auto-generated")
 	}
-	
+
 	// Timestamp should be set
 	if saved.Timestamp.IsZero() {
 		t.Error("Timestamp should be set")
@@ -93,7 +93,7 @@ func TestLogRequest_WithBodiesEnabled(t *testing.T) {
 	}
 
 	saved := storage.logs[0]
-	
+
 	// Bodies should be logged
 	if saved.RequestBody == "" {
 		t.Error("Request body should be logged")
@@ -125,7 +125,7 @@ func TestLogRequest_Redaction(t *testing.T) {
 	}
 
 	saved := storage.logs[0]
-	
+
 	// Email should be redacted - check for [REDACTED] marker
 	if saved.RequestBody == originalBody {
 		t.Error("Email should be redacted")
@@ -153,7 +153,7 @@ func TestLogRequest_BodyTruncation(t *testing.T) {
 	}
 
 	saved := storage.logs[0]
-	
+
 	// Body should be truncated
 	if len(saved.RequestBody) > 25 { // 10 chars + "... [truncated]"
 		t.Errorf("Body not truncated properly, length: %d", len(saved.RequestBody))
@@ -165,10 +165,10 @@ func TestLogRequest_BodyTruncation(t *testing.T) {
 
 func TestCalculateCost(t *testing.T) {
 	tests := []struct {
-		name           string
-		costPerMToken  float64
-		tokens         int64
-		expectedCost   float64
+		name          string
+		costPerMToken float64
+		tokens        int64
+		expectedCost  float64
 	}{
 		{
 			name:          "Standard calculation",
@@ -226,12 +226,12 @@ func TestSanitizeForLogging(t *testing.T) {
 	if sanitized == "" {
 		t.Error("Sanitized output should not be empty")
 	}
-	
+
 	// Password should be redacted
 	if sanitized == `{"api_key":"sk-12345678901234567890","data":"normal data","password":"secret123","username":"john"}` {
 		t.Error("Sensitive data not redacted")
 	}
-	
+
 	// Username and normal data should remain
 	if sanitized == "" {
 		t.Error("Non-sensitive data should remain")

@@ -45,7 +45,7 @@ func (s *Server) HandleGetCommandLogs(w http.ResponseWriter, r *http.Request) {
 	// Handle both GET /api/v1/commands and GET /api/v1/commands/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/commands")
 	path = strings.TrimPrefix(path, "/")
-	
+
 	// If path is not empty, it's a specific command log ID
 	if path != "" {
 		s.handleGetCommandLog(w, r, path)
@@ -54,7 +54,7 @@ func (s *Server) HandleGetCommandLogs(w http.ResponseWriter, r *http.Request) {
 
 	// Otherwise, list command logs with filters
 	filters := make(map[string]interface{})
-	
+
 	if agentID := r.URL.Query().Get("agent_id"); agentID != "" {
 		filters["agent_id"] = agentID
 	}

@@ -17,26 +17,26 @@ import (
 
 // RegistryEntry represents a plugin in the registry.
 type RegistryEntry struct {
-	ID              string                 `json:"id"`
-	Name            string                 `json:"name"`
-	ProviderType    string                 `json:"provider_type"`
-	Description     string                 `json:"description"`
-	Author          string                 `json:"author"`
-	Version         string                 `json:"version"`
-	License         string                 `json:"license"`
-	Homepage        string                 `json:"homepage"`
-	Repository      string                 `json:"repository"`
-	Downloads       int64                  `json:"downloads"`
-	Rating          float64                `json:"rating"`
-	Reviews         int64                  `json:"reviews"`
-	Verified        bool                   `json:"verified"`
-	Tags            []string               `json:"tags"`
-	Capabilities    plugin.Capabilities    `json:"capabilities"`
-	Install         InstallConfig          `json:"install"`
-	Screenshots     []string               `json:"screenshots,omitempty"`
-	DocumentationURL string                `json:"documentation_url,omitempty"`
-	PublishedAt     time.Time              `json:"published_at"`
-	UpdatedAt       time.Time              `json:"updated_at"`
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	ProviderType     string              `json:"provider_type"`
+	Description      string              `json:"description"`
+	Author           string              `json:"author"`
+	Version          string              `json:"version"`
+	License          string              `json:"license"`
+	Homepage         string              `json:"homepage"`
+	Repository       string              `json:"repository"`
+	Downloads        int64               `json:"downloads"`
+	Rating           float64             `json:"rating"`
+	Reviews          int64               `json:"reviews"`
+	Verified         bool                `json:"verified"`
+	Tags             []string            `json:"tags"`
+	Capabilities     plugin.Capabilities `json:"capabilities"`
+	Install          InstallConfig       `json:"install"`
+	Screenshots      []string            `json:"screenshots,omitempty"`
+	DocumentationURL string              `json:"documentation_url,omitempty"`
+	PublishedAt      time.Time           `json:"published_at"`
+	UpdatedAt        time.Time           `json:"updated_at"`
 }
 
 // InstallConfig describes how to install the plugin.

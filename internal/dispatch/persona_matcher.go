@@ -91,18 +91,18 @@ func (pm *PersonaMatcher) extractFromText(text string) string {
 // normalizePersonaHint normalizes a persona hint to match PersonaName format
 func normalizePersonaHint(hint string) string {
 	hint = strings.TrimSpace(strings.ToLower(hint))
-	
+
 	// Remove common suffixes
 	hint = strings.TrimSuffix(hint, " agent")
 	hint = strings.TrimSuffix(hint, " only")
-	
+
 	// Replace spaces with hyphens (persona names use hyphens)
 	hint = strings.ReplaceAll(hint, " ", "-")
-	
+
 	// Remove extra hyphens
 	hint = regexp.MustCompile(`-+`).ReplaceAllString(hint, "-")
 	hint = strings.Trim(hint, "-")
-	
+
 	return hint
 }
 
@@ -122,7 +122,7 @@ func (pm *PersonaMatcher) FindAgentByPersonaHint(hint string, agents []*models.A
 		personaName := strings.ToLower(agent.PersonaName)
 		// Strip "default/" prefix if present
 		personaName = strings.TrimPrefix(personaName, "default/")
-		
+
 		if personaName == hint {
 			return agent
 		}
@@ -135,12 +135,12 @@ func (pm *PersonaMatcher) FindAgentByPersonaHint(hint string, agents []*models.A
 		}
 		personaName := strings.ToLower(agent.PersonaName)
 		personaName = strings.TrimPrefix(personaName, "default/")
-		
+
 		// Check if hint matches any part of the persona name
 		if strings.Contains(personaName, hint) {
 			return agent
 		}
-		
+
 		// Check if any part of persona name matches the hint
 		if strings.Contains(hint, personaName) {
 			return agent
@@ -153,7 +153,7 @@ func (pm *PersonaMatcher) FindAgentByPersonaHint(hint string, agents []*models.A
 			continue
 		}
 		role := strings.ToLower(agent.Role)
-		
+
 		if role == hint || strings.Contains(role, hint) || strings.Contains(hint, role) {
 			return agent
 		}

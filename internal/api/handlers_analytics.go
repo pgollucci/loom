@@ -292,7 +292,7 @@ func (s *Server) handleExportStats(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"agenticorp-stats-"+time.Now().Format("2006-01-02")+".json\"")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"exported_at":   time.Now().Format(time.RFC3339),
+			"exported_at": time.Now().Format(time.RFC3339),
 			"time_range": map[string]string{
 				"start": filter.StartTime.Format(time.RFC3339),
 				"end":   filter.EndTime.Format(time.RFC3339),

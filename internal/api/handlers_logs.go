@@ -206,10 +206,10 @@ func (s *Server) HandleLogsExport(w http.ResponseWriter, r *http.Request) {
 	case "csv":
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"logs-%s.csv\"", time.Now().Format("2006-01-02")))
-		
+
 		// Write CSV header
 		fmt.Fprintln(w, "Timestamp,Level,Source,Message,Metadata")
-		
+
 		// Write CSV rows
 		for _, log := range logs {
 			metadataJSON := ""
