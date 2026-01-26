@@ -1,6 +1,6 @@
 # AgentiCorp Architecture Guide
 
-**Last Updated**: January 21, 2026 (Analytics v1.1)
+**Last Updated**: January 25, 2026 (Motivation System v1.2)
 
 This document describes the architecture of AgentiCorp, the Agent Orchestration System for managing distributed AI workflows.
 
@@ -20,6 +20,10 @@ AgentiCorp is a comprehensive agent orchestration platform that:
 - **NEW (v1.1)**: Per-user and per-provider cost tracking
 - **NEW (v1.1)**: Privacy-first logging with GDPR compliance
 - **NEW (v1.1)**: Spending alerts and anomaly detection
+- **NEW (v1.2)**: Motivation system for proactive agent workflows
+- **NEW (v1.2)**: Idle detection with system/project/agent granularity
+- **NEW (v1.2)**: GitHub webhook integration for external events
+- **NEW (v1.2)**: Milestone and deadline tracking
 
 ## Core Components
 
@@ -480,6 +484,64 @@ See [docs/ANALYTICS_GUIDE.md](ANALYTICS_GUIDE.md) for usage details.
 - Build must pass before deployment
 - Test failures block merges
 
+### 13. Motivation System (NEW v1.2)
+
+**Purpose**: Proactively trigger agent workflows based on events, time, thresholds, and system state
+
+**Key Files**:
+- `internal/motivation/engine.go` - Core trigger evaluation engine
+- `internal/motivation/registry.go` - Motivation storage and CRUD
+- `internal/motivation/evaluators.go` - 5 evaluator types (calendar, event, threshold, idle, external)
+- `internal/motivation/idle_detector.go` - System/project/agent idle detection
+- `internal/motivation/defaults.go` - 34 built-in motivations for 12 agent roles
+- `internal/api/handlers_motivations.go` - REST API endpoints
+- `internal/api/handlers_webhooks.go` - GitHub webhook integration
+
+**Concepts**:
+- **Motivation**: A trigger that can wake an agent or create work
+- **Evaluator**: Logic to determine when a motivation should fire
+- **Cooldown**: Minimum time between triggers to prevent storms
+- **Stimulus Bead**: Work item automatically created when motivation fires
+
+**Motivation Types**:
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| `calendar` | Time-based triggers | Deadline approaching, quarter boundary, scheduled interval |
+| `event` | System event triggers | Bead completed, decision pending, release published |
+| `threshold` | Metric-based triggers | Cost exceeded, coverage dropped, test failure |
+| `idle` | Activity-based triggers | System idle, project idle, agent idle |
+| `external` | Webhook triggers | GitHub issue opened, PR opened, comment added |
+
+**Default Motivations by Role**:
+- **CEO**: System idle → strategic review, Decision pending → executive approval
+- **CFO**: Budget exceeded → cost analysis, Monthly review
+- **Project Manager**: Deadline approaching/passed, Velocity drop
+- **Engineering Manager**: Test failure, Coverage drop
+- **QA Engineer**: Bead completed → review, Test failure → investigation
+- **DevOps Engineer**: Release approaching → infrastructure prep
+- **And 6 more roles...**
+
+**Workflow**:
+1. Motivation engine evaluates all registered motivations on heartbeat (30s)
+2. Each evaluator checks its condition against current system state
+3. If condition met and cooldown elapsed, motivation fires
+4. Fire actions: wake agent, create stimulus bead, publish event
+5. Cooldown period prevents re-triggering until elapsed
+
+**API Endpoints**:
+- `GET /api/v1/motivations` - List motivations with filters
+- `POST /api/v1/motivations/{id}/enable` - Enable motivation
+- `POST /api/v1/motivations/{id}/disable` - Disable motivation
+- `POST /api/v1/motivations/{id}/trigger` - Manual trigger
+- `GET /api/v1/motivations/history` - Trigger history
+- `GET /api/v1/motivations/idle` - Current idle state
+- `POST /api/v1/webhooks/github` - GitHub webhook receiver
+
+**Database**: `motivations` table with type, condition, cooldown, priority; `motivation_triggers` table for history; `milestones` table for deadline tracking
+
+See [docs/MOTIVATION_SYSTEM.md](MOTIVATION_SYSTEM.md) for complete reference.
+
 ## Data Flow
 
 ### Work Distribution Flow
@@ -506,6 +568,28 @@ Agent Execution (Via Provider)
 Bead Complete / Update Dependencies
     ↓
 Next Ready Beads Available
+```
+
+### Motivation Flow (NEW v1.2)
+
+```
+System Idle / Event / Time Trigger
+    ↓
+Motivation Engine Tick (30s interval)
+    ↓
+Evaluate All Registered Motivations
+    ↓
+Check Cooldown Period
+    ↓
+Fire Motivation (if conditions met)
+    ↓
+┌────────────┬────────────┐
+│            │            │
+Wake Agent   Create Bead  Publish Event
+│            │            │
+└────────────┴────────────┘
+    ↓
+Agent Resumes Work / Bead Dispatched
 ```
 
 ### Agent Processing Flow
@@ -851,5 +935,7 @@ AgentiCorp can be extended via:
 3. **Temporal Workflows**: Add workflows in `internal/temporal/workflows/`
 4. **Custom Providers**: Register new LLM endpoints
 5. **Temporal DSL**: Use DSL in agent instructions for workflows
+6. **Custom Motivations**: Register custom triggers via API or DSL
+7. **External Webhooks**: Configure GitHub or custom webhook triggers
 
 See individual documentation files for details.
