@@ -15,10 +15,16 @@ func TestDailyBudgetAlert(t *testing.T) {
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
+	// Use timestamps relative to now (going backwards) to avoid timing issues
 	for i := 0; i < 5; i++ {
+		ts := now.Add(-time.Duration(i+1) * time.Minute)
+		// Ensure we don't go before start of day
+		if ts.Before(startOfDay) {
+			ts = startOfDay.Add(time.Duration(i) * time.Minute)
+		}
 		storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-%d", i),
-			Timestamp: startOfDay.Add(time.Duration(i) * time.Hour),
+			Timestamp: ts,
 			UserID:    "user-test",
 			CostUSD:   25.0, // Total: $125, exceeds $100 budget
 		})
@@ -112,11 +118,16 @@ func TestAnomalyDetection(t *testing.T) {
 		})
 	}
 
-	// Add today's logs with unusual spending
+	// Add today's logs with unusual spending (use timestamps before now)
 	for i := 0; i < 5; i++ {
+		ts := now.Add(-time.Duration(i+1) * time.Minute)
+		// Ensure we don't go before start of day
+		if ts.Before(startOfToday) {
+			ts = startOfToday.Add(time.Duration(i) * time.Minute)
+		}
 		storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-today-%d", i),
-			Timestamp: startOfToday.Add(time.Duration(i) * time.Hour),
+			Timestamp: ts,
 			UserID:    "user-test",
 			CostUSD:   5.0, // Total: $25 today vs $10 average (2.5x)
 		})
