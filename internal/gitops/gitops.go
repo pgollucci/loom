@@ -211,11 +211,10 @@ func (m *Manager) GetCurrentCommit(workDir string) (string, error) {
 
 // GetProjectWorkDir returns the work directory path for a project
 func (m *Manager) GetProjectWorkDir(projectID string) string {
-	if projectID == "agenticorp-self" {
-		if _, err := os.Stat(filepath.Join(m.baseWorkDir, ".git")); err == nil {
-			return m.baseWorkDir
-		}
-	}
+	// Always use baseWorkDir/projectID for cloned projects
+	// The special case for agenticorp-self was removed because in Docker,
+	// the repo is cloned separately to baseWorkDir/agenticorp-self even though
+	// baseWorkDir/.git may exist from the image build.
 	return filepath.Join(m.baseWorkDir, projectID)
 }
 
