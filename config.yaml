@@ -28,10 +28,11 @@ agents:
   file_lock_timeout: 10m
 
 security:
-  enable_auth: false  # DISABLED FOR DEVELOPMENT - Enable in production
+  enable_auth: true  # ENABLED FOR PRODUCTION
   pki_enabled: false  # Will be enabled when certificates are provided
   ca_file: ""
   require_https: false
+  jwt_secret: "change-me-in-production"
   allowed_origins:
     - "*"  # CORS - adjust in production
   # api_keys:
@@ -52,6 +53,20 @@ cache:
   max_size: 10000             # Maximum number of cached entries
   max_memory_mb: 500          # Maximum memory usage (approximate)
   cleanup_period: 5m          # How often to clean expired entries
+
+providers:
+  - id: puck-local
+    name: Puck Local
+    type: local
+    endpoint: http://puck.local:8000/v1
+    model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+    enabled: true
+  - id: sparky-local
+    name: Sparky Local
+    type: local
+    endpoint: http://sparky.local:8000/v1
+    model: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+    enabled: true
 
 projects:
   - id: agenticorp-self

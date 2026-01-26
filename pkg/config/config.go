@@ -13,10 +13,15 @@ import (
 
 const configFileName = ".agenticorp.json"
 
-// Provider represents an AI service provider configuration (user-specific JSON config).
+// Provider represents an AI service provider configuration (file/JSON config).
 type Provider struct {
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint"`
+	ID       string `yaml:"id" json:"id"`
+	Name     string `yaml:"name" json:"name"`
+	Type     string `yaml:"type" json:"type"`
+	Endpoint string `yaml:"endpoint" json:"endpoint"`
+	APIKey   string `yaml:"api_key" json:"api_key"`
+	Model    string `yaml:"model" json:"model"`
+	Enabled  bool   `yaml:"enabled" json:"enabled"`
 }
 
 // Config represents the main configuration for the agenticorp system.

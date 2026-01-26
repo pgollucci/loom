@@ -78,7 +78,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - AGENTICORP_PASSWORD=test-new-password-12345
+      - AGENTICORP_PASSWORD=${AGENTICORP_PASSWORD}
       - TZ=UTC
       - TEMPORAL_HOST=temporal:7233
       - TEMPORAL_NAMESPACE=default
@@ -93,6 +93,8 @@ services:
       - .:/app/src:rw
       # Persist SQLite database across container restarts
       - agenticorp-db:/app/data
+      # Persist beads across container restarts
+      - agenticorp-beads:/app/src/.beads
       # Mount SSH keys for git operations (read-only)
       - ~/.ssh/id_ecdsa:/home/agenticorp/.ssh/id_ecdsa:ro
       - ~/.ssh/id_ecdsa.pub:/home/agenticorp/.ssh/id_ecdsa.pub:ro
@@ -127,3 +129,4 @@ networks:
 volumes:
   temporal-db-data:
   agenticorp-db:
+  agenticorp-beads:

@@ -371,6 +371,37 @@ func (a *AgentiCorp) Initialize(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to load providers: %w", err)
 		}
+		if len(providers) == 0 && len(a.config.Providers) > 0 {
+			for _, cfgProvider := range a.config.Providers {
+				if !cfgProvider.Enabled {
+					continue
+				}
+				providerID := cfgProvider.ID
+				if providerID == "" && cfgProvider.Name != "" {
+					providerID = strings.ReplaceAll(strings.ToLower(cfgProvider.Name), " ", "-")
+				}
+				if providerID == "" {
+					log.Printf("Skipping provider seed without id or name: endpoint=%s", cfgProvider.Endpoint)
+					continue
+				}
+				seed := &internalmodels.Provider{
+					ID:          providerID,
+					Name:        cfgProvider.Name,
+					Type:        cfgProvider.Type,
+					Endpoint:    cfgProvider.Endpoint,
+					Model:       cfgProvider.Model,
+					RequiresKey: cfgProvider.APIKey != "",
+					Status:      "pending",
+				}
+				if _, regErr := a.RegisterProvider(ctx, seed); regErr != nil {
+					log.Printf("Failed to seed provider %s: %v", providerID, regErr)
+				}
+			}
+			providers, err = a.database.ListProviders()
+			if err != nil {
+				return fmt.Errorf("failed to reload providers: %w", err)
+			}
+		}
 		for _, p := range providers {
 			selected := p.SelectedModel
 			if selected == "" {
