@@ -1,200 +1,61 @@
-// AgentiCorp UI Self-Diagnostic Tool
-// This script runs diagnostics and reports UI issues automatically
+// AgentiCorp UI Error Handler and Auto-Filer
+// Catches ALL JS errors and auto-files them as beads
 
 (function() {
     'use strict';
     
-    const diagnostics = {
-        errors: [],
-        warnings: [],
-        info: []
-    };
+    // Track errors to avoid duplicate filings
+    const filedErrors = new Set();
+    const ERROR_DEBOUNCE_MS = 5000; // Don't file same error within 5 seconds
     
-    // Run diagnostics after page load
-    window.addEventListener('load', () => {
-        setTimeout(runDiagnostics, 2000); // Wait 2 seconds for everything to settle
-    });
-    
-    function runDiagnostics() {
-        console.log('[Diagnostic] Running UI diagnostics...');
-        
-        // Check 1: Verify state is populated
-        if (typeof state === 'undefined') {
-            diagnostics.errors.push('Global state object not defined');
+    // Show toast notification (uses app.js showToast if available, falls back to console)
+    function showErrorToast(message, type = 'error') {
+        if (typeof showToast === 'function') {
+            showToast(message, type);
         } else {
-            if (!state.beads || state.beads.length === 0) {
-                diagnostics.warnings.push(`Beads not loaded (state.beads = ${state.beads?.length || 0})`);
-            } else {
-                diagnostics.info.push(`✓ ${state.beads.length} beads loaded`);
-            }
-            
-            if (!state.projects || state.projects.length === 0) {
-                diagnostics.warnings.push(`Projects not loaded (state.projects = ${state.projects?.length || 0})`);
-            } else {
-                diagnostics.info.push(`✓ ${state.projects.length} projects loaded`);
-            }
-            
-            if (!state.agents || state.agents.length === 0) {
-                diagnostics.warnings.push(`Agents not loaded (state.agents = ${state.agents?.length || 0})`);
-            } else {
-                diagnostics.info.push(`✓ ${state.agents.length} agents loaded`);
-            }
-        }
-        
-        // Check 2: Verify DOM elements exist
-        const requiredElements = [
-            'project-view-select',
-            'project-view-details',
-            'open-beads',
-            'in-progress-beads',
-            'closed-beads'
-        ];
-        
-        requiredElements.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) {
-                diagnostics.errors.push(`Missing required DOM element: #${id}`);
-            } else if (el.innerHTML.trim() === '') {
-                diagnostics.warnings.push(`DOM element #${id} is empty`);
-            } else {
-                diagnostics.info.push(`✓ Element #${id} exists and has content`);
-            }
-        });
-        
-        // Check 3: Look for JavaScript errors in console
-        const consoleErrors = window._agenticorpErrors || [];
-        if (consoleErrors.length > 0) {
-            diagnostics.errors.push(`${consoleErrors.length} JavaScript errors detected`);
-        }
-        
-        // Check 4: Verify API responses
-        if (typeof fetch !== 'undefined') {
-            checkAPIEndpoints();
-        }
-        
-        // Display results
-        displayDiagnostics();
-    }
-    
-    async function checkAPIEndpoints() {
-        const endpoints = ['/api/v1/projects', '/api/v1/beads', '/api/v1/agents'];
-        
-        for (const endpoint of endpoints) {
-            try {
-                const response = await fetch(endpoint);
-                if (!response.ok) {
-                    diagnostics.warnings.push(`API ${endpoint} returned ${response.status}`);
-                } else {
-                    const data = await response.json();
-                    diagnostics.info.push(`✓ API ${endpoint} returned ${Array.isArray(data) ? data.length : '?'} items`);
-                }
-            } catch (error) {
-                diagnostics.errors.push(`API ${endpoint} failed: ${error.message}`);
-            }
+            console.log(`[Toast ${type}] ${message}`);
         }
     }
     
-    function displayDiagnostics() {
-        console.log('\n╔════════════════════════════════════════════════════════════════╗');
-        console.log('║  AgentiCorp UI Diagnostics Report                             ║');
-        console.log('╚════════════════════════════════════════════════════════════════╝\n');
+    // Auto-file error to backend
+    async function autoFileError(errorInfo) {
+        // Create a unique key for deduplication
+        const errorKey = `${errorInfo.message}:${errorInfo.source}:${errorInfo.lineno}`;
         
-        if (diagnostics.errors.length > 0) {
-            console.error('❌ ERRORS:');
-            diagnostics.errors.forEach(err => console.error('   •', err));
-            console.log('');
+        // Check if we've already filed this error recently
+        if (filedErrors.has(errorKey)) {
+            return;
         }
+        filedErrors.add(errorKey);
         
-        if (diagnostics.warnings.length > 0) {
-            console.warn('⚠️  WARNINGS:');
-            diagnostics.warnings.forEach(warn => console.warn('   •', warn));
-            console.log('');
-        }
+        // Clear from set after debounce period
+        setTimeout(() => filedErrors.delete(errorKey), ERROR_DEBOUNCE_MS);
         
-        if (diagnostics.info.length > 0) {
-            console.log('✓ INFO:');
-            diagnostics.info.forEach(info => console.log('   •', info));
-            console.log('');
-        }
-        
-        // Generate report summary
-        const totalIssues = diagnostics.errors.length + diagnostics.warnings.length;
-        if (totalIssues === 0) {
-            console.log('%c✅ No issues detected - UI should be working!', 'color: green; font-weight: bold');
-        } else {
-            console.log(`%c⚠️  Found ${totalIssues} issues`, 'color: orange; font-weight: bold');
-            
-            // Suggest fixes
-            if (diagnostics.errors.some(e => e.includes('DOM element'))) {
-                console.log('\n💡 Suggestion: HTML structure may be incomplete. Check index.html.');
-            }
-            if (diagnostics.warnings.some(w => w.includes('not loaded'))) {
-                console.log('\n💡 Suggestion: Data loaded but state not populated. Check loadAll() function.');
-            }
-            if (diagnostics.warnings.some(w => w.includes('empty'))) {
-                console.log('\n💡 Suggestion: Data exists but not rendering. Check render() functions.');
-            }
-        }
-        
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-        
-        // Auto-file bug only if truly critical errors found
-        // Don't auto-file for transient network issues or expected warnings
-        const hasCriticalErrors = diagnostics.errors.some(err => 
-            err.includes('DOM element') ||           // Missing UI elements
-            err.includes('state object not defined') // Critical state issues
-        );
-        
-        if (hasCriticalErrors && diagnostics.errors.length > 0) {
-            console.log('%c🐛 Critical errors detected - auto-filing bug report...', 'color: red; font-weight: bold');
-            autoFileBugReport();
-        } else if (diagnostics.errors.length > 0) {
-            console.log('%c⚠️  Non-critical errors detected - not auto-filing', 'color: orange; font-weight: bold');
-        }
-    }
-    
-    // Capture console errors (but filter out expected API errors)
-    window._agenticorpErrors = [];
-    const originalError = console.error;
-    console.error = function(...args) {
-        const errorMsg = args.join(' ');
-        // Filter out expected errors that are handled gracefully
-        const isExpectedError = 
-            errorMsg.includes('Failed to load') ||  // Normal data loading errors
-            errorMsg.includes('API Error:') ||      // API call errors (already shown in toast)
-            errorMsg.includes('Request failed');     // Generic request failures
-        
-        if (!isExpectedError) {
-            window._agenticorpErrors.push(errorMsg);
-        }
-        originalError.apply(console, args);
-    };
-    
-    // Auto-file bug report to backend
-    async function autoFileBugReport() {
-        const errorSummary = diagnostics.errors.slice(0, 3).join('; ');
-        const title = `UI Error: ${errorSummary.substring(0, 100)}`;
+        // Show immediate toast
+        showErrorToast('Internal UI error detected', 'error');
         
         const bugReport = {
-            title: title,
+            title: `[auto-filed] UI Error: ${(errorInfo.message || 'Unknown error').substring(0, 80)}`,
             source: 'frontend',
-            error_type: 'ui_error',
-            message: diagnostics.errors.join('\n'),
-            stack_trace: window._agenticorpErrors.join('\n'),
+            error_type: 'js_error',
+            message: errorInfo.message || 'Unknown error',
+            stack_trace: errorInfo.stack || '',
             context: {
                 url: window.location.href,
+                source_file: errorInfo.source || 'unknown',
+                line: errorInfo.lineno || 0,
+                column: errorInfo.colno || 0,
                 user_agent: navigator.userAgent,
                 timestamp: new Date().toISOString(),
                 viewport: `${window.innerWidth}x${window.innerHeight}`,
-                warnings: diagnostics.warnings,
                 state: typeof state !== 'undefined' ? {
                     beads: state.beads?.length || 0,
                     projects: state.projects?.length || 0,
                     agents: state.agents?.length || 0,
                     providers: state.providers?.length || 0
-                } : 'undefined'
+                } : 'state not available'
             },
-            severity: diagnostics.errors.length > 2 ? 'critical' : 'high',
+            severity: 'high',
             occurred_at: new Date().toISOString()
         };
         
@@ -207,18 +68,99 @@
             
             if (response.ok) {
                 const result = await response.json();
-                console.log(`%c✅ Bug report auto-filed: ${result.bead_id}`, 'color: green; font-weight: bold');
-                console.log(`   Assigned to: ${result.assigned_to}`);
-                console.log(`   Ask your AI assistant to check for "[auto-filed]" beads`);
+                showErrorToast(`Bug filed: ${result.bead_id}`, 'success');
+                console.log(`[AutoFile] Bug report filed: ${result.bead_id}, assigned to: ${result.assigned_to}`);
             } else {
-                console.error('❌ Failed to auto-file bug report:', await response.text());
+                const errorText = await response.text();
+                showErrorToast('Failed to file bug report', 'error');
+                console.error('[AutoFile] Failed to file bug report:', errorText);
             }
         } catch (error) {
-            console.error('❌ Error filing bug report:', error);
+            showErrorToast('Cannot reach backend to file bug', 'error');
+            console.error('[AutoFile] Error filing bug report:', error);
         }
     }
     
-    // Make it available globally for manual filing
-    window.fileUIBug = autoFileBugReport;
+    // Global error handler for uncaught errors
+    window.onerror = function(message, source, lineno, colno, error) {
+        console.error('[GlobalError]', message, 'at', source, lineno, colno);
+        
+        autoFileError({
+            message: message,
+            source: source,
+            lineno: lineno,
+            colno: colno,
+            stack: error?.stack || ''
+        });
+        
+        // Don't prevent default error handling
+        return false;
+    };
+    
+    // Global handler for unhandled promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+        const error = event.reason;
+        const message = error?.message || String(error) || 'Unhandled promise rejection';
+        
+        console.error('[UnhandledRejection]', message);
+        
+        autoFileError({
+            message: `Promise rejection: ${message}`,
+            source: 'promise',
+            lineno: 0,
+            colno: 0,
+            stack: error?.stack || ''
+        });
+    });
+    
+    // Intercept console.error to catch errors logged but not thrown
+    const originalConsoleError = console.error;
+    console.error = function(...args) {
+        // Call original first
+        originalConsoleError.apply(console, args);
+        
+        // Check if this looks like an actual error (not just a log)
+        const errorMsg = args.map(a => String(a)).join(' ');
+        
+        // Filter out expected/handled errors to avoid noise
+        const isExpectedError = 
+            errorMsg.includes('[GlobalError]') ||       // Already handled by onerror
+            errorMsg.includes('[UnhandledRejection]') || // Already handled
+            errorMsg.includes('[AutoFile]') ||          // Our own logging
+            errorMsg.includes('[AgentiCorp]') ||        // App's own error handling
+            errorMsg.includes('Failed to load');        // Normal load failures shown in toast
+        
+        // File if it contains error indicators and isn't expected
+        const looksLikeError = 
+            errorMsg.includes('Error') ||
+            errorMsg.includes('error') ||
+            errorMsg.includes('Cannot read') ||
+            errorMsg.includes('undefined') ||
+            errorMsg.includes('is not a function') ||
+            errorMsg.includes('is not defined');
+        
+        if (looksLikeError && !isExpectedError) {
+            autoFileError({
+                message: errorMsg.substring(0, 200),
+                source: 'console.error',
+                lineno: 0,
+                colno: 0,
+                stack: ''
+            });
+        }
+    };
+    
+    // Manual filing function available globally
+    window.fileUIBug = function(message) {
+        autoFileError({
+            message: message || 'Manually reported UI issue',
+            source: 'manual',
+            lineno: 0,
+            colno: 0,
+            stack: new Error().stack
+        });
+    };
+    
+    console.log('[Diagnostic] UI error auto-filer initialized');
     
 })();
