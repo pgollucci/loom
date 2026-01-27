@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Complete self-healing workflow system for automatic bug detection and fixing
+- Auto-bug dispatch system with intelligent routing to specialist agents (web-designer, backend-engineer, devops-engineer)
+- Agent bug investigation workflow with step-by-step guidance for root cause analysis
+- Hot-reload system for rapid frontend development (CSS hot-reload, JS/HTML full reload)
+- CEO approval workflow for code fix proposals with risk assessments
+- Perpetual tasks system for proactive agent workflows (15 tasks across 7 roles)
+- File watching with fsnotify and WebSocket-based browser notifications
+- Comprehensive documentation for self-healing, hot-reload, and testing workflows
+
+### Fixed
+- Duplicate API_BASE declaration causing blank UI (web-designer agent investigation)
+- Motivations API response parsing (extract history array correctly from object)
+- Frontend JavaScript errors now auto-filed with full stack traces and context
+- Backend Go errors now auto-routed to appropriate engineering agents
+
+### Changed
+- Dispatcher now provides specialized bug investigation instructions for auto-filed bugs
+- Enhanced buildBeadContext to include step-by-step workflow for bug investigation
+- Auto-filed P0 bugs now bypass CEO approval requirement for immediate dispatch
+- Hot-reload enabled by default in development configuration
+
 [0;34mℹ️  Generating changelog from v0.0.0 to HEAD...[0m
 ## [0.0.1] - 2026-01-26
 
