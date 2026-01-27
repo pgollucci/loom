@@ -16,6 +16,7 @@ ALLOWED_ROOT=(
   "./README.md"
   "./AGENTS.md"
   "./MANUAL.md"
+  "./CHANGELOG.md"
   "./CONTRIBUTING.md"
   "./LICENSE.md"
   "./MILESTONES.md"
