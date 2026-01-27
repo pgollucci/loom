@@ -1798,7 +1798,150 @@ func (a *AgentiCorp) CloseBead(beadID, reason string) error {
 		})
 	}
 
+	// Auto-create apply-fix bead if this was an approved code fix proposal
+	if strings.Contains(strings.ToLower(bead.Title), "code fix approval") &&
+		bead.Type == "decision" &&
+		strings.Contains(strings.ToLower(reason), "approve") {
+
+		if err := a.createApplyFixBead(bead, reason); err != nil {
+			log.Printf("[AutoFix] Failed to create apply-fix bead for %s: %v", beadID, err)
+			// Don't fail the close operation if apply-fix creation fails
+		}
+	}
+
 	return nil
+}
+
+// createApplyFixBead automatically creates an apply-fix task when a code fix proposal is approved
+func (a *AgentiCorp) createApplyFixBead(approvalBead *models.Bead, closeReason string) error {
+	// Extract original bug ID from approval bead description
+	originalBugID := extractOriginalBugID(approvalBead.Description)
+	if originalBugID == "" {
+		return fmt.Errorf("could not extract original bug ID from approval bead")
+	}
+
+	// Get the agent who created the proposal (from context or assigned_to)
+	agentID := ""
+	if approvalBead.Context != nil {
+		agentID = approvalBead.Context["agent_id"]
+	}
+	if agentID == "" && approvalBead.AssignedTo != "" {
+		agentID = approvalBead.AssignedTo
+	}
+
+	projectID := approvalBead.ProjectID
+	if projectID == "" {
+		projectID = "agenticorp-self"
+	}
+
+	// Create apply-fix bead
+	title := fmt.Sprintf("[apply-fix] Apply approved patch from %s", approvalBead.ID)
+
+	description := fmt.Sprintf(`## Apply Approved Code Fix
+
+**Approval Bead:** %s
+**Original Bug:** %s
+**Approved By:** CEO
+**Approved At:** %s
+**Approval Reason:** %s
+
+### Instructions
+
+1. Read the approved fix proposal from bead %s
+2. Extract the patch or code changes from the proposal
+3. Apply the changes using write_file or apply_patch action
+4. Verify the fix (compile/test if applicable)
+5. Update cache versions if needed (for frontend changes)
+6. Close this bead and the original bug bead %s
+7. Add comment to bug bead: "Fixed by applying approved patch from %s"
+
+### Approved Proposal
+
+%s
+
+### Important Notes
+
+- This fix has been reviewed and approved by the CEO
+- Apply the changes exactly as specified in the proposal
+- Test thoroughly after applying
+- Report any issues or unexpected errors immediately
+- If hot-reload is enabled, verify the fix works after automatic browser refresh
+`,
+		approvalBead.ID,
+		originalBugID,
+		time.Now().Format(time.RFC3339),
+		closeReason,
+		approvalBead.ID,
+		originalBugID,
+		approvalBead.ID,
+		approvalBead.Description,
+	)
+
+	// Create the bead
+	bead, err := a.CreateBead(title, description, models.BeadPriority(1), "task", projectID)
+	if err != nil {
+		return fmt.Errorf("failed to create apply-fix bead: %w", err)
+	}
+
+	// Update with tags, assignment, and context
+	tags := []string{"apply-fix", "auto-created", "code-fix"}
+	ctx := map[string]string{
+		"approval_bead_id": approvalBead.ID,
+		"original_bug_id":  originalBugID,
+		"fix_type":         "code-fix",
+		"created_by":       "auto_fix_system",
+	}
+
+	updates := map[string]interface{}{
+		"tags":    tags,
+		"context": ctx,
+	}
+
+	// Assign to the agent who created the proposal, if available
+	if agentID != "" {
+		updates["assigned_to"] = agentID
+	}
+
+	if err := a.beadsManager.UpdateBead(bead.ID, updates); err != nil {
+		log.Printf("[AutoFix] Failed to update apply-fix bead %s: %v", bead.ID, err)
+		// Don't fail - bead is created, just missing some metadata
+	}
+
+	log.Printf("[AutoFix] Created apply-fix bead %s for approved proposal %s (original bug: %s)",
+		bead.ID, approvalBead.ID, originalBugID)
+
+	return nil
+}
+
+// extractOriginalBugID extracts the original bug bead ID from an approval bead description
+func extractOriginalBugID(description string) string {
+	// Look for patterns like "**Original Bug:** ac-001" or "Original Bug: bd-123"
+	patterns := []string{
+		"**Original Bug:** ",
+		"Original Bug: ",
+		"**Original Bug:**",
+	}
+
+	for _, pattern := range patterns {
+		idx := strings.Index(description, pattern)
+		if idx >= 0 {
+			// Extract the bead ID after the pattern
+			start := idx + len(pattern)
+			end := start
+			for end < len(description) && (
+				(description[end] >= 'a' && description[end] <= 'z') ||
+				(description[end] >= '0' && description[end] <= '9') ||
+				description[end] == '-') {
+				end++
+			}
+			if end > start {
+				bugID := strings.TrimSpace(description[start:end])
+				return bugID
+			}
+		}
+	}
+
+	return ""
 }
 
 // CreateDecisionBead creates a decision bead when an agent needs a decision

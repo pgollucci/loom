@@ -84,19 +84,27 @@ curl http://localhost:8080/api/v1/beads?type=decision | jq '.[] | select(.title 
    - Root cause analysis
    - Proposed fix (patch)
    - Risk assessment
-5. Close bead with comment: "Approved. Apply the fix."
+5. Close bead with reason containing "approved":
+   - Example: "Approved. Apply the fix."
+   - Or simply: "Approved"
 
-### Step 6: Create Apply-Fix Task
+### Step 6: Automatic Apply-Fix Creation
 
-**Manual Action (for now):**
-1. Create new task bead:
+**Automated - No Manual Action Required:**
+1. System detects approval bead closure
+2. Extracts original bug ID from proposal
+3. Creates `[apply-fix]` bead automatically:
    - Title: `[apply-fix] Apply approved patch from dc-xxx`
-   - Description: Link to approval bead + instructions
-   - Assign to: Web Designer
-2. Dispatcher will pick it up
+   - Assigned to: Web Designer (agent who created proposal)
+   - Contains full instructions and proposal
+4. Dispatcher automatically picks up the task
 
-**Future Enhancement:**
-This will be automated via a motivation trigger.
+**Verify:**
+```bash
+curl http://localhost:8080/api/v1/beads?tags=apply-fix
+```
+
+Should show newly created apply-fix bead.
 
 ### Step 7: Agent Applies Fix
 
@@ -224,10 +232,11 @@ Follow same investigation → approval → fix → verification workflow.
 4. **Wait for routing:** Check dispatcher logs for "Auto-bug detected"
 5. **Wait for investigation:** Agent analyzes and creates approval bead (~1-2 minutes)
 6. **CEO approves:** Close approval bead with "Approved"
-7. **Create apply-fix:** Manual for now
-8. **Wait for fix:** Agent applies patch (~30 seconds)
-9. **Hot-reload triggers:** Browser refreshes automatically
-10. **Verify:** Error gone from console
+7. **System creates apply-fix:** Automatic - apply-fix bead created instantly
+8. **Wait for dispatch:** Dispatcher assigns apply-fix bead to agent (~10 seconds)
+9. **Wait for fix:** Agent applies patch (~30 seconds)
+10. **Hot-reload triggers:** Browser refreshes automatically
+11. **Verify:** Error gone from console
 
 ### Success Criteria
 

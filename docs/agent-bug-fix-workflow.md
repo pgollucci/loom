@@ -328,17 +328,32 @@ Depending on the type of fix:
            │
            ▼
 ┌─────────────────────┐
-│  Wait for CEO       │
-│  Decision           │
+│  CEO Reviews and    │
+│  Makes Decision     │
 └──────┬──────┬───────┘
        │      │
    Approved Rejected
        │      │
        ▼      ▼
 ┌──────────┐ ┌──────────┐
-│Apply Fix │ │Close Bug │
-│         │ │Won't Fix │
-└────┬─────┘ └──────────┘
+│System    │ │Close Bug │
+│Creates   │ │Won't Fix │
+│Apply-Fix │ └──────────┘
+│Bead Auto │
+└────┬─────┘
+     │
+     ▼
+┌──────────┐
+│Agent Gets│
+│Apply-Fix │
+│Task      │
+└────┬─────┘
+     │
+     ▼
+┌──────────┐
+│Apply     │
+│Patch     │
+└────┬─────┘
      │
      ▼
 ┌──────────┐
@@ -347,8 +362,8 @@ Depending on the type of fix:
      │
      ▼
 ┌──────────┐
-│Close Both│
-│Beads     │
+│Close All │
+│3 Beads   │
 └──────────┘
 ```
 
@@ -394,7 +409,7 @@ Let me investigate:
 I recommend <approval/rejection> because <reasoning>.
 ```
 
-## CEO Approval Process (Manual)
+## CEO Approval Process (Automated)
 
 ### Step 1: CEO Receives Approval Bead
 
@@ -415,24 +430,25 @@ CEO examines:
 
 ### Step 3: CEO Makes Decision
 
-**Option A: Approve and Apply (Recommended)**
+**Option A: Approve (Automated - Recommended)**
 
-1. Close the approval bead via UI or API
-2. Create a new task bead asking the agent to apply the fix:
-   ```
-   Title: [apply-fix] Apply approved patch from dc-xxx
-   Description:
-   Apply the approved code fix from decision bead dc-xxx.
+1. Close the approval bead via UI or API with reason containing "approved"
+   - Example: "Approved. Apply the fix."
+   - Or simply: "Approved"
+2. **System automatically creates apply-fix bead:**
+   - Title: `[apply-fix] Apply approved patch from dc-xxx`
+   - Assigned to the agent who created the proposal
+   - Contains full instructions and original proposal
+   - Tagged: `apply-fix`, `auto-created`, `code-fix`
+3. Dispatcher automatically picks up and executes the task
 
-   Instructions:
-   1. Read the approved patch from dc-xxx
-   2. Apply using write_file or apply_patch action
-   3. Verify the fix works
-   4. Update cache versions if needed
-   5. Close original bug bead <bug-id>
-   ```
-3. Assign to the agent who created the proposal
-4. Dispatcher will assign and execute
+**What Happens Automatically:**
+- System detects approval bead closure
+- Extracts original bug ID from proposal
+- Creates apply-fix task bead
+- Assigns to proposing agent
+- Links approval bead, bug bead, and apply-fix bead
+- Agent applies fix automatically
 
 **Option B: Approve and Apply Manually**
 
@@ -443,21 +459,36 @@ CEO examines:
 **Option C: Reject**
 
 1. Close the approval bead with reason: "Rejected: <explanation>"
+   - System will NOT create apply-fix bead (reason doesn't contain "approve")
 2. Add comment explaining why and what needs to change
 3. Agent can revise and resubmit, or mark bug as "needs-investigation"
 
 **Option D: Request Changes**
 
 1. Add comment to approval bead: "Needs revision: <specific feedback>"
-2. Leave bead open for agent to revise
+2. Leave bead open (don't close it yet)
 3. Agent updates proposal and notifies CEO
+4. CEO re-reviews and either approves or rejects
 
-### Automating Approvals (Future Enhancement)
+### Automatic Apply-Fix Creation (✅ Implemented)
 
-For low-risk fixes (e.g., typo fixes, obvious bugs), CEO could:
-- Set up auto-approval rules based on risk level
+When CEO approves a code fix proposal by closing the approval bead with "approved" in the reason:
+1. System automatically detects the approval
+2. Extracts original bug ID from proposal
+3. Creates `[apply-fix]` task bead
+4. Assigns to the agent who created the proposal
+5. Agent applies the fix automatically
+
+**Implementation:** `internal/agenticorp/agenticorp.go:1794-1809` (CloseBead function)
+
+### Future Enhancements
+
+For even more automation:
+- Set up auto-approval rules based on risk level (low-risk fixes auto-approved)
 - Delegate approval authority to Engineering Manager for specific fix types
 - Implement post-fix review instead of pre-approval for certain categories
+- Confidence scoring for proposed fixes
+- A/B testing different fix approaches
 
 ## Hot-Reload Integration (Future)
 
@@ -541,31 +572,44 @@ Contains: Root cause, patch, risk assessment
 ```
 CEO reviews dc-fix-001
 CEO adds comment: "Approved. Good analysis."
-CEO closes with resolution: "approved"
+CEO closes with reason: "Approved. Apply the fix."
 ```
 
-### 6. Fix Applied
+### 6. Automatic Apply-Fix Creation
 ```
+System detects approval
+System extracts bug ID: ac-js-error-001
+System creates: [apply-fix] Apply approved patch from dc-fix-001
+System assigns to: agent-web-designer-001
+```
+
+### 7. Agent Applies Fix
+```
+Agent reads dc-fix-001 proposal
+Agent extracts patch
 Agent applies patch to diagrams.js
 Agent increments cache version v=1 → v=2
-Agent adds comment to ac-js-error-001: "Fixed"
 Agent closes ac-js-error-001 with resolution: "fixed"
+Agent closes apply-fix bead with resolution: "applied"
 ```
 
-### 7. Verification
+### 8. Verification
 ```
+Hot-reload detects change
+Browser refreshes automatically
 No new errors filed in next 5 minutes
 Mark as successful fix
 Update metrics
 ```
 
-## Next Steps
+## Implementation Status
 
 1. ✅ Design workflow (this document)
-2. Create bug investigation action or update agent prompts
-3. Implement CEO approval workflow in REPL
-4. Add hot-reload for automatic testing
-5. Build metrics dashboard
+2. ✅ Implement bug investigation instructions for agents
+3. ✅ Implement CEO approval workflow
+4. ✅ Add automatic apply-fix bead creation on approval
+5. ✅ Add hot-reload for automatic testing
+6. ⏳ Build metrics dashboard (future enhancement)
 
 ## See Also
 
