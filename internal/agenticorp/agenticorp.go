@@ -30,6 +30,7 @@ import (
 	"github.com/jordanhubbard/agenticorp/internal/provider"
 	"github.com/jordanhubbard/agenticorp/internal/routing"
 	"github.com/jordanhubbard/agenticorp/internal/motivation"
+	"github.com/jordanhubbard/agenticorp/internal/workflow"
 	"github.com/jordanhubbard/agenticorp/internal/temporal"
 	temporalactivities "github.com/jordanhubbard/agenticorp/internal/temporal/activities"
 	"github.com/jordanhubbard/agenticorp/internal/temporal/eventbus"
@@ -61,6 +62,7 @@ type AgentiCorp struct {
 	motivationRegistry   *motivation.Registry
 	motivationEngine     *motivation.Engine
 	idleDetector         *motivation.IdleDetector
+	workflowEngine       *workflow.Engine
 }
 
 // New creates a new AgentiCorp instance
@@ -146,6 +148,13 @@ func New(cfg *config.Config) (*AgentiCorp, error) {
 	motivationRegistry := motivation.NewRegistry(motivation.DefaultConfig())
 	idleDetector := motivation.NewIdleDetector(motivation.DefaultIdleConfig())
 
+	// Initialize workflow engine (if database is available)
+	var workflowEngine *workflow.Engine
+	if db != nil {
+		beadsMgr := beads.NewManager(cfg.Beads.BDPath)
+		workflowEngine = workflow.NewEngine(db, beadsMgr)
+	}
+
 	arb := &AgentiCorp{
 		config:           cfg,
 		agentManager:     agentMgr,
@@ -165,6 +174,7 @@ func New(cfg *config.Config) (*AgentiCorp, error) {
 		logManager:           logMgr,
 		motivationRegistry:   motivationRegistry,
 		idleDetector:         idleDetector,
+		workflowEngine:       workflowEngine,
 	}
 
 	actionRouter := &actions.Router{
@@ -528,6 +538,21 @@ func (a *AgentiCorp) Initialize(ctx context.Context) error {
 			log.Printf("Warning: Failed to register default motivations: %v", err)
 		} else {
 			log.Printf("Registered %d default motivations", a.motivationRegistry.Count())
+		}
+	}
+
+	// Load default workflows
+	if a.database != nil && a.workflowEngine != nil {
+		workflowsDir := "./workflows/defaults"
+		if _, err := os.Stat(workflowsDir); err == nil {
+			log.Printf("Loading default workflows from %s", workflowsDir)
+			if err := workflow.InstallDefaultWorkflows(a.database, workflowsDir); err != nil {
+				log.Printf("Warning: Failed to load default workflows: %v", err)
+			} else {
+				log.Printf("Successfully loaded default workflows")
+			}
+		} else {
+			log.Printf("Default workflows directory not found: %s", workflowsDir)
 		}
 	}
 

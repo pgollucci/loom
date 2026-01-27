@@ -45,6 +45,9 @@ COPY --from=builder /build/config.yaml /app/config.yaml
 # Copy personas directory
 COPY --from=builder /build/personas /app/personas
 
+# Copy workflows directory
+COPY --from=builder /build/workflows /app/workflows
+
 # Copy web static files
 COPY --from=builder /build/web/static /app/web/static
 

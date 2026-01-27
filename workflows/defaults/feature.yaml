@@ -1,0 +1,154 @@
+id: "wf-feature-default"
+name: "Feature Development Workflow"
+description: "Default workflow for new features and enhancements"
+workflow_type: "feature"
+is_default: true
+
+nodes:
+  - node_key: "ceo_review"
+    node_type: "approval"
+    role_required: "CEO"
+    persona_hint: "default/ceo"
+    max_attempts: 1
+    timeout_minutes: 240
+    instructions: |
+      Review this feature request:
+      1. Assess strategic value and priority
+      2. Verify alignment with product vision
+      3. Approve with specifications or reject
+
+  - node_key: "pm_plan"
+    node_type: "task"
+    role_required: "Product Manager"
+    persona_hint: "default/product-manager"
+    max_attempts: 2
+    timeout_minutes: 120
+    instructions: |
+      Create implementation plan:
+      1. Break down feature into tasks
+      2. Define acceptance criteria
+      3. Estimate complexity and risk
+      4. Create detailed specification
+
+  - node_key: "pm_approve"
+    node_type: "approval"
+    role_required: "Product Manager"
+    persona_hint: "default/product-manager"
+    max_attempts: 1
+    timeout_minutes: 60
+    instructions: |
+      Review implementation plan:
+      1. Verify completeness
+      2. Assess feasibility
+      3. Approve plan or request revisions
+
+  - node_key: "implement"
+    node_type: "task"
+    role_required: "Engineering Manager"
+    persona_hint: "default/engineering-manager"
+    max_attempts: 3
+    timeout_minutes: 240
+    instructions: |
+      Implement the feature:
+      1. Write code according to specification
+      2. Add tests
+      3. Ensure code quality
+      4. Create commit with changes
+
+  - node_key: "commit_and_push"
+    node_type: "commit"
+    role_required: "Engineering Manager"
+    persona_hint: "default/engineering-manager"
+    max_attempts: 2
+    timeout_minutes: 15
+    instructions: |
+      Commit and push the implementation:
+      1. Stage all changes
+      2. Create descriptive commit message
+      3. Push to remote repository
+
+  - node_key: "qa_verify"
+    node_type: "verify"
+    role_required: "QA"
+    persona_hint: "default/qa"
+    max_attempts: 2
+    timeout_minutes: 60
+    instructions: |
+      Verify the feature implementation:
+      1. Test against acceptance criteria
+      2. Perform regression testing
+      3. Document any issues found
+      4. Approve or reject with findings
+
+edges:
+  # Start → ceo_review
+  - from_node_key: ""
+    to_node_key: "ceo_review"
+    condition: "success"
+    priority: 100
+
+  # ceo_review → pm_plan (on approval)
+  - from_node_key: "ceo_review"
+    to_node_key: "pm_plan"
+    condition: "approved"
+    priority: 100
+
+  # ceo_review → end (on rejection)
+  - from_node_key: "ceo_review"
+    to_node_key: ""
+    condition: "rejected"
+    priority: 100
+
+  # pm_plan → pm_approve (on success)
+  - from_node_key: "pm_plan"
+    to_node_key: "pm_approve"
+    condition: "success"
+    priority: 100
+
+  # pm_approve → implement (on approval)
+  - from_node_key: "pm_approve"
+    to_node_key: "implement"
+    condition: "approved"
+    priority: 100
+
+  # pm_approve → pm_plan (on rejection - revise plan)
+  - from_node_key: "pm_approve"
+    to_node_key: "pm_plan"
+    condition: "rejected"
+    priority: 100
+
+  # implement → commit_and_push (on success)
+  - from_node_key: "implement"
+    to_node_key: "commit_and_push"
+    condition: "success"
+    priority: 100
+
+  # implement → pm_plan (on failure - need new approach)
+  - from_node_key: "implement"
+    to_node_key: "pm_plan"
+    condition: "failure"
+    priority: 100
+
+  # commit_and_push → qa_verify (on success)
+  - from_node_key: "commit_and_push"
+    to_node_key: "qa_verify"
+    condition: "success"
+    priority: 100
+
+  # commit_and_push → implement (on failure)
+  - from_node_key: "commit_and_push"
+    to_node_key: "implement"
+    condition: "failure"
+    priority: 100
+
+  # qa_verify → end (on approval - complete!)
+  - from_node_key: "qa_verify"
+    to_node_key: ""
+    condition: "approved"
+    priority: 100
+
+  # qa_verify → implement (on rejection - fix issues)
+  - from_node_key: "qa_verify"
+    to_node_key: "implement"
+    condition: "rejected"
+    priority: 100

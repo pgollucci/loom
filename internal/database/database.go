@@ -59,6 +59,11 @@ func New(dbPath string) (*Database, error) {
 		return nil, fmt.Errorf("failed to migrate motivations: %w", err)
 	}
 
+	if err := d.migrateWorkflows(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate workflows: %w", err)
+	}
+
 	return d, nil
 }
 
