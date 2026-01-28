@@ -516,6 +516,49 @@
                 </div>
             </div>
 
+            <!-- Batching Recommendations -->
+            <div class="analytics-section">
+                <h3>Batching Recommendations</h3>
+                <p class="small" style="margin-bottom: 1rem;">Identify batchable request bursts and potential efficiency gains.</p>
+                <div class="analytics-summary">
+                    <div class="analytics-card">
+                        <h3>Batchable Requests</h3>
+                        <div class="analytics-value" id="analytics-batching-requests">-</div>
+                        <div class="analytics-label">requests</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Recommended Batches</h3>
+                        <div class="analytics-value" id="analytics-batching-batches">-</div>
+                        <div class="analytics-label">batches</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Est. Savings</h3>
+                        <div class="analytics-value" id="analytics-batching-savings">-</div>
+                        <div class="analytics-label">USD</div>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Avg Batch Size</h3>
+                        <div class="analytics-value" id="analytics-batching-batch-size">-</div>
+                        <div class="analytics-label">requests</div>
+                    </div>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Provider</th>
+                            <th>Requests</th>
+                            <th>Batch Size</th>
+                            <th>Est. Savings</th>
+                            <th>Window</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analytics-batching-table">
+                        <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
             <!-- Detailed Table -->
             <div class="analytics-section">
                 <h3>Detailed Breakdown</h3>

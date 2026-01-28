@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jordanhubbard/agenticorp/internal/analytics"
@@ -234,6 +235,88 @@ func (s *Server) handleGetCostReport(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(costReport)
+}
+
+// handleGetBatchingRecommendations handles GET /api/v1/analytics/batching
+func (s *Server) handleGetBatchingRecommendations(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.analyticsLogger == nil {
+		http.Error(w, "Analytics unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	userID := auth.GetUserIDFromRequest(r)
+	if userID == "" && s.config.Security.EnableAuth {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	filter := &analytics.LogFilter{
+		UserID: userID,
+		Limit:  2000,
+	}
+
+	if providerID := r.URL.Query().Get("provider_id"); providerID != "" {
+		filter.ProviderID = providerID
+	}
+
+	if startTime := r.URL.Query().Get("start_time"); startTime != "" {
+		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
+			filter.StartTime = t
+		}
+	}
+
+	if endTime := r.URL.Query().Get("end_time"); endTime != "" {
+		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
+			filter.EndTime = t
+		}
+	}
+
+	if limitParam := r.URL.Query().Get("limit"); limitParam != "" {
+		if parsed, err := strconv.Atoi(limitParam); err == nil && parsed > 0 {
+			if parsed > 10000 {
+				parsed = 10000
+			}
+			filter.Limit = parsed
+		}
+	}
+
+	role := auth.GetRoleFromRequest(r)
+	if role == "admin" {
+		filter.UserID = ""
+		if queryUserID := r.URL.Query().Get("user_id"); queryUserID != "" {
+			filter.UserID = queryUserID
+		}
+	}
+
+	logs, err := s.analyticsLogger.GetLogs(r.Context(), filter)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	options := analytics.DefaultBatchingOptions()
+	if maxRecommendations := r.URL.Query().Get("max_recommendations"); maxRecommendations != "" {
+		if parsed, err := strconv.Atoi(maxRecommendations); err == nil && parsed > 0 {
+			options.MaxRecommendations = parsed
+		}
+	}
+	if windowMinutes := r.URL.Query().Get("window_minutes"); windowMinutes != "" {
+		if parsed, err := strconv.Atoi(windowMinutes); err == nil && parsed > 0 {
+			options.Window = time.Duration(parsed) * time.Minute
+		}
+	}
+	if autoBatch := r.URL.Query().Get("auto_batch"); autoBatch != "" {
+		options.IncludeAutoBatchPlan = autoBatch == "true" || autoBatch == "1"
+	}
+
+	recommendations := analytics.BuildBatchingRecommendations(logs, options)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(recommendations)
 }
 
 // handleExportStats handles GET /api/v1/analytics/export-stats

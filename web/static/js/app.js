@@ -3498,6 +3498,10 @@ async function loadAnalytics() {
         
         const stats = await response.json();
         renderAnalytics(stats);
+        
+        const batchingParams = new URLSearchParams(params.toString());
+        batchingParams.append('auto_batch', 'true');
+        await loadBatchingRecommendations(batchingParams);
     } catch (error) {
         console.error('Error loading analytics:', error);
         showToast('Failed to load analytics: ' + error.message, 'error');
@@ -3526,6 +3530,87 @@ function renderAnalytics(stats) {
     
     // Render detailed table
     renderAnalyticsTable(stats);
+}
+
+async function loadBatchingRecommendations(params) {
+    const tbody = document.getElementById('analytics-batching-table');
+    try {
+        const query = params ? params.toString() : '';
+        const response = await fetch(`/api/v1/analytics/batching?${query}`, {
+            headers: {
+                'Authorization': `Bearer ${state.token}`
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to load batching recommendations');
+        
+        const recommendations = await response.json();
+        renderBatchingRecommendations(recommendations);
+    } catch (error) {
+        console.error('Error loading batching recommendations:', error);
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Unable to load batching recommendations</td></tr>';
+        }
+        showToast('Failed to load batching recommendations: ' + error.message, 'error');
+    }
+}
+
+function renderBatchingRecommendations(data) {
+    const summary = data?.summary || {};
+    const requests = summary.batchable_requests || 0;
+    const batches = summary.recommended_batches || 0;
+    const savings = summary.estimated_cost_savings_usd || 0;
+    const avgBatchSize = summary.average_batch_size || 0;
+
+    const requestsEl = document.getElementById('analytics-batching-requests');
+    const batchesEl = document.getElementById('analytics-batching-batches');
+    const savingsEl = document.getElementById('analytics-batching-savings');
+    const avgBatchEl = document.getElementById('analytics-batching-batch-size');
+
+    if (requestsEl) requestsEl.textContent = requests.toLocaleString();
+    if (batchesEl) batchesEl.textContent = batches.toLocaleString();
+    if (savingsEl) savingsEl.textContent = '$' + savings.toFixed(4);
+    if (avgBatchEl) avgBatchEl.textContent = avgBatchSize ? avgBatchSize.toFixed(1) : '-';
+
+    const tbody = document.getElementById('analytics-batching-table');
+    if (!tbody) return;
+
+    const recommendations = data?.recommendations || [];
+    if (recommendations.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No batchable requests detected</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = recommendations.slice(0, 10).map((rec) => {
+        const endpoint = `${rec.method || ''} ${rec.path || ''}`.trim();
+        const provider = rec.provider_id || 'unknown';
+        const window = formatBatchingWindow(rec.time_window_start, rec.time_window_end);
+        const savingsValue = rec.estimated_cost_savings_usd || 0;
+        return `
+            <tr>
+                <td>${escapeHtml(endpoint || '-')}
+                    <div class="small" style="color: var(--text-muted);">${escapeHtml(rec.model_name || 'model n/a')}</div>
+                </td>
+                <td>${escapeHtml(provider)}</td>
+                <td>${(rec.request_count || 0).toLocaleString()}</td>
+                <td>${rec.batch_size || '-'}</td>
+                <td>$${savingsValue.toFixed(4)}</td>
+                <td class="small">${escapeHtml(window)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function formatBatchingWindow(start, end) {
+    if (!start || !end) return '-';
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        return '-';
+    }
+    const startTime = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const endTime = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${startTime} - ${endTime}`;
 }
 
 function renderBarChart(elementId, data, prefix = '') {
