@@ -39,6 +39,8 @@ Optional fields:
 - `is_perpetual` (never closes)
 - `is_sticky` (auto-registered on startup)
 - `context` (build/test/lint commands and other agent guidance)
+- `git_auth_method` (e.g., `ssh`)
+- `git_credential_id` (if using managed credentials)
 
 Example:
 
@@ -46,9 +48,10 @@ Example:
 projects:
   - id: agenticorp
     name: AgentiCorp
-    git_repo: https://github.com/jordanhubbard/agenticorp
+    git_repo: git@github.com:jordanhubbard/agenticorp.git
     branch: main
     beads_path: .beads
+    git_auth_method: ssh
     is_perpetual: true
     is_sticky: true
     context:
@@ -57,6 +60,16 @@ projects:
 ```
 
 AgentiCorp loads beads from each project’s `beads_path` and uses them to build the work graph.
+
+### Git Access (SSH Keys)
+
+For SSH-based repos, fetch the per-project public key and add it as a **write-enabled deploy key**:
+
+```bash
+curl http://localhost:8080/api/v1/projects/<project-id>/git-key
+```
+
+Dispatch will pause until git access and the beads path are valid.
 
 ## Personas and Agents
 
@@ -68,8 +81,9 @@ shows agent assignments and bead progress in real time.
 
 ## Beads
 
-Beads are YAML work items stored in `.beads/beads/` for each project. They drive
-the work graph and include metadata such as priority, status, and dependencies.
+Beads are JSONL work items stored in `.beads/issues.jsonl` for each project and
+managed by the `bd` CLI. They drive the work graph and include metadata such as
+priority, status, and dependencies.
 
 Key fields:
 
@@ -115,7 +129,7 @@ latency weighted) with the AgentiCorp persona context.
 
 ## Troubleshooting
 
-- If beads fail to load, run `make lint-yaml` to validate YAML.
+- If beads fail to load, confirm `.beads/issues.jsonl` exists and `bd list` works.
 - If providers are missing, register them in the Providers UI and re-negotiate models.
 - If providers show as disabled, check heartbeat errors and verify the provider endpoint.
-- If no work is dispatched, check the Project Viewer for blocked beads or missing agents.
+- If no work is dispatched, check the Project Viewer for blocked beads, missing agents, or readiness gate failures.

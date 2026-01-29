@@ -12,45 +12,11 @@ Beads are work items that represent tasks, decisions, features, or bugs. The bea
 
 ### Manual Method (when bd CLI is not available)
 
-1. Create a new YAML file in `.beads/beads/` with a unique ID:
-   ```bash
-   # Example: bd-002-add-new-feature.yaml
-   ```
+Beads are stored in `.beads/issues.jsonl` and are intended to be managed by the
+`bd` CLI. If you must work without the CLI, prefer using the API endpoints
+below so the JSONL remains consistent.
 
-2. Use this template:
-   ```yaml
-   id: bd-XXX
-   type: task  # or: decision, epic, bug
-   title: Brief description of work
-   description: |
-     Detailed description of what needs to be done
-   status: open  # open, in_progress, blocked, closed
-   priority: 2  # 0=P0/critical, 1=P1/high, 2=P2/medium, 3=P3/low
-   project_id: agenticorp
-   assigned_to: your-name-or-agent-id
-   blocked_by: []
-   blocks: []
-   parent: null
-   children: []
-   tags: [relevant, tags]
-   created_at: YYYY-MM-DDTHH:MM:SSZ
-   updated_at: YYYY-MM-DDTHH:MM:SSZ
-   context:
-     branch: your-branch-name
-     issue: related-issue-if-any
-   ```
-
-3. Update the bead as work progresses:
-   - Change `status` field
-   - Update `updated_at` timestamp
-   - Add context or notes
-
-4. When work is complete:
-   - Set `status: closed`
-   - Add `closed_at: YYYY-MM-DDTHH:MM:SSZ`
-   - Move file to `.beads/closed/` directory
-
-### Using the bd CLI (when available)
+### Using the bd CLI (recommended)
 
 ```bash
 # Initialize beads in a repository
@@ -63,10 +29,10 @@ bd create "Title of work" -p 2 -d "Description"
 bd list
 
 # Update a bead
-bd update bd-XXX --status in_progress
+bd update ac-XXX --status in_progress
 
 # Close a bead
-bd close bd-XXX
+bd close ac-XXX
 ```
 
 ### Using the AgentiCorp API
@@ -87,7 +53,7 @@ curl -X POST http://localhost:8080/api/v1/beads \
 curl http://localhost:8080/api/v1/beads?project_id=agenticorp
 
 # Update a bead
-curl -X PATCH http://localhost:8080/api/v1/beads/bd-XXX \
+curl -X PATCH http://localhost:8080/api/v1/beads/ac-XXX \
   -H "Content-Type: application/json" \
   -d '{"status": "in_progress"}'
 ```
@@ -135,31 +101,28 @@ curl -X PATCH http://localhost:8080/api/v1/beads/bd-XXX \
 6. Add notes or context
 
 # Completing work
-7. Set status to "closed"
-8. Add closed_at timestamp
-9. Move to .beads/closed/ directory
+7. Close the bead (`bd close ac-XXX`)
+8. Sync the bead store if needed (`bd sync`)
 ```
 
 ## Decision Beads
 
 When work requires a decision:
 
-1. Create a decision bead in `.beads/decisions/`
-2. Include:
-   - Question to be answered
-   - Available options
-   - Your recommendation (if any)
-   - Priority level
-3. Set parent bead status to "blocked"
-4. Wait for decision resolution
-5. Once decided, update parent bead and continue work
+1. Create a decision bead with `bd create`:
+   ```bash
+   bd create "Decision title" --type decision -p 1 -d "Decision context"
+   ```
+2. Set parent bead status to "blocked"
+3. Wait for decision resolution
+4. Once decided, update parent bead and continue work
 
 ## For AI Agents
 
 When you are assigned work:
 
-1. Check `.beads/beads/` for open beads
-2. Claim a bead by setting `assigned_to` to your agent ID
+1. Check `bd list open` for open beads
+2. Claim a bead by setting `assigned_to` to your agent ID (or `bd update --claim`)
 3. Update status to "in_progress"
 4. Perform the work
 5. File decision beads when uncertain (P0 for critical decisions)
