@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/jordanhubbard/agenticorp/internal/actions"
+	"github.com/jordanhubbard/agenticorp/internal/activity"
 	"github.com/jordanhubbard/agenticorp/internal/agent"
 	"github.com/jordanhubbard/agenticorp/internal/beads"
+	"github.com/jordanhubbard/agenticorp/internal/comments"
 	"github.com/jordanhubbard/agenticorp/internal/database"
 	"github.com/jordanhubbard/agenticorp/internal/decision"
 	"github.com/jordanhubbard/agenticorp/internal/dispatch"
@@ -27,6 +29,7 @@ import (
 	"github.com/jordanhubbard/agenticorp/internal/modelcatalog"
 	internalmodels "github.com/jordanhubbard/agenticorp/internal/models"
 	"github.com/jordanhubbard/agenticorp/internal/motivation"
+	"github.com/jordanhubbard/agenticorp/internal/notifications"
 	"github.com/jordanhubbard/agenticorp/internal/observability"
 	"github.com/jordanhubbard/agenticorp/internal/orgchart"
 	"github.com/jordanhubbard/agenticorp/internal/persona"
@@ -52,32 +55,35 @@ type projectReadinessState struct {
 
 // AgentiCorp is the main orchestrator
 type AgentiCorp struct {
-	config             *config.Config
-	agentManager       *agent.WorkerManager
-	actionRouter       *actions.Router
-	projectManager     *project.Manager
-	personaManager     *persona.Manager
-	beadsManager       *beads.Manager
-	decisionManager    *decision.Manager
-	fileLockManager    *FileLockManager
-	orgChartManager    *orgchart.Manager
-	providerRegistry   *provider.Registry
-	database           *database.Database
-	dispatcher         *dispatch.Dispatcher
-	eventBus           *eventbus.EventBus
-	temporalManager    *temporal.Manager
-	modelCatalog       *modelcatalog.Catalog
-	gitopsManager      *gitops.Manager
-	shellExecutor      *executor.ShellExecutor
-	logManager         *logging.Manager
-	motivationRegistry *motivation.Registry
-	motivationEngine   *motivation.Engine
-	idleDetector       *motivation.IdleDetector
-	workflowEngine     *workflow.Engine
-	metrics            *metrics.Metrics
-	readinessMu        sync.Mutex
-	readinessCache     map[string]projectReadinessState
-	readinessFailures  map[string]time.Time
+	config              *config.Config
+	agentManager        *agent.WorkerManager
+	actionRouter        *actions.Router
+	projectManager      *project.Manager
+	personaManager      *persona.Manager
+	beadsManager        *beads.Manager
+	decisionManager     *decision.Manager
+	fileLockManager     *FileLockManager
+	orgChartManager     *orgchart.Manager
+	providerRegistry    *provider.Registry
+	database            *database.Database
+	dispatcher          *dispatch.Dispatcher
+	eventBus            *eventbus.EventBus
+	temporalManager     *temporal.Manager
+	modelCatalog        *modelcatalog.Catalog
+	gitopsManager       *gitops.Manager
+	shellExecutor       *executor.ShellExecutor
+	logManager          *logging.Manager
+	activityManager     *activity.Manager
+	notificationManager *notifications.Manager
+	commentsManager     *comments.Manager
+	motivationRegistry  *motivation.Registry
+	motivationEngine    *motivation.Engine
+	idleDetector        *motivation.IdleDetector
+	workflowEngine      *workflow.Engine
+	metrics             *metrics.Metrics
+	readinessMu         sync.Mutex
+	readinessCache      map[string]projectReadinessState
+	readinessFailures   map[string]time.Time
 }
 
 // New creates a new AgentiCorp instance
@@ -174,27 +180,40 @@ func New(cfg *config.Config) (*AgentiCorp, error) {
 		workflowEngine = workflow.NewEngine(db, beadsMgr)
 	}
 
+	// Initialize activity, notification, and comments managers
+	var activityMgr *activity.Manager
+	var notificationMgr *notifications.Manager
+	var commentsMgr *comments.Manager
+	if db != nil {
+		activityMgr = activity.NewManager(db, eb)
+		notificationMgr = notifications.NewManager(db, activityMgr)
+		commentsMgr = comments.NewManager(db, notificationMgr, eb)
+	}
+
 	arb := &AgentiCorp{
-		config:             cfg,
-		agentManager:       agentMgr,
-		projectManager:     project.NewManager(),
-		personaManager:     persona.NewManager(personaPath),
-		beadsManager:       beads.NewManager(cfg.Beads.BDPath),
-		decisionManager:    decision.NewManager(),
-		fileLockManager:    NewFileLockManager(cfg.Agents.FileLockTimeout),
-		orgChartManager:    orgchart.NewManager(),
-		providerRegistry:   providerRegistry,
-		database:           db,
-		eventBus:           eb,
-		temporalManager:    temporalMgr,
-		modelCatalog:       modelCatalog,
-		gitopsManager:      gitopsMgr,
-		shellExecutor:      shellExec,
-		logManager:         logMgr,
-		motivationRegistry: motivationRegistry,
-		idleDetector:       idleDetector,
-		workflowEngine:     workflowEngine,
-		metrics:            metrics.NewMetrics(),
+		config:              cfg,
+		agentManager:        agentMgr,
+		projectManager:      project.NewManager(),
+		personaManager:      persona.NewManager(personaPath),
+		beadsManager:        beads.NewManager(cfg.Beads.BDPath),
+		decisionManager:     decision.NewManager(),
+		fileLockManager:     NewFileLockManager(cfg.Agents.FileLockTimeout),
+		orgChartManager:     orgchart.NewManager(),
+		providerRegistry:    providerRegistry,
+		database:            db,
+		eventBus:            eb,
+		temporalManager:     temporalMgr,
+		modelCatalog:        modelCatalog,
+		gitopsManager:       gitopsMgr,
+		shellExecutor:       shellExec,
+		logManager:          logMgr,
+		activityManager:     activityMgr,
+		notificationManager: notificationMgr,
+		commentsManager:     commentsMgr,
+		motivationRegistry:  motivationRegistry,
+		idleDetector:        idleDetector,
+		workflowEngine:      workflowEngine,
+		metrics:             metrics.NewMetrics(),
 	}
 
 	actionRouter := &actions.Router{
@@ -850,6 +869,21 @@ func (a *AgentiCorp) GetIdleDetector() *motivation.IdleDetector {
 // GetWorkflowEngine returns the workflow engine
 func (a *AgentiCorp) GetWorkflowEngine() *workflow.Engine {
 	return a.workflowEngine
+}
+
+// GetActivityManager returns the activity manager
+func (a *AgentiCorp) GetActivityManager() *activity.Manager {
+	return a.activityManager
+}
+
+// GetNotificationManager returns the notification manager
+func (a *AgentiCorp) GetNotificationManager() *notifications.Manager {
+	return a.notificationManager
+}
+
+// GetCommentsManager returns the comments manager
+func (a *AgentiCorp) GetCommentsManager() *comments.Manager {
+	return a.commentsManager
 }
 
 // AdvanceWorkflowWithCondition advances a bead's workflow with a specific condition

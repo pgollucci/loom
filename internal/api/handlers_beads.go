@@ -102,6 +102,12 @@ func (s *Server) handleBead(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(path, "/")
 	id := parts[0]
 
+	// Handle /comments endpoint
+	if len(parts) > 1 && parts[1] == "comments" {
+		s.handleBeadComments(w, r)
+		return
+	}
+
 	// Handle /claim endpoint
 	if len(parts) > 1 && parts[1] == "claim" {
 		if r.Method != http.MethodPost {

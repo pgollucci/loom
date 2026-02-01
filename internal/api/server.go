@@ -179,6 +179,12 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/beads", s.handleBeads)
 	mux.HandleFunc("/api/v1/beads/", s.handleBead)
 
+	// Comments (must be registered before other /beads/ routes to avoid conflicts)
+	// Note: This is already handled by handleBead which routes to specific sub-paths
+	// but we also need a dedicated handler for comments
+	// Actually, we'll use a pattern that matches /beads/{id}/comments
+	mux.HandleFunc("/api/v1/comments/", s.handleComment)
+
 	// Decisions
 	mux.HandleFunc("/api/v1/decisions", s.handleDecisions)
 	mux.HandleFunc("/api/v1/decisions/", s.handleDecision)
@@ -260,6 +266,17 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/events/stats", s.handleGetEventStats)
 	mux.HandleFunc("/api/v1/events", s.handleGetEvents) // GET for history
 	// POST /api/v1/events for publishing is available but should be restricted
+
+	// Activity feed
+	mux.HandleFunc("/api/v1/activity-feed", s.handleGetActivityFeed)
+	mux.HandleFunc("/api/v1/activity-feed/stream", s.handleActivityFeedStream)
+
+	// Notifications
+	mux.HandleFunc("/api/v1/notifications", s.handleGetNotifications)
+	mux.HandleFunc("/api/v1/notifications/stream", s.handleNotificationStream)
+	mux.HandleFunc("/api/v1/notifications/", s.handleNotificationActions)
+	mux.HandleFunc("/api/v1/notifications/mark-all-read", s.handleMarkAllRead)
+	mux.HandleFunc("/api/v1/notifications/preferences", s.handleNotificationPreferences)
 
 	// Motivations
 	mux.HandleFunc("/api/v1/motivations", s.handleMotivations)
@@ -454,6 +471,24 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 }
 
 // Helper functions
+
+// getUserFromContext extracts the user from request headers (set by auth middleware)
+func (s *Server) getUserFromContext(r *http.Request) *auth.User {
+	userID := r.Header.Get("X-User-ID")
+	if userID == "" {
+		return nil
+	}
+
+	username := r.Header.Get("X-Username")
+	role := r.Header.Get("X-Role")
+
+	return &auth.User{
+		ID:       userID,
+		Username: username,
+		Role:     role,
+		IsActive: true,
+	}
+}
 
 // respondJSON writes a JSON response
 func (s *Server) respondJSON(w http.ResponseWriter, status int, data interface{}) {
