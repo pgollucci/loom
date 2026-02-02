@@ -3,12 +3,26 @@ package analytics
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/smtp"
+	"os"
+	"strconv"
 	"time"
 )
+
+// SMTPConfig defines SMTP server configuration for email notifications
+type SMTPConfig struct {
+	Host     string // SMTP server hostname (e.g., smtp.gmail.com)
+	Port     int    // SMTP server port (e.g., 587 for TLS)
+	Username string // SMTP username
+	Password string // SMTP password
+	From     string // From email address
+	UseTLS   bool   // Whether to use TLS (default: true)
+}
 
 // AlertConfig defines alerting thresholds and settings
 type AlertConfig struct {
@@ -37,15 +51,47 @@ type Alert struct {
 
 // AlertChecker monitors spending and triggers alerts
 type AlertChecker struct {
-	storage Storage
-	config  *AlertConfig
+	storage    Storage
+	config     *AlertConfig
+	smtpConfig *SMTPConfig
 }
 
 // NewAlertChecker creates a new alert checker
 func NewAlertChecker(storage Storage, config *AlertConfig) *AlertChecker {
 	return &AlertChecker{
-		storage: storage,
-		config:  config,
+		storage:    storage,
+		config:     config,
+		smtpConfig: loadSMTPConfigFromEnv(),
+	}
+}
+
+// loadSMTPConfigFromEnv loads SMTP configuration from environment variables
+func loadSMTPConfigFromEnv() *SMTPConfig {
+	host := os.Getenv("SMTP_HOST")
+	if host == "" {
+		return nil // SMTP not configured
+	}
+
+	portStr := os.Getenv("SMTP_PORT")
+	port := 587 // Default TLS port
+	if portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			port = p
+		}
+	}
+
+	useTLS := true
+	if tlsStr := os.Getenv("SMTP_USE_TLS"); tlsStr == "false" || tlsStr == "0" {
+		useTLS = false
+	}
+
+	return &SMTPConfig{
+		Host:     host,
+		Port:     port,
+		Username: os.Getenv("SMTP_USERNAME"),
+		Password: os.Getenv("SMTP_PASSWORD"),
+		From:     os.Getenv("SMTP_FROM"),
+		UseTLS:   useTLS,
 	}
 }
 
@@ -193,10 +239,17 @@ func (ac *AlertChecker) notify(alert *Alert) {
 	// Log the alert
 	log.Printf("[ALERT] %s: %s", alert.Severity, alert.Message)
 
-	// TODO: Implement email notifications if enabled
+	// Send email notifications if enabled
 	if ac.config.EnableEmailAlerts && ac.config.EmailAddress != "" {
-		// Send email (requires email service integration)
-		log.Printf("[ALERT] Email notification to %s: %s", ac.config.EmailAddress, alert.Message)
+		if ac.smtpConfig == nil {
+			log.Printf("[ALERT] Email notifications enabled but SMTP not configured (set SMTP_HOST env var)")
+		} else {
+			if err := ac.sendEmail(alert); err != nil {
+				log.Printf("[ALERT] Failed to send email to %s: %v", ac.config.EmailAddress, err)
+			} else {
+				log.Printf("[ALERT] Email notification sent to %s: %s", ac.config.EmailAddress, alert.Message)
+			}
+		}
 	}
 
 	// Send webhook notifications if enabled
@@ -256,6 +309,183 @@ func (ac *AlertChecker) sendWebhook(alert *Alert) error {
 	}
 
 	return nil
+}
+
+// sendEmail sends an alert via email using SMTP
+func (ac *AlertChecker) sendEmail(alert *Alert) error {
+	if ac.smtpConfig == nil {
+		return fmt.Errorf("SMTP not configured")
+	}
+
+	// Determine sender email
+	from := ac.smtpConfig.From
+	if from == "" {
+		from = ac.smtpConfig.Username // Fallback to username if From not set
+	}
+
+	// Build email message
+	subject := fmt.Sprintf("[AgentiCorp Alert] %s: %s", alert.Severity, alert.Type)
+	body := buildEmailBody(alert)
+
+	// Construct email headers and body
+	message := []byte(fmt.Sprintf(
+		"From: %s\r\n"+
+			"To: %s\r\n"+
+			"Subject: %s\r\n"+
+			"MIME-Version: 1.0\r\n"+
+			"Content-Type: text/html; charset=UTF-8\r\n"+
+			"\r\n"+
+			"%s",
+		from,
+		ac.config.EmailAddress,
+		subject,
+		body,
+	))
+
+	// Set up authentication
+	auth := smtp.PlainAuth("", ac.smtpConfig.Username, ac.smtpConfig.Password, ac.smtpConfig.Host)
+
+	// Send email
+	addr := fmt.Sprintf("%s:%d", ac.smtpConfig.Host, ac.smtpConfig.Port)
+
+	if ac.smtpConfig.UseTLS {
+		// Use TLS (recommended for most SMTP servers)
+		return sendEmailTLS(addr, auth, from, []string{ac.config.EmailAddress}, message, ac.smtpConfig.Host)
+	}
+
+	// Send without TLS (not recommended for production)
+	return smtp.SendMail(addr, auth, from, []string{ac.config.EmailAddress}, message)
+}
+
+// sendEmailTLS sends email using explicit TLS
+func sendEmailTLS(addr string, auth smtp.Auth, from string, to []string, msg []byte, host string) error {
+	// Create TLS connection
+	tlsConfig := &tls.Config{
+		ServerName: host,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create TLS connection: %w", err)
+	}
+	defer conn.Close()
+
+	// Create SMTP client
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return fmt.Errorf("failed to create SMTP client: %w", err)
+	}
+	defer client.Quit()
+
+	// Authenticate
+	if auth != nil {
+		if err = client.Auth(auth); err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
+	}
+
+	// Set sender and recipients
+	if err = client.Mail(from); err != nil {
+		return fmt.Errorf("failed to set sender: %w", err)
+	}
+
+	for _, recipient := range to {
+		if err = client.Rcpt(recipient); err != nil {
+			return fmt.Errorf("failed to set recipient: %w", err)
+		}
+	}
+
+	// Send email data
+	writer, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("failed to get data writer: %w", err)
+	}
+
+	if _, err = writer.Write(msg); err != nil {
+		return fmt.Errorf("failed to write message: %w", err)
+	}
+
+	if err = writer.Close(); err != nil {
+		return fmt.Errorf("failed to close writer: %w", err)
+	}
+
+	return nil
+}
+
+// buildEmailBody creates an HTML email body for the alert
+func buildEmailBody(alert *Alert) string {
+	severityColor := "#FFA500" // Orange for warning
+	if alert.Severity == "critical" {
+		severityColor = "#DC3545" // Red
+	} else if alert.Severity == "info" {
+		severityColor = "#17A2B8" // Blue
+	}
+
+	return fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: %s; color: white; padding: 20px; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 5px 5px; }
+        .detail { margin: 10px 0; }
+        .label { font-weight: bold; color: #555; }
+        .value { color: #333; }
+        .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #777; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin: 0;">AgentiCorp Alert</h1>
+            <p style="margin: 5px 0 0 0;">%s Alert</p>
+        </div>
+        <div class="content">
+            <div class="detail">
+                <span class="label">Type:</span>
+                <span class="value">%s</span>
+            </div>
+            <div class="detail">
+                <span class="label">Message:</span>
+                <span class="value">%s</span>
+            </div>
+            <div class="detail">
+                <span class="label">Current Cost:</span>
+                <span class="value">$%.2f USD</span>
+            </div>
+            <div class="detail">
+                <span class="label">Threshold:</span>
+                <span class="value">$%.2f USD</span>
+            </div>
+            <div class="detail">
+                <span class="label">Triggered At:</span>
+                <span class="value">%s</span>
+            </div>
+            <div class="detail">
+                <span class="label">Alert ID:</span>
+                <span class="value">%s</span>
+            </div>
+        </div>
+        <div class="footer">
+            <p>This is an automated alert from AgentiCorp. Please do not reply to this email.</p>
+            <p>To manage your alert settings, please log in to your AgentiCorp dashboard.</p>
+        </div>
+    </div>
+</body>
+</html>
+`,
+		severityColor,
+		alert.Severity,
+		alert.Type,
+		alert.Message,
+		alert.CurrentCost,
+		alert.Threshold,
+		alert.TriggeredAt.Format("2006-01-02 15:04:05 MST"),
+		alert.ID,
+	)
 }
 
 // DefaultAlertConfig provides sensible defaults

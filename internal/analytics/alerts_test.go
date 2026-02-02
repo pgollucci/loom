@@ -203,3 +203,139 @@ func TestNoAlertsWhenWithinBudget(t *testing.T) {
 		t.Errorf("Expected no alerts, got %d", len(alerts))
 	}
 }
+
+func TestSMTPConfigLoading(t *testing.T) {
+	// Test with no SMTP configuration
+	config := loadSMTPConfigFromEnv()
+	if config != nil {
+		t.Error("Expected nil config when SMTP_HOST not set")
+	}
+
+	// Test with SMTP configuration
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_USERNAME", "test@example.com")
+	t.Setenv("SMTP_PASSWORD", "password123")
+	t.Setenv("SMTP_FROM", "noreply@agenticorp.com")
+	t.Setenv("SMTP_USE_TLS", "true")
+
+	config = loadSMTPConfigFromEnv()
+	if config == nil {
+		t.Fatal("Expected config to be loaded")
+	}
+
+	if config.Host != "smtp.example.com" {
+		t.Errorf("Expected host smtp.example.com, got %s", config.Host)
+	}
+	if config.Port != 587 {
+		t.Errorf("Expected port 587, got %d", config.Port)
+	}
+	if config.Username != "test@example.com" {
+		t.Errorf("Expected username test@example.com, got %s", config.Username)
+	}
+	if !config.UseTLS {
+		t.Error("Expected UseTLS to be true")
+	}
+}
+
+func TestEmailBodyGeneration(t *testing.T) {
+	alert := &Alert{
+		ID:          "alert-test-123",
+		UserID:      "user-test",
+		Type:        "budget_exceeded",
+		Severity:    "warning",
+		Message:     "Daily budget exceeded: $150.00 / $100.00 (150%)",
+		CurrentCost: 150.0,
+		Threshold:   100.0,
+		TriggeredAt: time.Now(),
+	}
+
+	body := buildEmailBody(alert)
+
+	// Check that key elements are present in the HTML
+	if !containsString(body, "AgentiCorp Alert") {
+		t.Error("Email body missing title")
+	}
+	if !containsString(body, "warning") {
+		t.Error("Email body missing severity")
+	}
+	if !containsString(body, "budget_exceeded") {
+		t.Error("Email body missing alert type")
+	}
+	if !containsString(body, "$150.00") {
+		t.Error("Email body missing current cost")
+	}
+	if !containsString(body, "$100.00") {
+		t.Error("Email body missing threshold")
+	}
+	if !containsString(body, "alert-test-123") {
+		t.Error("Email body missing alert ID")
+	}
+
+	// Check HTML structure
+	if !containsString(body, "<!DOCTYPE html>") {
+		t.Error("Email body missing HTML doctype")
+	}
+	if !containsString(body, "</html>") {
+		t.Error("Email body missing closing HTML tag")
+	}
+}
+
+func TestEmailNotificationDisabled(t *testing.T) {
+	storage := NewInMemoryStorage()
+	ctx := context.Background()
+
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	// Add logs that exceed budget
+	for i := 0; i < 3; i++ {
+		ts := now.Add(-time.Duration(i+1) * time.Minute)
+		if ts.Before(startOfDay) {
+			ts = startOfDay.Add(time.Duration(i) * time.Minute)
+		}
+		storage.SaveLog(ctx, &RequestLog{
+			ID:        fmt.Sprintf("log-%d", i),
+			Timestamp: ts,
+			UserID:    "user-test",
+			CostUSD:   50.0, // Total: $150
+		})
+	}
+
+	config := &AlertConfig{
+		UserID:            "user-test",
+		DailyBudgetUSD:    100.0,
+		EnableEmailAlerts: false, // Email alerts disabled
+		EmailAddress:      "test@example.com",
+	}
+
+	checker := NewAlertChecker(storage, config)
+	alerts, err := checker.CheckAlerts(ctx)
+
+	if err != nil {
+		t.Fatalf("CheckAlerts failed: %v", err)
+	}
+
+	// Should still detect alert, but not send email (test passes if no crash)
+	if len(alerts) == 0 {
+		t.Fatal("Expected budget alert to be detected")
+	}
+}
+
+// Helper function to check if string contains substring
+func containsString(str, substr string) bool {
+	return len(str) > 0 && len(substr) > 0 &&
+		(str == substr || len(str) >= len(substr) &&
+		(str[:len(substr)] == substr ||
+		 str[len(str)-len(substr):] == substr ||
+		 findInString(str, substr)))
+}
+
+func findInString(str, substr string) bool {
+	for i := 0; i <= len(str)-len(substr); i++ {
+		if str[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
