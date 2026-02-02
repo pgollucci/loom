@@ -13,7 +13,7 @@ server:
 
 database:
   type: sqlite
-  path: /app/data/agenticorp.db  # Persisted volume mount
+  path: ./agenticorp.db  # Local development database
 
 beads:
   bd_path: bd  # Path to bd executable
@@ -31,6 +31,9 @@ agents:
 
 dispatch:
   max_hops: 5
+
+git:
+  project_key_dir: ./data/projects
 
 security:
   enable_auth: false  # Disabled for development - enable for production

@@ -886,6 +886,11 @@ func (a *AgentiCorp) GetCommentsManager() *comments.Manager {
 	return a.commentsManager
 }
 
+// GetLogManager returns the log manager
+func (a *AgentiCorp) GetLogManager() *logging.Manager {
+	return a.logManager
+}
+
 // AdvanceWorkflowWithCondition advances a bead's workflow with a specific condition
 func (a *AgentiCorp) AdvanceWorkflowWithCondition(beadID, agentID string, condition string, resultData map[string]string) error {
 	if a.workflowEngine == nil {
