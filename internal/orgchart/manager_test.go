@@ -78,7 +78,9 @@ func TestCreateForProjectIdempotent(t *testing.T) {
 
 func TestAssignAgent(t *testing.T) {
 	m := NewManager()
-	m.CreateForProject("proj-123", "Test")
+	if _, err := m.CreateForProject("proj-123", "Test"); err != nil {
+		t.Fatalf("CreateForProject failed: %v", err)
+	}
 
 	err := m.AssignAgent("proj-123", "pos-ceo", "agent-1")
 	if err != nil {
@@ -94,7 +96,9 @@ func TestAssignAgent(t *testing.T) {
 
 func TestAssignAgentMaxCapacity(t *testing.T) {
 	m := NewManager()
-	m.CreateForProject("proj-123", "Test")
+	if _, err := m.CreateForProject("proj-123", "Test"); err != nil {
+		t.Fatalf("CreateForProject failed: %v", err)
+	}
 
 	// CEO position has MaxInstances=1
 	_ = m.AssignAgent("proj-123", "pos-ceo", "agent-1")
@@ -106,7 +110,9 @@ func TestAssignAgentMaxCapacity(t *testing.T) {
 
 func TestAssignAgentToRole(t *testing.T) {
 	m := NewManager()
-	m.CreateForProject("proj-123", "Test")
+	if _, err := m.CreateForProject("proj-123", "Test"); err != nil {
+		t.Fatalf("CreateForProject failed: %v", err)
+	}
 
 	err := m.AssignAgentToRole("proj-123", "product-manager", "agent-1")
 	if err != nil {
@@ -122,8 +128,12 @@ func TestAssignAgentToRole(t *testing.T) {
 
 func TestUnassignAgent(t *testing.T) {
 	m := NewManager()
-	m.CreateForProject("proj-123", "Test")
-	m.AssignAgent("proj-123", "pos-ceo", "agent-1")
+	if _, err := m.CreateForProject("proj-123", "Test"); err != nil {
+		t.Fatalf("CreateForProject failed: %v", err)
+	}
+	if err := m.AssignAgent("proj-123", "pos-ceo", "agent-1"); err != nil {
+		t.Fatalf("AssignAgent failed: %v", err)
+	}
 
 	err := m.UnassignAgent("proj-123", "pos-ceo", "agent-1")
 	if err != nil {
@@ -139,11 +149,17 @@ func TestUnassignAgent(t *testing.T) {
 
 func TestRemoveAgentFromAll(t *testing.T) {
 	m := NewManager()
-	m.CreateForProject("proj-123", "Test")
+	if _, err := m.CreateForProject("proj-123", "Test"); err != nil {
+		t.Fatalf("CreateForProject failed: %v", err)
+	}
 
 	// Assign agent to multiple positions (PM has unlimited capacity)
-	m.AssignAgentToRole("proj-123", "product-manager", "agent-1")
-	m.AssignAgentToRole("proj-123", "qa-engineer", "agent-1")
+	if err := m.AssignAgentToRole("proj-123", "product-manager", "agent-1"); err != nil {
+		t.Fatalf("AssignAgentToRole failed: %v", err)
+	}
+	if err := m.AssignAgentToRole("proj-123", "qa-engineer", "agent-1"); err != nil {
+		t.Fatalf("AssignAgentToRole failed: %v", err)
+	}
 
 	err := m.RemoveAgentFromAll("proj-123", "agent-1")
 	if err != nil {
@@ -160,9 +176,15 @@ func TestRemoveAgentFromAll(t *testing.T) {
 
 func TestGetPositionsForAgent(t *testing.T) {
 	m := NewManager()
-	m.CreateForProject("proj-123", "Test")
-	m.AssignAgentToRole("proj-123", "product-manager", "agent-1")
-	m.AssignAgentToRole("proj-123", "qa-engineer", "agent-1")
+	if _, err := m.CreateForProject("proj-123", "Test"); err != nil {
+		t.Fatalf("CreateForProject failed: %v", err)
+	}
+	if err := m.AssignAgentToRole("proj-123", "product-manager", "agent-1"); err != nil {
+		t.Fatalf("AssignAgentToRole failed: %v", err)
+	}
+	if err := m.AssignAgentToRole("proj-123", "qa-engineer", "agent-1"); err != nil {
+		t.Fatalf("AssignAgentToRole failed: %v", err)
+	}
 
 	positions := m.GetPositionsForAgent("proj-123", "agent-1")
 	if len(positions) != 2 {
@@ -251,7 +273,9 @@ func TestOrgChartAllRequiredFilled(t *testing.T) {
 
 	// Fill all required positions
 	for _, pos := range chart.GetRequiredPositions() {
-		m.AssignAgent("proj-123", pos.ID, "agent-"+pos.RoleName)
+		if err := m.AssignAgent("proj-123", pos.ID, "agent-"+pos.RoleName); err != nil {
+			t.Fatalf("AssignAgent failed: %v", err)
+		}
 	}
 
 	chart, _ = m.GetByProject("proj-123")

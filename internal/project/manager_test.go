@@ -148,7 +148,9 @@ func TestCanClose(t *testing.T) {
 	}
 
 	// Mark as perpetual
-	manager.SetPerpetual(project.ID, true)
+	if err := manager.SetPerpetual(project.ID, true); err != nil {
+		t.Fatalf("SetPerpetual failed: %v", err)
+	}
 
 	// Cannot close perpetual project even without open work
 	if manager.CanClose(project.ID, false) {
@@ -193,7 +195,9 @@ func TestCloseAlreadyClosed(t *testing.T) {
 	)
 
 	// Close the project
-	manager.CloseProject(project.ID, "agent-1", "First close")
+	if err := manager.CloseProject(project.ID, "agent-1", "First close"); err != nil {
+		t.Fatalf("CloseProject failed: %v", err)
+	}
 
 	// Try to close again (should fail)
 	err := manager.CloseProject(project.ID, "agent-1", "Second close")
