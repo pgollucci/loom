@@ -32,7 +32,7 @@ func (s *Server) Start() error {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","message":"AgentiCorp worker system is ready"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","message":"AgentiCorp worker system is ready"}`))
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +52,7 @@ func (s *Server) Start() error {
 		</body>
 		</html>
 		`
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	})
 
 	return http.ListenAndServe(addr, nil)

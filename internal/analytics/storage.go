@@ -174,7 +174,10 @@ func (s *DatabaseStorage) GetLogs(ctx context.Context, filter *LogFilter) ([]*Re
 		}
 
 		if metadataJSON != "" {
-			json.Unmarshal([]byte(metadataJSON), &log.Metadata)
+			if err := json.Unmarshal([]byte(metadataJSON), &log.Metadata); err != nil {
+				// Log unmarshal error but continue
+				log.Metadata = nil
+			}
 		}
 
 		logs = append(logs, log)

@@ -209,7 +209,10 @@ func (e *ShellExecutor) GetCommandLogs(filters map[string]interface{}, limit int
 		}
 
 		if contextJSON.Valid {
-			json.Unmarshal([]byte(contextJSON.String), &cmdLog.Context)
+			if err := json.Unmarshal([]byte(contextJSON.String), &cmdLog.Context); err != nil {
+				// Log unmarshal error but continue
+				cmdLog.Context = nil
+			}
 		}
 
 		logs = append(logs, &cmdLog)

@@ -332,7 +332,9 @@ func AddToLocalRegistry(registryPath string, entry *RegistryEntry) error {
 	// Read existing index
 	var index RegistryIndex
 	if data, err := os.ReadFile(indexPath); err == nil {
-		json.Unmarshal(data, &index)
+		if err := json.Unmarshal(data, &index); err != nil {
+			return fmt.Errorf("failed to parse registry index: %w", err)
+		}
 	} else {
 		index = RegistryIndex{Version: "1.0", Plugins: []*RegistryEntry{}}
 	}

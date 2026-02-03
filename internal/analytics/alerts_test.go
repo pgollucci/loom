@@ -22,12 +22,14 @@ func TestDailyBudgetAlert(t *testing.T) {
 		if ts.Before(startOfDay) {
 			ts = startOfDay.Add(time.Duration(i) * time.Minute)
 		}
-		storage.SaveLog(ctx, &RequestLog{
+		if err := storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-%d", i),
 			Timestamp: ts,
 			UserID:    "user-test",
 			CostUSD:   25.0, // Total: $125, exceeds $100 budget
-		})
+		}); err != nil {
+			t.Fatalf("Failed to save log: %v", err)
+		}
 	}
 
 	config := &AlertConfig{
@@ -66,12 +68,14 @@ func TestMonthlyBudgetAlert(t *testing.T) {
 	// Add logs in the past few hours (all within current month and before "now")
 	// to ensure they're included in the query
 	for i := 0; i < 10; i++ {
-		storage.SaveLog(ctx, &RequestLog{
+		if err := storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-%d", i),
 			Timestamp: now.Add(-time.Duration(i+1) * time.Hour), // Go backwards from now
 			UserID:    "user-test",
 			CostUSD:   250.0, // Total: $2500, exceeds $2000 budget
-		})
+		}); err != nil {
+			t.Fatalf("Failed to save log: %v", err)
+		}
 	}
 
 	config := &AlertConfig{
@@ -124,12 +128,14 @@ func TestAnomalyDetection(t *testing.T) {
 	// Add historical logs (last 7 days) with normal spending
 	for i := 1; i <= 7; i++ {
 		day := startOfToday.Add(-time.Duration(i*24) * time.Hour)
-		storage.SaveLog(ctx, &RequestLog{
+		if err := storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-hist-%d", i),
 			Timestamp: day,
 			UserID:    "user-test",
 			CostUSD:   10.0, // $10/day average
-		})
+		}); err != nil {
+			t.Fatalf("Failed to save log: %v", err)
+		}
 	}
 
 	// Add today's logs with unusual spending (use timestamps before now)
@@ -139,12 +145,14 @@ func TestAnomalyDetection(t *testing.T) {
 		if ts.Before(startOfToday) {
 			ts = startOfToday.Add(time.Duration(i) * time.Minute)
 		}
-		storage.SaveLog(ctx, &RequestLog{
+		if err := storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-today-%d", i),
 			Timestamp: ts,
 			UserID:    "user-test",
 			CostUSD:   5.0, // Total: $25 today vs $10 average (2.5x)
-		})
+		}); err != nil {
+			t.Fatalf("Failed to save log: %v", err)
+		}
 	}
 
 	config := &AlertConfig{
@@ -180,12 +188,14 @@ func TestNoAlertsWhenWithinBudget(t *testing.T) {
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	// Add logs within budget
-	storage.SaveLog(ctx, &RequestLog{
+	if err := storage.SaveLog(ctx, &RequestLog{
 		ID:        "log-1",
 		Timestamp: startOfDay,
 		UserID:    "user-test",
 		CostUSD:   50.0, // Under $100 budget
-	})
+	}); err != nil {
+		t.Fatalf("Failed to save log: %v", err)
+	}
 
 	config := &AlertConfig{
 		UserID:         "user-test",
@@ -294,7 +304,7 @@ func TestEmailNotificationDisabled(t *testing.T) {
 		if ts.Before(startOfDay) {
 			ts = startOfDay.Add(time.Duration(i) * time.Minute)
 		}
-		storage.SaveLog(ctx, &RequestLog{
+		_ = storage.SaveLog(ctx, &RequestLog{
 			ID:        fmt.Sprintf("log-%d", i),
 			Timestamp: ts,
 			UserID:    "user-test",
