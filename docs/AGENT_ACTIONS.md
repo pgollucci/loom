@@ -363,6 +363,123 @@ Run eslint with custom timeout:
 }
 ```
 
+#### build_project
+
+Execute project builds to verify compilation and catch build errors.
+
+```json
+{
+  "type": "build_project",
+  "build_target": "myapp",
+  "build_command": "go build -o myapp ./cmd/app",
+  "framework": "go",
+  "timeout_seconds": 300
+}
+```
+
+**Fields:**
+- `build_target` (optional): Build output target (e.g., binary name)
+- `build_command` (optional): Custom build command (overrides framework default)
+- `framework` (optional): Build framework ("go", "npm", "make", "cargo", "maven", "gradle")
+- `timeout_seconds` (optional): Maximum execution time in seconds
+
+**Returns:**
+```json
+{
+  "framework": "go",
+  "success": false,
+  "exit_code": 1,
+  "duration": "3.456s",
+  "error_count": 2,
+  "errors": [
+    {
+      "file": "internal/foo.go",
+      "line": 10,
+      "column": 2,
+      "message": "undefined: someFunc",
+      "type": "error"
+    }
+  ],
+  "warnings": [],
+  "raw_output": "full build output...",
+  "timed_out": false,
+  "error": ""
+}
+```
+
+**Framework Auto-Detection:**
+
+If `framework` is not specified, the system auto-detects based on:
+
+- **go**: Presence of `go.mod` or `*.go` files
+- **npm**: `package.json` file
+- **make**: `Makefile` or `makefile`
+- **cargo**: `Cargo.toml` file (Rust)
+- **maven**: `pom.xml` file (Java)
+- **gradle**: `build.gradle` or `build.gradle.kts` files (Java)
+
+**Examples:**
+
+Run build with auto-detection:
+```json
+{
+  "type": "build_project"
+}
+```
+
+Build Go project with custom target:
+```json
+{
+  "type": "build_project",
+  "build_target": "myapp",
+  "framework": "go"
+}
+```
+
+Build npm project:
+```json
+{
+  "type": "build_project",
+  "framework": "npm"
+}
+```
+
+Build with custom command:
+```json
+{
+  "type": "build_project",
+  "build_command": "go build -v -tags production ./...",
+  "timeout_seconds": 600
+}
+```
+
+**Build-Fix-Rebuild Pattern:**
+
+```json
+{
+  "actions": [
+    {"type": "build_project"},
+    {"type": "read_file", "path": "internal/parser.go"},
+    {"type": "edit_code", "path": "internal/parser.go", "patch": "..."},
+    {"type": "build_project"}
+  ],
+  "notes": "Fixed compilation error in parser"
+}
+```
+
+**Complete Quality Check Pattern:**
+
+```json
+{
+  "actions": [
+    {"type": "build_project"},
+    {"type": "run_tests"},
+    {"type": "run_linter"}
+  ],
+  "notes": "Comprehensive verification: build, test, and lint"
+}
+```
+
 ### Git Operations
 
 #### git_status

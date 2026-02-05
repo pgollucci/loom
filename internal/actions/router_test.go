@@ -455,3 +455,163 @@ func TestRouter_ExecuteAction_RunLinter_NoLinter(t *testing.T) {
 		t.Errorf("Expected error message about linter, got: %s", result.Message)
 	}
 }
+
+// mockBuildRunner implements the BuildRunner interface for testing
+type mockBuildRunner struct {
+	runFunc func(ctx context.Context, projectPath, buildTarget, buildCommand, framework string, timeoutSeconds int) (map[string]interface{}, error)
+}
+
+func (m *mockBuildRunner) Run(ctx context.Context, projectPath, buildTarget, buildCommand, framework string, timeoutSeconds int) (map[string]interface{}, error) {
+	if m.runFunc != nil {
+		return m.runFunc(ctx, projectPath, buildTarget, buildCommand, framework, timeoutSeconds)
+	}
+	// Default successful build result
+	return map[string]interface{}{
+		"framework":   "go",
+		"success":     true,
+		"exit_code":   0,
+		"errors":      []interface{}{},
+		"warnings":    []interface{}{},
+		"error_count": 0,
+	}, nil
+}
+
+func TestRouter_ExecuteAction_BuildProject_Success(t *testing.T) {
+	mock := &mockBuildRunner{
+		runFunc: func(ctx context.Context, projectPath, buildTarget, buildCommand, framework string, timeoutSeconds int) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"framework":   "go",
+				"success":     true,
+				"exit_code":   0,
+				"errors":      []interface{}{},
+				"warnings":    []interface{}{},
+				"error_count": 0,
+			}, nil
+		},
+	}
+
+	router := &Router{
+		Builder: mock,
+	}
+
+	action := Action{
+		Type:           ActionBuildProject,
+		BuildTarget:    "myapp",
+		Framework:      "go",
+		TimeoutSeconds: 300,
+	}
+
+	actx := ActionContext{
+		AgentID:   "agent-123",
+		BeadID:    "bead-456",
+		ProjectID: "proj-789",
+	}
+
+	result := router.executeAction(context.Background(), action, actx)
+
+	if result.ActionType != ActionBuildProject {
+		t.Errorf("Expected action type %s, got %s", ActionBuildProject, result.ActionType)
+	}
+
+	if result.Status != "executed" {
+		t.Errorf("Expected status 'executed', got %s", result.Status)
+	}
+
+	if result.Message != "build executed" {
+		t.Errorf("Expected message 'build executed', got %s", result.Message)
+	}
+
+	if result.Metadata == nil {
+		t.Fatal("Expected metadata to be present")
+	}
+
+	// Check metadata fields
+	if success, ok := result.Metadata["success"].(bool); !ok || !success {
+		t.Error("Expected success to be true")
+	}
+}
+
+func TestRouter_ExecuteAction_BuildProject_WithErrors(t *testing.T) {
+	mock := &mockBuildRunner{
+		runFunc: func(ctx context.Context, projectPath, buildTarget, buildCommand, framework string, timeoutSeconds int) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"framework": "go",
+				"success":   false,
+				"exit_code": 1,
+				"errors": []map[string]interface{}{
+					{
+						"file":    "internal/foo.go",
+						"line":    10,
+						"column":  2,
+						"message": "undefined: someFunc",
+						"type":    "error",
+					},
+					{
+						"file":    "internal/bar.go",
+						"line":    25,
+						"column":  5,
+						"message": "syntax error",
+						"type":    "error",
+					},
+				},
+				"warnings":    []interface{}{},
+				"error_count": 2,
+			}, nil
+		},
+	}
+
+	router := &Router{
+		Builder: mock,
+	}
+
+	action := Action{
+		Type: ActionBuildProject,
+	}
+
+	actx := ActionContext{
+		AgentID:   "agent-123",
+		BeadID:    "bead-456",
+		ProjectID: "proj-789",
+	}
+
+	result := router.executeAction(context.Background(), action, actx)
+
+	if result.Status != "executed" {
+		t.Errorf("Expected status 'executed', got %s", result.Status)
+	}
+
+	// Check that error information is present
+	if success, ok := result.Metadata["success"].(bool); !ok || success {
+		t.Error("Expected success to be false")
+	}
+
+	if count, ok := result.Metadata["error_count"].(int); !ok || count != 2 {
+		t.Errorf("Expected error_count 2, got %v", count)
+	}
+}
+
+func TestRouter_ExecuteAction_BuildProject_NoBuilder(t *testing.T) {
+	router := &Router{
+		Builder: nil, // No builder configured
+	}
+
+	action := Action{
+		Type: ActionBuildProject,
+	}
+
+	actx := ActionContext{
+		AgentID:   "agent-123",
+		BeadID:    "bead-456",
+		ProjectID: "proj-789",
+	}
+
+	result := router.executeAction(context.Background(), action, actx)
+
+	if result.Status != "error" {
+		t.Errorf("Expected status 'error', got %s", result.Status)
+	}
+
+	if result.Message != "builder not configured" {
+		t.Errorf("Expected error message about builder, got: %s", result.Message)
+	}
+}

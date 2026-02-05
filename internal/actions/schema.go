@@ -9,24 +9,25 @@ import (
 )
 
 const (
-	ActionAskFollowup = "ask_followup"
-	ActionReadCode    = "read_code"
-	ActionEditCode    = "edit_code"
-	ActionWriteFile   = "write_file"
-	ActionRunCommand  = "run_command"
-	ActionRunTests    = "run_tests"
-	ActionRunLinter   = "run_linter"
-	ActionCreateBead  = "create_bead"
-	ActionCloseBead   = "close_bead"
-	ActionEscalateCEO = "escalate_ceo"
-	ActionReadFile    = "read_file"
-	ActionReadTree    = "read_tree"
-	ActionSearchText  = "search_text"
-	ActionApplyPatch  = "apply_patch"
-	ActionGitStatus   = "git_status"
-	ActionGitDiff     = "git_diff"
-	ActionApproveBead = "approve_bead"
-	ActionRejectBead  = "reject_bead"
+	ActionAskFollowup   = "ask_followup"
+	ActionReadCode      = "read_code"
+	ActionEditCode      = "edit_code"
+	ActionWriteFile     = "write_file"
+	ActionRunCommand    = "run_command"
+	ActionRunTests      = "run_tests"
+	ActionRunLinter     = "run_linter"
+	ActionBuildProject  = "build_project"
+	ActionCreateBead    = "create_bead"
+	ActionCloseBead     = "close_bead"
+	ActionEscalateCEO   = "escalate_ceo"
+	ActionReadFile      = "read_file"
+	ActionReadTree      = "read_tree"
+	ActionSearchText    = "search_text"
+	ActionApplyPatch    = "apply_patch"
+	ActionGitStatus     = "git_status"
+	ActionGitDiff       = "git_diff"
+	ActionApproveBead   = "approve_bead"
+	ActionRejectBead    = "reject_bead"
 )
 
 type ActionEnvelope struct {
@@ -56,6 +57,10 @@ type Action struct {
 
 	// Linter execution fields
 	Files []string `json:"files,omitempty"` // Specific files to lint
+
+	// Build execution fields
+	BuildTarget  string `json:"build_target,omitempty"`  // Build target (e.g., binary name)
+	BuildCommand string `json:"build_command,omitempty"` // Custom build command
 
 	Bead *BeadPayload `json:"bead,omitempty"`
 
@@ -265,6 +270,9 @@ func validateAction(action Action) error {
 	case ActionRunLinter:
 		// All fields are optional - defaults will be used
 		// files, framework (auto-detect), timeout_seconds (default)
+	case ActionBuildProject:
+		// All fields are optional - defaults will be used
+		// build_target, framework (auto-detect), build_command, timeout_seconds (default)
 	case ActionCreateBead:
 		if action.Bead == nil {
 			return errors.New("create_bead requires bead payload")

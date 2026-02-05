@@ -312,3 +312,130 @@ func TestActionRunLinter_JSONDecoding(t *testing.T) {
 		t.Errorf("Expected timeout 300, got %d", action.TimeoutSeconds)
 	}
 }
+
+func TestActionBuildProject_Validation(t *testing.T) {
+	tests := []struct {
+		name    string
+		action  Action
+		wantErr bool
+	}{
+		{
+			name: "Valid with all fields",
+			action: Action{
+				Type:           ActionBuildProject,
+				BuildTarget:    "myapp",
+				BuildCommand:   "go build -o myapp ./cmd/app",
+				Framework:      "go",
+				TimeoutSeconds: 300,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid with no fields (all optional)",
+			action: Action{
+				Type: ActionBuildProject,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid with only target",
+			action: Action{
+				Type:        ActionBuildProject,
+				BuildTarget: "output.bin",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Valid with only framework",
+			action: Action{
+				Type:      ActionBuildProject,
+				Framework: "npm",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAction(tt.action)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateAction() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestActionBuildProject_JSONDecoding(t *testing.T) {
+	tests := []struct {
+		name    string
+		json    string
+		wantErr bool
+		check   func(*testing.T, *ActionEnvelope)
+	}{
+		{
+			name: "Build with all parameters",
+			json: `{
+				"actions": [{
+					"type": "build_project",
+					"build_target": "myapp",
+					"build_command": "go build -o myapp ./cmd/app",
+					"framework": "go",
+					"timeout_seconds": 300
+				}]
+			}`,
+			wantErr: false,
+			check: func(t *testing.T, env *ActionEnvelope) {
+				if len(env.Actions) != 1 {
+					t.Fatal("Expected 1 action")
+				}
+				action := env.Actions[0]
+				if action.Type != ActionBuildProject {
+					t.Errorf("Expected type %s, got %s", ActionBuildProject, action.Type)
+				}
+				if action.BuildTarget != "myapp" {
+					t.Errorf("Expected target myapp, got %s", action.BuildTarget)
+				}
+				if action.BuildCommand != "go build -o myapp ./cmd/app" {
+					t.Errorf("Expected custom command, got %s", action.BuildCommand)
+				}
+				if action.Framework != "go" {
+					t.Errorf("Expected framework go, got %s", action.Framework)
+				}
+				if action.TimeoutSeconds != 300 {
+					t.Errorf("Expected timeout 300, got %d", action.TimeoutSeconds)
+				}
+			},
+		},
+		{
+			name: "Build with minimal parameters",
+			json: `{
+				"actions": [{
+					"type": "build_project"
+				}]
+			}`,
+			wantErr: false,
+			check: func(t *testing.T, env *ActionEnvelope) {
+				if len(env.Actions) != 1 {
+					t.Fatal("Expected 1 action")
+				}
+				action := env.Actions[0]
+				if action.Type != ActionBuildProject {
+					t.Errorf("Expected type %s, got %s", ActionBuildProject, action.Type)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env, err := DecodeStrict([]byte(tt.json))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DecodeStrict() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && tt.check != nil {
+				tt.check(t, env)
+			}
+		})
+	}
+}
