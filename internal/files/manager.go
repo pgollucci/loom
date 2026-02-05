@@ -244,14 +244,112 @@ func (m *Manager) SearchText(ctx context.Context, projectID, relPath, query stri
 	return matches, nil
 }
 
+// extractPatchFiles parses a unified diff patch and extracts the file paths
+func extractPatchFiles(patch string) ([]string, error) {
+	var files []string
+	seen := make(map[string]bool)
+
+	lines := strings.Split(patch, "\n")
+	for _, line := range lines {
+		// Look for diff headers: "diff --git a/path b/path" or "+++ b/path" or "--- a/path"
+		if strings.HasPrefix(line, "diff --git ") {
+			// Parse "diff --git a/path b/path"
+			parts := strings.Fields(line)
+			if len(parts) >= 4 {
+				// Extract "b/path" which is the target file
+				path := strings.TrimPrefix(parts[3], "b/")
+				if path != "" && !seen[path] {
+					files = append(files, path)
+					seen[path] = true
+				}
+			}
+		} else if strings.HasPrefix(line, "+++ ") {
+			// Parse "+++ b/path" or "+++ /dev/null"
+			path := strings.TrimPrefix(line, "+++ ")
+			path = strings.TrimPrefix(path, "b/")
+			path = strings.Fields(path)[0] // Take first field (before any timestamps)
+			if path != "" && path != "/dev/null" && !seen[path] {
+				files = append(files, path)
+				seen[path] = true
+			}
+		} else if strings.HasPrefix(line, "--- ") {
+			// Parse "--- a/path" or "--- /dev/null"
+			path := strings.TrimPrefix(line, "--- ")
+			path = strings.TrimPrefix(path, "a/")
+			path = strings.Fields(path)[0] // Take first field (before any timestamps)
+			if path != "" && path != "/dev/null" && !seen[path] {
+				files = append(files, path)
+				seen[path] = true
+			}
+		}
+	}
+
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no files found in patch")
+	}
+
+	return files, nil
+}
+
 func (m *Manager) ApplyPatch(ctx context.Context, projectID, patch string) (*PatchResult, error) {
 	if strings.TrimSpace(patch) == "" {
 		return nil, fmt.Errorf("patch is required")
 	}
+
+	// Validate patch size (prevent DoS)
+	if len(patch) > 10*1024*1024 { // 10MB limit
+		return nil, fmt.Errorf("patch too large (max 10MB)")
+	}
+
 	workDir, err := m.resolveWorkDir(projectID)
 	if err != nil {
 		return nil, err
 	}
+
+	// Extract and validate all files in the patch
+	files, err := extractPatchFiles(patch)
+	if err != nil {
+		return nil, fmt.Errorf("invalid patch format: %w", err)
+	}
+
+	// Validate each file path
+	for _, file := range files {
+		// Use safeJoin to validate path is within project
+		fullPath, err := safeJoin(workDir, file)
+		if err != nil {
+			return nil, fmt.Errorf("patch modifies unauthorized file: %s (%w)", file, err)
+		}
+
+		// Check if path is blocked (e.g., .git, .env)
+		if isBlockedPath(fullPath) {
+			return nil, fmt.Errorf("patch modifies blocked file: %s", file)
+		}
+
+		// Additional sensitive file checks
+		lowercaseFile := strings.ToLower(file)
+		sensitivePatterns := []string{".env", "secret", "password", "key", "token", "credentials"}
+		for _, pattern := range sensitivePatterns {
+			if strings.Contains(lowercaseFile, pattern) {
+				return nil, fmt.Errorf("patch modifies potentially sensitive file: %s", file)
+			}
+		}
+	}
+
+	// First, check if patch is valid without applying it
+	checkCmd := exec.CommandContext(ctx, "git", "apply", "--check", "--whitespace=nowarn", "-")
+	checkCmd.Dir = workDir
+	checkCmd.Stdin = strings.NewReader(patch)
+	var checkOut bytes.Buffer
+	checkCmd.Stdout = &checkOut
+	checkCmd.Stderr = &checkOut
+	if err := checkCmd.Run(); err != nil {
+		return &PatchResult{
+			Applied: false,
+			Output:  fmt.Sprintf("patch validation failed: %s", strings.TrimSpace(checkOut.String())),
+		}, fmt.Errorf("patch validation failed: %w", err)
+	}
+
+	// Now apply the patch
 	cmd := exec.CommandContext(ctx, "git", "apply", "--whitespace=nowarn", "--recount", "-")
 	cmd.Dir = workDir
 	cmd.Stdin = strings.NewReader(patch)

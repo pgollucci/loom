@@ -187,6 +187,66 @@ func (m *Manager) PullProject(ctx context.Context, project *models.Project) erro
 }
 
 // validateCommitMessage validates a commit message for security
+// validateProjectID validates a project ID for security
+func validateProjectID(projectID string) error {
+	if projectID == "" {
+		return fmt.Errorf("project ID is required")
+	}
+
+	// Maximum length check
+	if len(projectID) > 100 {
+		return fmt.Errorf("project ID too long (max 100 characters)")
+	}
+
+	// Only allow alphanumeric characters, hyphens, and underscores
+	// This prevents path traversal and command injection
+	for _, ch := range projectID {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			 (ch >= '0' && ch <= '9') || ch == '-' || ch == '_') {
+			return fmt.Errorf("project ID contains invalid character: %c (only alphanumeric, hyphens, and underscores allowed)", ch)
+		}
+	}
+
+	// Prevent directory traversal patterns
+	if strings.Contains(projectID, "..") || strings.Contains(projectID, "/.") || strings.Contains(projectID, "./") {
+		return fmt.Errorf("project ID contains invalid path components")
+	}
+
+	return nil
+}
+
+// validateSSHKeyPath validates that an SSH key path is safe and within expected directory
+func validateSSHKeyPath(keyPath, expectedBaseDir string) error {
+	// Check the path exists
+	if _, err := os.Stat(keyPath); err != nil {
+		return fmt.Errorf("SSH key path does not exist: %w", err)
+	}
+
+	// Resolve to absolute path to prevent symlink attacks
+	absPath, err := filepath.Abs(keyPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve SSH key path: %w", err)
+	}
+
+	absBaseDir, err := filepath.Abs(expectedBaseDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve base directory: %w", err)
+	}
+
+	// Ensure the key is within the expected directory
+	if !strings.HasPrefix(absPath, absBaseDir+string(os.PathSeparator)) {
+		return fmt.Errorf("SSH key path is outside expected directory")
+	}
+
+	return nil
+}
+
+// shellEscape escapes a string for safe use in shell commands
+func shellEscape(s string) string {
+	// For paths in shell commands, wrap in single quotes and escape any single quotes
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 func validateCommitMessage(message string) error {
 	if message == "" {
 		return fmt.Errorf("commit message is required")
@@ -471,21 +531,31 @@ func (m *Manager) configureAuth(cmd *exec.Cmd, project *models.Project) error {
 		return nil
 
 	case models.GitAuthSSH:
+		// Validate project ID for security (prevent command injection)
+		if err := validateProjectID(project.ID); err != nil {
+			return fmt.Errorf("invalid project ID: %w", err)
+		}
+
 		publicKey, err := m.EnsureProjectSSHKey(project.ID)
 		if err != nil {
 			return err
 		}
 		_ = publicKey
 		sshKeyPath := m.projectPrivateKeyPath(project.ID)
-		if _, err := os.Stat(sshKeyPath); err != nil {
-			return fmt.Errorf("ssh key not found for project %s: %w", project.ID, err)
+
+		// Validate SSH key path is within expected directory (prevent path traversal)
+		if err := validateSSHKeyPath(sshKeyPath, m.projectKeyDir); err != nil {
+			return fmt.Errorf("invalid SSH key path for project %s: %w", project.ID, err)
 		}
+
 		if cmd.Env == nil {
 			cmd.Env = os.Environ()
 		}
+		// Use shell escaping to prevent command injection in GIT_SSH_COMMAND
+		escapedKeyPath := shellEscape(sshKeyPath)
 		cmd.Env = append(cmd.Env,
 			"GIT_TERMINAL_PROMPT=0",
-			fmt.Sprintf("GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o UserKnownHostsFile=/home/agenticorp/.ssh/known_hosts", sshKeyPath),
+			fmt.Sprintf("GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o UserKnownHostsFile=/home/agenticorp/.ssh/known_hosts", escapedKeyPath),
 		)
 		return nil
 
