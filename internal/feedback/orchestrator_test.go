@@ -12,6 +12,10 @@ import (
 )
 
 func TestOrchestrator_Run_AllSuccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	orch := NewOrchestrator(".")
 	config := DefaultConfig(".")
 
@@ -48,6 +52,10 @@ func TestOrchestrator_Run_AllSuccess(t *testing.T) {
 }
 
 func TestOrchestrator_Run_BuildFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	orch := NewOrchestrator(".")
 	config := DefaultConfig(".")
 	config.StopOnBuildFailure = true
@@ -350,6 +358,10 @@ func TestFormatDuration(t *testing.T) {
 }
 
 func TestOrchestrator_QuickCheck(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	orch := NewOrchestrator(".")
 
 	ctx := context.Background()
@@ -369,6 +381,10 @@ func TestOrchestrator_QuickCheck(t *testing.T) {
 }
 
 func TestOrchestrator_BuildOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	orch := NewOrchestrator(".")
 
 	ctx := context.Background()
@@ -396,6 +412,10 @@ func TestOrchestrator_BuildOnly(t *testing.T) {
 }
 
 func TestOrchestratorConfig_PhaseControl(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	config := DefaultConfig(".")
 
 	// Test disabling phases
