@@ -316,6 +316,137 @@ func (m *Manager) WriteFile(ctx context.Context, projectID, relPath, content str
 	}, nil
 }
 
+// MoveFile moves a file from source to target path within the project
+func (m *Manager) MoveFile(ctx context.Context, projectID, sourceRelPath, targetRelPath string) error {
+	if strings.TrimSpace(sourceRelPath) == "" {
+		return fmt.Errorf("source path is required")
+	}
+	if strings.TrimSpace(targetRelPath) == "" {
+		return fmt.Errorf("target path is required")
+	}
+
+	workDir, err := m.resolveWorkDir(projectID)
+	if err != nil {
+		return err
+	}
+
+	// Validate source path
+	sourcePath, err := safeJoin(workDir, sourceRelPath)
+	if err != nil {
+		return fmt.Errorf("invalid source path: %w", err)
+	}
+	if isBlockedPath(sourcePath) {
+		return fmt.Errorf("source path is not allowed")
+	}
+
+	// Validate target path
+	targetPath, err := safeJoin(workDir, targetRelPath)
+	if err != nil {
+		return fmt.Errorf("invalid target path: %w", err)
+	}
+	if isBlockedPath(targetPath) {
+		return fmt.Errorf("target path is not allowed")
+	}
+
+	// Check source exists
+	if _, err := os.Stat(sourcePath); err != nil {
+		return fmt.Errorf("source file not found: %w", err)
+	}
+
+	// Ensure target directory exists
+	targetDir := filepath.Dir(targetPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("failed to create target directory: %w", err)
+	}
+
+	// Move file
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return fmt.Errorf("failed to move file: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteFile deletes a file within the project
+func (m *Manager) DeleteFile(ctx context.Context, projectID, relPath string) error {
+	if strings.TrimSpace(relPath) == "" {
+		return fmt.Errorf("path is required")
+	}
+
+	workDir, err := m.resolveWorkDir(projectID)
+	if err != nil {
+		return err
+	}
+
+	// Validate path
+	filePath, err := safeJoin(workDir, relPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	if isBlockedPath(filePath) {
+		return fmt.Errorf("path is not allowed")
+	}
+
+	// Check file exists
+	if _, err := os.Stat(filePath); err != nil {
+		return fmt.Errorf("file not found: %w", err)
+	}
+
+	// Delete file
+	if err := os.Remove(filePath); err != nil {
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+
+	return nil
+}
+
+// RenameFile renames a file within the project
+func (m *Manager) RenameFile(ctx context.Context, projectID, sourceRelPath, newName string) error {
+	if strings.TrimSpace(sourceRelPath) == "" {
+		return fmt.Errorf("source path is required")
+	}
+	if strings.TrimSpace(newName) == "" {
+		return fmt.Errorf("new name is required")
+	}
+
+	// newName should be just the filename, not a path
+	if strings.Contains(newName, "/") || strings.Contains(newName, "\\") {
+		return fmt.Errorf("new name must be a filename, not a path")
+	}
+
+	workDir, err := m.resolveWorkDir(projectID)
+	if err != nil {
+		return err
+	}
+
+	// Validate source path
+	sourcePath, err := safeJoin(workDir, sourceRelPath)
+	if err != nil {
+		return fmt.Errorf("invalid source path: %w", err)
+	}
+	if isBlockedPath(sourcePath) {
+		return fmt.Errorf("source path is not allowed")
+	}
+
+	// Check source exists
+	if _, err := os.Stat(sourcePath); err != nil {
+		return fmt.Errorf("source file not found: %w", err)
+	}
+
+	// Build target path (same directory, new name)
+	targetPath := filepath.Join(filepath.Dir(sourcePath), newName)
+	if isBlockedPath(targetPath) {
+		return fmt.Errorf("target path is not allowed")
+	}
+
+	// Rename file
+	if err := os.Rename(sourcePath, targetPath); err != nil {
+		return fmt.Errorf("failed to rename file: %w", err)
+	}
+
+	return nil
+}
+
 func (m *Manager) resolveWorkDir(projectID string) (string, error) {
 	if m.WorkDirs == nil {
 		return "", fmt.Errorf("workdir resolver not configured")

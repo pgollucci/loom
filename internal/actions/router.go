@@ -43,6 +43,9 @@ type FileManager interface {
 	ReadTree(ctx context.Context, projectID, path string, maxDepth, limit int) ([]files.TreeEntry, error)
 	SearchText(ctx context.Context, projectID, path, query string, limit int) ([]files.SearchMatch, error)
 	ApplyPatch(ctx context.Context, projectID, patch string) (*files.PatchResult, error)
+	MoveFile(ctx context.Context, projectID, sourcePath, targetPath string) error
+	DeleteFile(ctx context.Context, projectID, path string) error
+	RenameFile(ctx context.Context, projectID, sourcePath, newName string) error
 }
 
 type GitOperator interface {
@@ -691,6 +694,10 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		if r.Files == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
 		}
+		err := r.Files.MoveFile(ctx, actx.ProjectID, action.SourcePath, action.TargetPath)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to move file: %v", err)}
+		}
 		return Result{
 			ActionType: action.Type,
 			Status:     "executed",
@@ -705,6 +712,10 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		if r.Files == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
 		}
+		err := r.Files.DeleteFile(ctx, actx.ProjectID, action.Path)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to delete file: %v", err)}
+		}
 		return Result{
 			ActionType: action.Type,
 			Status:     "executed",
@@ -717,6 +728,10 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		// Rename file operation
 		if r.Files == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
+		}
+		err := r.Files.RenameFile(ctx, actx.ProjectID, action.SourcePath, action.NewName)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to rename file: %v", err)}
 		}
 		return Result{
 			ActionType: action.Type,

@@ -8,11 +8,64 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jordanhubbard/agenticorp/pkg/models"
 )
+
+// allowedCommands is the allowlist of permitted commands for security
+var allowedCommands = map[string]bool{
+	// Build tools
+	"go":    true,
+	"make":  true,
+	"cmake": true,
+
+	// Package managers
+	"npm":  true,
+	"yarn": true,
+	"pip":  true,
+	"pip3": true,
+
+	// Version control
+	"git": true,
+	"bd":  true,
+
+	// Testing
+	"pytest":   true,
+	"jest":     true,
+	"mocha":    true,
+	"go test":  true, // Special case handled in parsing
+
+	// Common utilities (read-only operations)
+	"ls":   true,
+	"cat":  true,
+	"grep": true,
+	"find": true,
+	"echo": true,
+	"pwd":  true,
+	"date": true,
+	"wc":   true,
+	"head": true,
+	"tail": true,
+	"diff": true,
+	"tree": true,
+
+	// Docker
+	"docker": true,
+
+	// Language tools
+	"node":   true,
+	"python": true,
+	"python3": true,
+	"ruby":   true,
+	"java":   true,
+	"javac":  true,
+	"rustc":  true,
+	"cargo":  true,
+}
 
 // ShellExecutor provides shell command execution with persistent logging
 type ShellExecutor struct {
@@ -24,6 +77,53 @@ func NewShellExecutor(db *sql.DB) *ShellExecutor {
 	return &ShellExecutor{
 		db: db,
 	}
+}
+
+// validateCommand checks if a command is allowed and returns the parsed command parts
+func validateCommand(command string) ([]string, bool, error) {
+	// Empty command check
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return nil, false, fmt.Errorf("empty command")
+	}
+
+	// Check for shell metacharacters that require shell interpretation
+	shellMetachars := []string{"|", "&&", "||", ";", ">", "<", "&", "`", "$(", "\"", "'", "\\"}
+	requiresShell := false
+	for _, meta := range shellMetachars {
+		if strings.Contains(command, meta) {
+			requiresShell = true
+			break
+		}
+	}
+
+	// Parse command into fields
+	parts := strings.Fields(trimmed)
+	if len(parts) == 0 {
+		return nil, false, fmt.Errorf("invalid command")
+	}
+
+	// Extract binary name (base of first part, handles paths like /usr/bin/go)
+	binary := filepath.Base(parts[0])
+
+	// Special case: "go test" is two words but a single command
+	if binary == "go" && len(parts) > 1 && parts[1] == "test" {
+		binary = "go test"
+	}
+
+	// Check allowlist
+	if !allowedCommands[binary] {
+		return nil, false, fmt.Errorf("command not allowed: %s (use one of: go, npm, git, pytest, make, docker, or common utilities)", binary)
+	}
+
+	// If requires shell, return original command as single part
+	if requiresShell {
+		log.Printf("[ShellExecutor] Command requires shell interpretation: %s", command)
+		return []string{command}, true, nil
+	}
+
+	// Return parsed parts for direct execution
+	return parts, false, nil
 }
 
 // ExecuteCommandRequest represents a shell command execution request
@@ -55,6 +155,12 @@ type ExecuteCommandResult struct {
 func (e *ShellExecutor) ExecuteCommand(ctx context.Context, req ExecuteCommandRequest) (*ExecuteCommandResult, error) {
 	if req.Command == "" {
 		return nil, fmt.Errorf("command is required")
+	}
+
+	// Validate command against allowlist
+	parts, requiresShell, err := validateCommand(req.Command)
+	if err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 
 	// Set default timeout if not specified
@@ -89,7 +195,16 @@ func (e *ShellExecutor) ExecuteCommand(ctx context.Context, req ExecuteCommandRe
 	// Execute command
 	log.Printf("[ShellExecutor] Executing command for agent=%s bead=%s: %s", req.AgentID, req.BeadID, req.Command)
 
-	cmd := exec.CommandContext(cmdCtx, "/bin/sh", "-c", req.Command)
+	var cmd *exec.Cmd
+	if requiresShell {
+		// Complex command requires shell interpretation (piping, redirection, etc.)
+		log.Printf("[ShellExecutor] Using shell for complex command")
+		cmd = exec.CommandContext(cmdCtx, "/bin/sh", "-c", parts[0])
+	} else {
+		// Simple command - execute directly without shell for security
+		log.Printf("[ShellExecutor] Direct execution (no shell)")
+		cmd = exec.CommandContext(cmdCtx, parts[0], parts[1:]...)
+	}
 	cmd.Dir = workingDir
 
 	var stdout, stderr bytes.Buffer
@@ -97,7 +212,7 @@ func (e *ShellExecutor) ExecuteCommand(ctx context.Context, req ExecuteCommandRe
 	cmd.Stderr = &stderr
 
 	startTime := time.Now()
-	err := cmd.Run()
+	err = cmd.Run()
 	endTime := time.Now()
 	duration := endTime.Sub(startTime).Milliseconds()
 

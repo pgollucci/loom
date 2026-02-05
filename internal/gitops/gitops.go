@@ -186,8 +186,81 @@ func (m *Manager) PullProject(ctx context.Context, project *models.Project) erro
 	return nil
 }
 
+// validateCommitMessage validates a commit message for security
+func validateCommitMessage(message string) error {
+	if message == "" {
+		return fmt.Errorf("commit message is required")
+	}
+
+	// Maximum length check
+	if len(message) > 10000 {
+		return fmt.Errorf("commit message too long (max 10000 characters)")
+	}
+
+	// Check for shell metacharacters that could be dangerous in git hooks
+	dangerousChars := []string{
+		"$(", "`", "\n$(", "\n`", // Command substitution
+		"&&", "||", ";", "|", // Command chaining
+		">", "<", // Redirection (only if at start of line or after newline)
+	}
+
+	for _, char := range dangerousChars {
+		if strings.Contains(message, char) {
+			// Allow some cases in commit message body (after first line)
+			lines := strings.Split(message, "\n")
+			if len(lines) > 0 && !strings.Contains(lines[0], char) {
+				// It's in the body, which is usually safer, but still check for command substitution
+				if char == "$(" || char == "`" {
+					return fmt.Errorf("commit message contains potentially dangerous pattern: %s", char)
+				}
+				continue
+			}
+			return fmt.Errorf("commit message contains potentially dangerous pattern: %s", char)
+		}
+	}
+
+	return nil
+}
+
+// validateAuthorInfo validates author name and email for security
+func validateAuthorInfo(name, email string) error {
+	if name == "" && email == "" {
+		return nil // Both empty is OK
+	}
+
+	if name == "" || email == "" {
+		return fmt.Errorf("both author name and email must be provided together")
+	}
+
+	// Validate name (allow letters, numbers, spaces, hyphens, periods)
+	if len(name) > 100 {
+		return fmt.Errorf("author name too long (max 100 characters)")
+	}
+	if strings.ContainsAny(name, "<>;|&$`\n\r\t") {
+		return fmt.Errorf("author name contains invalid characters")
+	}
+
+	// Validate email format
+	if len(email) > 254 { // RFC 5321
+		return fmt.Errorf("author email too long (max 254 characters)")
+	}
+	// Basic email validation
+	if !strings.Contains(email, "@") || strings.ContainsAny(email, " \n\r\t;|&$`") {
+		return fmt.Errorf("author email format invalid")
+	}
+
+	return nil
+}
+
 // CommitChanges commits all changes in the project work directory
 func (m *Manager) CommitChanges(ctx context.Context, project *models.Project, message, authorName, authorEmail string) error {
+	// Validate inputs for security
+	if err := validateCommitMessage(message); err != nil {
+		return fmt.Errorf("invalid commit message: %w", err)
+	}
+	if err := validateAuthorInfo(authorName, authorEmail); err != nil {
+		return fmt.Errorf("invalid author info: %w", err)
+	}
 	workDir := m.GetProjectWorkDir(project.ID)
 	start := time.Now()
 	logGitEvent("git.commit.start", project, map[string]interface{}{
