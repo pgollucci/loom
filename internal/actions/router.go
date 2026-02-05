@@ -800,6 +800,8 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		return r.handleRequestReview(ctx, action, actx)
 	case ActionSendAgentMessage:
 		return r.handleSendAgentMessage(ctx, action, actx)
+	case ActionDelegateTask:
+		return r.handleDelegateTask(ctx, action, actx)
 
 	default:
 		return Result{ActionType: action.Type, Status: "error", Message: "unsupported action"}
@@ -1145,6 +1147,70 @@ func (r *Router) handleSendAgentMessage(ctx context.Context, action Action, actx
 			"to_agent_id":     targetAgentID,
 			"message_type":    action.MessageType,
 			"message_subject": action.MessageSubject,
+		},
+	}
+}
+
+func (r *Router) handleDelegateTask(ctx context.Context, action Action, actx ActionContext) Result {
+	// Validate required fields
+	if action.DelegateToRole == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "delegate_to_role is required"}
+	}
+
+	if action.TaskTitle == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "task_title is required"}
+	}
+
+	if r.Beads == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "bead creator not configured"}
+	}
+
+	// Determine priority (default to medium if out of valid range)
+	// Valid priorities are 0-4 (P0-P4)
+	// Since 0 is the zero value, we can't distinguish "not set" from "P0"
+	// So we only default if explicitly out of range (> 4)
+	priority := action.TaskPriority
+	if priority < 0 {
+		priority = 0 // Treat negative as P0
+	} else if priority > 4 {
+		priority = 2 // Out of range defaults to medium (P2)
+	}
+
+	// Create child bead
+	childBead, err := r.Beads.CreateBead(
+		action.TaskTitle,
+		action.TaskDescription,
+		models.BeadPriority(priority),
+		"delegated", // Type
+		actx.ProjectID,
+	)
+
+	if err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to create child bead: %v", err)}
+	}
+
+	// Store parent relationship (if parent bead provided)
+	parentBeadID := action.ParentBeadID
+	if parentBeadID == "" {
+		parentBeadID = actx.BeadID // Use current bead as parent if not specified
+	}
+
+	// Build result message
+	resultMessage := fmt.Sprintf("Delegated task '%s' to %s (child bead: %s)", action.TaskTitle, action.DelegateToRole, childBead.ID)
+	if parentBeadID != "" {
+		resultMessage = fmt.Sprintf("Delegated task '%s' to %s (parent: %s, child: %s)", action.TaskTitle, action.DelegateToRole, parentBeadID, childBead.ID)
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    resultMessage,
+		Metadata: map[string]interface{}{
+			"child_bead_id":    childBead.ID,
+			"parent_bead_id":   parentBeadID,
+			"delegate_to_role": action.DelegateToRole,
+			"task_title":       action.TaskTitle,
+			"task_priority":    priority,
 		},
 	}
 }

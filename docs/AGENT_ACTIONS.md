@@ -711,6 +711,78 @@ Notify project manager of completion:
 }
 ```
 
+#### delegate_task
+
+Create a child bead and delegate it to another agent for task decomposition.
+
+```json
+{
+  "type": "delegate_task",
+  "delegate_to_role": "qa-engineer",
+  "task_title": "Run integration tests for auth module",
+  "task_description": "Execute full integration test suite for the authentication module, including edge cases and error handling",
+  "task_priority": 2,
+  "parent_bead_id": "bead-abc-123"
+}
+```
+
+**Fields:**
+- `delegate_to_role` (required): Role/persona to delegate task to
+- `task_title` (required): Title for the delegated task (child bead)
+- `task_description` (optional): Detailed description for the child bead
+- `task_priority` (optional): Priority 0-4 (P0=critical, P2=medium, P4=backlog). Defaults to 0 if not specified.
+- `parent_bead_id` (optional): Parent bead ID. If not provided, uses the current bead as parent.
+
+**Returns:**
+- `child_bead_id`: ID of the newly created child bead
+- `parent_bead_id`: ID of the parent bead
+- `delegate_to_role`: Role the task was delegated to
+- `task_title`: Title of the delegated task
+- `task_priority`: Priority assigned to the task
+
+**Examples:**
+
+Delegate testing to QA agent:
+```json
+{
+  "type": "delegate_task",
+  "delegate_to_role": "qa-engineer",
+  "task_title": "Test authentication flow",
+  "task_description": "Verify all authentication scenarios work correctly",
+  "task_priority": 1
+}
+```
+
+Delegate code review:
+```json
+{
+  "type": "delegate_task",
+  "delegate_to_role": "code-reviewer",
+  "task_title": "Review authentication PR",
+  "task_description": "Review PR #456 for security and code quality",
+  "task_priority": 2,
+  "parent_bead_id": "bead-feature-auth"
+}
+```
+
+Delegate performance optimization:
+```json
+{
+  "type": "delegate_task",
+  "delegate_to_role": "performance-engineer",
+  "task_title": "Optimize database queries",
+  "task_description": "Profile and optimize slow database queries in the auth module",
+  "task_priority": 3
+}
+```
+
+**Use Cases:**
+
+- **Task Decomposition**: Break down complex tasks into subtasks for specialized agents
+- **Parallel Work**: Delegate independent subtasks to multiple agents simultaneously
+- **Skill Matching**: Assign work to agents with specific expertise (QA, review, optimization)
+- **Dependency Tracking**: Parent bead tracks completion of all child beads
+
 ## Action Results
 
 All actions return a result with this structure:

@@ -68,6 +68,7 @@ const (
 
 	// Agent communication actions
 	ActionSendAgentMessage = "send_agent_message"
+	ActionDelegateTask     = "delegate_task"
 )
 
 type ActionEnvelope struct {
@@ -161,6 +162,13 @@ type Action struct {
 	MessageSubject string                 `json:"message_subject,omitempty"`  // Message subject
 	MessageBody    string                 `json:"message_body,omitempty"`     // Message body
 	MessagePayload map[string]interface{} `json:"message_payload,omitempty"`  // Optional message payload/context
+
+	// Task delegation fields
+	DelegateToRole  string                 `json:"delegate_to_role,omitempty"`  // Role to delegate task to
+	TaskTitle       string                 `json:"task_title,omitempty"`        // Title for delegated task
+	TaskDescription string                 `json:"task_description,omitempty"`  // Description for delegated task
+	TaskPriority    int                    `json:"task_priority,omitempty"`     // Priority for delegated task (0-4)
+	ParentBeadID    string                 `json:"parent_bead_id,omitempty"`    // Parent bead that created this delegation
 
 	Bead *BeadPayload `json:"bead,omitempty"`
 
