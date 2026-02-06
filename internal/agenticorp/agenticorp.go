@@ -576,8 +576,11 @@ func (a *AgentiCorp) Initialize(ctx context.Context) error {
 		log.Printf("[AgentiCorp] Activating enabled providers...")
 		activatedCount := 0
 		for _, p := range providers {
-			if p.Status == "pending" || p.Status == "" {
-				log.Printf("[AgentiCorp] Activating provider: %s (type: %s)", p.ID, p.Type)
+			// FIX: Activate any provider that is not already active
+			// Don't only check for "pending" - providers can also be "healthy" or empty
+			// All providers from database should be activated unless explicitly inactive
+			if p.Status != "active" && p.Status != "inactive" {
+				log.Printf("[AgentiCorp] Activating provider: %s (type: %s, current status: %s)", p.ID, p.Type, p.Status)
 				p.Status = "active"
 				if err := a.database.UpsertProvider(p); err != nil {
 					log.Printf("[AgentiCorp] Warning: Failed to activate provider %s: %v", p.ID, err)
@@ -589,6 +592,10 @@ func (a *AgentiCorp) Initialize(ctx context.Context) error {
 					}
 					activatedCount++
 				}
+			} else if p.Status == "active" {
+				// Provider already active - count it
+				activatedCount++
+				log.Printf("[AgentiCorp] Provider already active: %s", p.ID)
 			}
 		}
 		if activatedCount > 0 {
