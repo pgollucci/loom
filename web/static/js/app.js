@@ -682,6 +682,14 @@ function render() {
     renderCeoBeads();
     renderUsers();
     renderDiagrams();
+
+    // New UI components
+    if (typeof renderProjectsTable === 'function') {
+        renderProjectsTable();
+    }
+    if (typeof renderConversationsView === 'function') {
+        renderConversationsView();
+    }
 }
 
 function renderProjectViewer() {
