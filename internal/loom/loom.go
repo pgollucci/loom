@@ -572,38 +572,17 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			})
 		}
 
-		// FIX #2: Activate all enabled providers on startup
-		// This is critical - providers default to "pending" status and the dispatcher
-		// will park if no active providers exist. We force-activate all enabled providers.
-		log.Printf("[Loom] Activating enabled providers...")
-		activatedCount := 0
+		// Count providers ready for dispatch
+		healthyCount := 0
 		for _, p := range providers {
-			// FIX: Activate any provider that is not already active
-			// Don't only check for "pending" - providers can also be "healthy" or empty
-			// All providers from database should be activated unless explicitly inactive
-			if p.Status != "active" && p.Status != "inactive" {
-				log.Printf("[Loom] Activating provider: %s (type: %s, current status: %s)", p.ID, p.Type, p.Status)
-				p.Status = "active"
-				if err := a.database.UpsertProvider(p); err != nil {
-					log.Printf("[Loom] Warning: Failed to activate provider %s: %v", p.ID, err)
-				} else {
-					// Also update in-memory registry
-					if regConfig, err := a.providerRegistry.Get(p.ID); err == nil && regConfig != nil {
-						regConfig.Config.Status = "active"
-						_ = a.providerRegistry.Upsert(regConfig.Config)
-					}
-					activatedCount++
-				}
-			} else if p.Status == "active" {
-				// Provider already active - count it
-				activatedCount++
-				log.Printf("[Loom] Provider already active: %s", p.ID)
+			if p.Status == "healthy" {
+				healthyCount++
 			}
 		}
-		if activatedCount > 0 {
-			log.Printf("[Loom] Successfully activated %d providers", activatedCount)
+		if healthyCount > 0 {
+			log.Printf("[Loom] %d providers already healthy, dispatch ready", healthyCount)
 		} else {
-			log.Printf("[Loom] Warning: No providers activated - work dispatch may not occur")
+			log.Printf("[Loom] No providers healthy yet — heartbeat will activate them shortly")
 		}
 
 		// Restore agents from database (best-effort).
