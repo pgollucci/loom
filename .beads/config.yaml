@@ -52,6 +52,10 @@ issue-prefix: "loom"
 #     - ~/beads-planning  # Personal planning repo
 #     - ~/work-planning   # Work planning repo
 
+# Federation sync mode
+sync:
+  mode: dolt-native
+
 # Integration settings (access with 'bd config get/set')
 # These are stored in the database, not in this file:
 # - jira.url

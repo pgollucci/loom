@@ -344,6 +344,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 					Branch:          p.Branch,
 					BeadsPath:       p.BeadsPath,
 					GitAuthMethod:   models.GitAuthMethod(p.GitAuthMethod),
+					GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 					GitCredentialID: p.GitCredentialID,
 					IsPerpetual:     p.IsPerpetual,
 					IsSticky:        p.IsSticky,
@@ -363,6 +364,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 					Branch:          p.Branch,
 					BeadsPath:       p.BeadsPath,
 					GitAuthMethod:   models.GitAuthMethod(p.GitAuthMethod),
+					GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 					GitCredentialID: p.GitCredentialID,
 					IsPerpetual:     p.IsPerpetual,
 					IsSticky:        p.IsSticky,
@@ -382,6 +384,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				Branch:          p.Branch,
 				BeadsPath:       p.BeadsPath,
 				GitAuthMethod:   models.GitAuthMethod(p.GitAuthMethod),
+				GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 				GitCredentialID: p.GitCredentialID,
 				IsPerpetual:     p.IsPerpetual,
 				IsSticky:        p.IsSticky,
@@ -411,6 +414,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				Branch:          p.Branch,
 				BeadsPath:       normalizeBeadsPath(p.BeadsPath),
 				GitAuthMethod:   normalizeGitAuthMethod(p.GitRepo, models.GitAuthMethod(p.GitAuthMethod)),
+				GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 				GitCredentialID: p.GitCredentialID,
 				IsPerpetual:     p.IsPerpetual,
 				IsSticky:        p.IsSticky,
@@ -427,6 +431,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			Branch:        "main",
 			BeadsPath:     normalizeBeadsPath(".beads"),
 			GitAuthMethod: normalizeGitAuthMethod(".", ""),
+			GitStrategy:   models.GitStrategyDirect,
 			IsPerpetual:   true,
 			IsSticky:      true,
 			Context: map[string]string{
@@ -459,6 +464,16 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			// Set default auth method if not specified
 			if p.GitAuthMethod == "" {
 				p.GitAuthMethod = models.GitAuthNone // Default to no auth for public repos
+			}
+
+			// For SSH-auth projects, ensure an SSH key exists
+			if p.GitAuthMethod == models.GitAuthSSH {
+				pubKey, err := a.gitopsManager.EnsureProjectSSHKey(p.ID)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to ensure SSH key for %s: %v\n", p.ID, err)
+				} else {
+					fmt.Printf("Project %s SSH public key:\n%s\n", p.ID, pubKey)
+				}
 			}
 
 			// Check if already cloned
@@ -498,6 +513,16 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				a.beadsManager.SetProjectPrefix(p.ID, p.BeadPrefix)
 			}
 			_ = a.beadsManager.LoadBeadsFromFilesystem(p.ID, beadsPath)
+
+			// Federation sync after loading beads
+			if a.config.Beads.Federation.Enabled && a.config.Beads.Federation.AutoSync {
+				fmt.Printf("Syncing federation peers for project %s...\n", p.ID)
+				if err := a.beadsManager.SyncFederation(ctx, &a.config.Beads.Federation); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Federation sync failed for %s: %v\n", p.ID, err)
+				}
+				// Reload beads after sync to pick up remote changes
+				_ = a.beadsManager.LoadBeadsFromFilesystem(p.ID, beadsPath)
+			}
 		} else {
 			// Local project (Loom itself), load beads directly
 			a.beadsManager.SetBeadsPath(p.BeadsPath)
@@ -508,6 +533,16 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				a.beadsManager.SetProjectPrefix(p.ID, p.BeadPrefix)
 			}
 			_ = a.beadsManager.LoadBeadsFromFilesystem(p.ID, p.BeadsPath)
+
+			// Federation sync after loading beads
+			if a.config.Beads.Federation.Enabled && a.config.Beads.Federation.AutoSync {
+				fmt.Printf("Syncing federation peers for project %s...\n", p.ID)
+				if err := a.beadsManager.SyncFederation(ctx, &a.config.Beads.Federation); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Federation sync failed for %s: %v\n", p.ID, err)
+				}
+				// Reload beads after sync to pick up remote changes
+				_ = a.beadsManager.LoadBeadsFromFilesystem(p.ID, p.BeadsPath)
+			}
 		}
 	}
 
@@ -1395,6 +1430,13 @@ func normalizeGitAuthMethod(repo string, method models.GitAuthMethod) models.Git
 		return models.GitAuthNone
 	}
 	return models.GitAuthSSH
+}
+
+func normalizeGitStrategy(strategy models.GitStrategy) models.GitStrategy {
+	if strategy != "" {
+		return strategy
+	}
+	return models.GitStrategyDirect
 }
 
 func (a *Loom) allowedRoleSet() map[string]struct{} {
@@ -2730,6 +2772,8 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
+	var lastFederationSync time.Time
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -2772,6 +2816,16 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 				reason := b.Context["loop_detected_reason"]
 				returnedTo := b.Context["agent_id"]
 				_, _ = a.EscalateBeadToCEO(b.ID, reason, returnedTo)
+			}
+
+			// Periodic federation sync
+			if a.config.Beads.Federation.Enabled && a.config.Beads.Federation.SyncInterval > 0 {
+				if time.Since(lastFederationSync) >= a.config.Beads.Federation.SyncInterval {
+					if err := a.beadsManager.SyncFederation(ctx, &a.config.Beads.Federation); err != nil {
+						log.Printf("[Federation] Periodic sync failed: %v", err)
+					}
+					lastFederationSync = time.Now()
+				}
 			}
 		}
 	}

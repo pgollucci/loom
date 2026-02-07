@@ -20,6 +20,13 @@ RUN git clone --depth 1 https://github.com/steveyegge/beads.git /tmp/beads && \
     CGO_ENABLED=1 go build -o /go/bin/bd ./cmd/bd && \
     rm -rf /tmp/beads
 
+# Install Dolt binary for version-controlled beads backend
+RUN DOLT_VERSION=$(wget -qO- https://api.github.com/repos/dolthub/dolt/releases/latest | grep tag_name | cut -d '"' -f 4) && \
+    wget -q "https://github.com/dolthub/dolt/releases/download/${DOLT_VERSION}/dolt-linux-amd64.tar.gz" && \
+    tar -xzf dolt-linux-amd64.tar.gz && \
+    mv dolt-linux-amd64/bin/dolt /go/bin/dolt && \
+    rm -rf dolt-linux-amd64 dolt-linux-amd64.tar.gz
+
 # Copy source code
 COPY . .
 
@@ -47,6 +54,9 @@ COPY --from=builder /build/loom /app/loom
 
 # Copy bd CLI
 COPY --from=builder /go/bin/bd /usr/local/bin/bd
+
+# Copy dolt binary for version-controlled beads backend
+COPY --from=builder /go/bin/dolt /usr/local/bin/dolt
 
 # Copy config file
 COPY --from=builder /build/config.yaml /app/config.yaml

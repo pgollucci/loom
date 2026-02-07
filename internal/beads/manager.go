@@ -1,6 +1,7 @@
 package beads
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/observability"
+	"github.com/jordanhubbard/loom/pkg/config"
 	"github.com/jordanhubbard/loom/pkg/models"
 	"gopkg.in/yaml.v3"
 )
@@ -783,6 +785,58 @@ func (m *Manager) SaveBeadToFilesystem(bead *models.Bead, beadsPath string) erro
 	}
 
 	return nil
+}
+
+// SyncFederation syncs with all enabled federation peers.
+func (m *Manager) SyncFederation(ctx context.Context, cfg *config.BeadsFederationConfig) error {
+	if cfg == nil || !cfg.Enabled {
+		return nil
+	}
+
+	var lastErr error
+	for _, peer := range cfg.Peers {
+		if !peer.Enabled {
+			continue
+		}
+		if err := m.syncWithPeer(ctx, peer, cfg.SyncStrategy); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: federation sync with peer %s failed: %v\n", peer.Name, err)
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// syncWithPeer runs `bd federation sync --peer <name> [--strategy <s>]`.
+func (m *Manager) syncWithPeer(ctx context.Context, peer config.FederationPeer, strategy string) error {
+	args := []string{"federation", "sync", "--peer", peer.Name}
+	if strategy != "" {
+		args = append(args, "--strategy", strategy)
+	}
+
+	cmd := exec.CommandContext(ctx, m.bdPath, args...)
+	if dir := beadsRootDir(m.beadsPath); dir != "" {
+		cmd.Dir = dir
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("bd federation sync --peer %s failed: %w: %s", peer.Name, err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// FederationStatus runs `bd federation status --json` and returns the raw JSON.
+func (m *Manager) FederationStatus(ctx context.Context) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, m.bdPath, "federation", "status", "--json")
+	if dir := beadsRootDir(m.beadsPath); dir != "" {
+		cmd.Dir = dir
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("bd federation status failed: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return output, nil
 }
 
 // sanitizeFilename removes characters that aren't safe for filenames

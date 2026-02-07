@@ -71,10 +71,30 @@ type DatabaseConfig struct {
 
 // BeadsConfig configures beads integration
 type BeadsConfig struct {
-	BDPath         string        `yaml:"bd_path"` // Path to bd executable
-	AutoSync       bool          `yaml:"auto_sync"`
-	SyncInterval   time.Duration `yaml:"sync_interval"`
-	CompactOldDays int           `yaml:"compact_old_days"` // Days before compacting closed beads
+	BDPath         string                `yaml:"bd_path"` // Path to bd executable
+	AutoSync       bool                  `yaml:"auto_sync"`
+	SyncInterval   time.Duration         `yaml:"sync_interval"`
+	CompactOldDays int                   `yaml:"compact_old_days"` // Days before compacting closed beads
+	Backend        string                `yaml:"backend"`          // "sqlite" or "dolt"
+	Federation     BeadsFederationConfig `yaml:"federation"`
+}
+
+// BeadsFederationConfig configures peer-to-peer federation via Dolt remotes
+type BeadsFederationConfig struct {
+	Enabled      bool             `yaml:"enabled"`
+	AutoSync     bool             `yaml:"auto_sync"`      // Sync with peers on startup
+	SyncInterval time.Duration    `yaml:"sync_interval"`  // Periodic sync interval (0 = disabled)
+	SyncStrategy string           `yaml:"sync_strategy"`  // "ours", "theirs", or "" (manual)
+	SyncMode     string           `yaml:"sync_mode"`      // "dolt-native" or "belt-and-suspenders"
+	Peers        []FederationPeer `yaml:"peers"`
+}
+
+// FederationPeer represents a federation peer configuration
+type FederationPeer struct {
+	Name        string `yaml:"name"`
+	RemoteURL   string `yaml:"remote_url"`
+	Enabled     bool   `yaml:"enabled"`
+	Description string `yaml:"description,omitempty"`
 }
 
 // AgentsConfig configures agent behavior
@@ -144,6 +164,7 @@ type ProjectConfig struct {
 	Branch          string            `yaml:"branch"`
 	BeadsPath       string            `yaml:"beads_path"`
 	GitAuthMethod   string            `yaml:"git_auth_method" json:"git_auth_method,omitempty"`
+	GitStrategy     string            `yaml:"git_strategy" json:"git_strategy,omitempty"`
 	GitCredentialID string            `yaml:"git_credential_id" json:"git_credential_id,omitempty"`
 	IsPerpetual     bool              `yaml:"is_perpetual" json:"is_perpetual,omitempty"`
 	IsSticky        bool              `yaml:"is_sticky" json:"is_sticky,omitempty"`
@@ -229,6 +250,11 @@ func DefaultConfig() *Config {
 			AutoSync:       true,
 			SyncInterval:   5 * time.Minute,
 			CompactOldDays: 90,
+			Backend:        "sqlite",
+			Federation: BeadsFederationConfig{
+				Enabled:  false,
+				AutoSync: true,
+			},
 		},
 		Agents: AgentsConfig{
 			MaxConcurrent:      10,

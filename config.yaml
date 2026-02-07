@@ -20,6 +20,14 @@ beads:
   auto_sync: true
   sync_interval: 5m
   compact_old_days: 90  # Compact closed beads older than 90 days
+  backend: dolt          # "sqlite" or "dolt"
+  federation:
+    enabled: false       # Enable after migration + peer setup
+    auto_sync: true
+    sync_interval: 10m
+    sync_strategy: ours
+    sync_mode: dolt-native
+    peers: []            # Add peers after migration
 
 agents:
   max_concurrent: 6
@@ -84,10 +92,11 @@ providers:
 projects:
   - id: loom-self
     name: Loom Self-Improvement
-    git_repo: .
+    git_repo: git@github.com:jordanhubbard/loom.git
     branch: main
     beads_path: .beads
-    git_auth_method: none
+    git_auth_method: ssh
+    git_strategy: direct
     is_perpetual: true
     is_sticky: true
     context:

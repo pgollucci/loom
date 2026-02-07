@@ -36,16 +36,18 @@ type BootstrapService struct {
 	templateDir    string
 	workspaceDir   string
 	gitopsManager  *gitops.Manager
+	beadsBackend   string // "sqlite" or "dolt"
 }
 
 // NewBootstrapService creates a new bootstrap service.
 // gitopsMgr is optional — pass nil to skip SSH key generation during bootstrap.
-func NewBootstrapService(pm *Manager, templateDir, workspaceDir string, gitopsMgr *gitops.Manager) *BootstrapService {
+func NewBootstrapService(pm *Manager, templateDir, workspaceDir string, gitopsMgr *gitops.Manager, beadsBackend string) *BootstrapService {
 	return &BootstrapService{
 		projectManager: pm,
 		templateDir:    templateDir,
 		workspaceDir:   workspaceDir,
 		gitopsManager:  gitopsMgr,
+		beadsBackend:   beadsBackend,
 	}
 }
 
@@ -225,7 +227,11 @@ func (bs *BootstrapService) copyTemplateFiles(projectPath string) error {
 
 // initializeBeads initializes the beads system for the project
 func (bs *BootstrapService) initializeBeads(ctx context.Context, projectPath string) error {
-	cmd := exec.CommandContext(ctx, "bd", "init")
+	args := []string{"init"}
+	if bs.beadsBackend == "dolt" {
+		args = append(args, "--backend", "dolt")
+	}
+	cmd := exec.CommandContext(ctx, "bd", args...)
 	cmd.Dir = projectPath
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to run bd init: %w", err)

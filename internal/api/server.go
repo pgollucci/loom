@@ -180,6 +180,10 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/beads", s.handleBeads)
 	mux.HandleFunc("/api/v1/beads/", s.handleBead)
 
+	// Federation
+	mux.HandleFunc("/api/v1/federation/status", s.handleFederationStatus)
+	mux.HandleFunc("/api/v1/federation/sync", s.handleFederationSync)
+
 	// Comments (must be registered before other /beads/ routes to avoid conflicts)
 	// Note: This is already handled by handleBead which routes to specific sub-paths
 	// but we also need a dedicated handler for comments
