@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jordanhubbard/loom/internal/actions"
+	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
@@ -42,14 +43,15 @@ func (s *Server) handlePairChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up agent
-	agentMgr := s.app.GetAgentManager()
-	if agentMgr == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Agent manager not available")
+	// Get database first — we query agent info from DB to avoid agent manager lock contention
+	db := s.app.GetDatabase()
+	if db == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
 		return
 	}
 
-	agent, err := agentMgr.GetAgent(req.AgentID)
+	// Look up agent from DB directly (avoids agent manager mutex which can block during dispatch)
+	agent, err := lookupAgentFromDB(db, req.AgentID)
 	if err != nil {
 		s.respondError(w, http.StatusNotFound, fmt.Sprintf("Agent not found: %s", req.AgentID))
 		return
@@ -78,13 +80,6 @@ func (s *Server) handlePairChat(w http.ResponseWriter, r *http.Request) {
 	_, ok := registeredProvider.Protocol.(provider.StreamingProtocol)
 	if !ok {
 		s.respondError(w, http.StatusBadRequest, "Provider does not support streaming")
-		return
-	}
-
-	// Load or create conversation context
-	db := s.app.GetDatabase()
-	if db == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
 		return
 	}
 
@@ -322,6 +317,31 @@ func applyTokenLimits(messages []provider.ChatMessage, model string) []provider.
 	}
 
 	return messages
+}
+
+// lookupAgentFromDB reads agent info directly from the database,
+// bypassing the agent manager's in-memory map (which can block under lock contention).
+func lookupAgentFromDB(db *database.Database, agentID string) (*models.Agent, error) {
+	query := `SELECT id, name, role, persona_name, provider_id, status, project_id FROM agents WHERE id = ?`
+	agent := &models.Agent{}
+	var role, providerID, projectID *string
+	err := db.DB().QueryRow(query, agentID).Scan(
+		&agent.ID, &agent.Name, &role, &agent.PersonaName,
+		&providerID, &agent.Status, &projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %s", agentID)
+	}
+	if role != nil {
+		agent.Role = *role
+	}
+	if providerID != nil {
+		agent.ProviderID = *providerID
+	}
+	if projectID != nil {
+		agent.ProjectID = *projectID
+	}
+	return agent, nil
 }
 
 // getModelTokenLimit returns the token limit for a given model
