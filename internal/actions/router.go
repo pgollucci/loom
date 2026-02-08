@@ -911,6 +911,13 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		return r.handleSubmitReview(ctx, action, actx)
 	case ActionRequestReview:
 		return r.handleRequestReview(ctx, action, actx)
+	case ActionDone:
+		return Result{
+			ActionType: action.Type,
+			Status:     "executed",
+			Message:    "agent signaled done",
+			Metadata:   map[string]interface{}{"reason": action.Reason},
+		}
 	case ActionSendAgentMessage:
 		return r.handleSendAgentMessage(ctx, action, actx)
 	case ActionDelegateTask:

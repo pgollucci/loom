@@ -680,6 +680,19 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		"agent_worker_id":      result.WorkerID,
 		"redispatch_requested": "true",
 	}
+
+	// Store action loop metadata if the task used the action loop
+	if result.LoopIterations > 0 {
+		ctxUpdates["loop_iterations"] = fmt.Sprintf("%d", result.LoopIterations)
+		ctxUpdates["terminal_reason"] = result.LoopTerminalReason
+
+		// If the loop completed successfully, the agent finished the work
+		if result.LoopTerminalReason == "completed" {
+			ctxUpdates["redispatch_requested"] = "false"
+		}
+		// If max_iterations, keep redispatch_requested=true (agent needs more turns)
+	}
+
 	historyJSON, loopDetected, loopReason := buildDispatchHistory(candidate, ag.ID)
 	ctxUpdates["dispatch_history"] = historyJSON
 	ctxUpdates["loop_detected"] = fmt.Sprintf("%t", loopDetected)

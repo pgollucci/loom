@@ -77,6 +77,9 @@ const (
 	ActionGitDiffBranches = "git_diff_branches"
 	ActionGitBeadCommits  = "git_bead_commits"
 
+	// Agent signals
+	ActionDone = "done"
+
 	// Agent communication actions
 	ActionSendAgentMessage = "send_agent_message"
 	ActionDelegateTask     = "delegate_task"
@@ -387,6 +390,8 @@ func validateAction(action Action) error {
 		if action.Patch == "" {
 			return errors.New("apply_patch requires patch")
 		}
+	case ActionDone:
+		// No required fields — agent signals work is complete
 	case ActionGitStatus, ActionGitDiff:
 		// No required fields
 	case ActionGitCommit:

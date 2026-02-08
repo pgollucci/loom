@@ -89,6 +89,11 @@ func New(dbPath string) (*Database, error) {
 		return nil, fmt.Errorf("failed to migrate credentials: %w", err)
 	}
 
+	if err := d.migrateLessons(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate lessons: %w", err)
+	}
+
 	return d, nil
 }
 

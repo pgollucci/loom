@@ -2,8 +2,11 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -444,15 +447,17 @@ type Task struct {
 
 // TaskResult represents the result of task execution
 type TaskResult struct {
-	TaskID      string
-	WorkerID    string
-	AgentID     string
-	Response    string
-	Actions     []actions.Result
-	TokensUsed  int
-	CompletedAt time.Time
-	Success     bool
-	Error       string
+	TaskID             string
+	WorkerID           string
+	AgentID            string
+	Response           string
+	Actions            []actions.Result
+	TokensUsed         int
+	CompletedAt        time.Time
+	Success            bool
+	Error              string
+	LoopIterations     int    // Set when action loop is used
+	LoopTerminalReason string // Set when action loop is used
 }
 
 // WorkerInfo contains information about a worker
@@ -465,4 +470,446 @@ type WorkerInfo struct {
 	CurrentTask string
 	StartedAt   time.Time
 	LastActive  time.Time
+}
+
+// --- Multi-turn action loop ---
+
+// LessonsProvider supplies and records project-specific lessons.
+type LessonsProvider interface {
+	GetLessonsForPrompt(projectID string) string
+	RecordLesson(projectID, category, title, detail, beadID, agentID string) error
+}
+
+// LoopConfig configures the multi-turn action loop.
+type LoopConfig struct {
+	MaxIterations   int
+	Router          *actions.Router
+	ActionContext   actions.ActionContext
+	LessonsProvider LessonsProvider
+	DB              *database.Database
+}
+
+// LoopResult contains the result of a multi-turn action loop.
+type LoopResult struct {
+	*TaskResult
+	Iterations     int              `json:"iterations"`
+	TerminalReason string           `json:"terminal_reason"` // "completed", "max_iterations", "escalated", "error", "no_actions", "parse_failures"
+	ActionLog      []ActionLogEntry `json:"action_log"`
+}
+
+// ActionLogEntry records a single iteration of the action loop.
+type ActionLogEntry struct {
+	Iteration int              `json:"iteration"`
+	Actions   []actions.Action `json:"actions"`
+	Results   []actions.Result `json:"results"`
+	Timestamp time.Time        `json:"timestamp"`
+}
+
+// ExecuteTaskWithLoop runs the task in a multi-turn action loop:
+// call LLM → parse actions → execute → format results → feed back → repeat.
+func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *LoopConfig) (*LoopResult, error) {
+	w.mu.Lock()
+	if w.status != WorkerStatusIdle {
+		w.mu.Unlock()
+		return nil, fmt.Errorf("worker %s is not idle", w.id)
+	}
+	w.status = WorkerStatusWorking
+	w.currentTask = task.ID
+	w.lastActive = time.Now()
+	w.mu.Unlock()
+
+	defer func() {
+		w.mu.Lock()
+		w.status = WorkerStatusIdle
+		w.currentTask = ""
+		w.lastActive = time.Now()
+		w.mu.Unlock()
+	}()
+
+	maxIter := config.MaxIterations
+	if maxIter <= 0 {
+		maxIter = 15
+	}
+
+	// Build initial messages
+	var messages []provider.ChatMessage
+	var conversationCtx *models.ConversationContext
+
+	if task.ConversationSession != nil {
+		conversationCtx = task.ConversationSession
+	} else if config.DB != nil && task.BeadID != "" && task.ProjectID != "" {
+		var err error
+		conversationCtx, err = config.DB.GetConversationContextByBeadID(task.BeadID)
+		if err != nil {
+			conversationCtx = models.NewConversationContext(
+				uuid.New().String(), task.BeadID, task.ProjectID, 24*time.Hour,
+			)
+			if createErr := config.DB.CreateConversationContext(conversationCtx); createErr != nil {
+				log.Printf("[ActionLoop] Warning: Failed to create conversation context: %v", createErr)
+				conversationCtx = nil
+			}
+		} else if conversationCtx != nil && conversationCtx.IsExpired() {
+			conversationCtx = models.NewConversationContext(
+				uuid.New().String(), task.BeadID, task.ProjectID, 24*time.Hour,
+			)
+			if createErr := config.DB.CreateConversationContext(conversationCtx); createErr != nil {
+				conversationCtx = nil
+			}
+		}
+	}
+
+	// Build system prompt with lessons
+	systemPrompt := w.buildEnhancedSystemPrompt(config.LessonsProvider, task.ProjectID, task.Context)
+
+	if conversationCtx != nil {
+		if len(conversationCtx.Messages) == 0 {
+			conversationCtx.AddMessage("system", systemPrompt, len(systemPrompt)/4)
+		}
+		for _, msg := range conversationCtx.Messages {
+			messages = append(messages, provider.ChatMessage{Role: msg.Role, Content: msg.Content})
+		}
+		userPrompt := task.Description
+		if task.Context != "" {
+			userPrompt = fmt.Sprintf("%s\n\nContext:\n%s", userPrompt, task.Context)
+		}
+		messages = append(messages, provider.ChatMessage{Role: "user", Content: userPrompt})
+	} else {
+		userPrompt := task.Description
+		if task.Context != "" {
+			userPrompt = fmt.Sprintf("%s\n\nContext:\n%s", userPrompt, task.Context)
+		}
+		messages = []provider.ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		}
+	}
+
+	loopResult := &LoopResult{
+		TaskResult: &TaskResult{
+			TaskID:   task.ID,
+			WorkerID: w.id,
+			AgentID:  w.agent.ID,
+			Success:  true,
+		},
+	}
+
+	var allActions []actions.Result
+	consecutiveParseFailures := 0
+	actionHashes := make(map[string]int) // for inner loop detection
+
+	for iteration := 0; iteration < maxIter; iteration++ {
+		select {
+		case <-ctx.Done():
+			loopResult.TerminalReason = "context_canceled"
+			loopResult.Iterations = iteration
+			loopResult.Actions = allActions
+			loopResult.CompletedAt = time.Now()
+			return loopResult, ctx.Err()
+		default:
+		}
+
+		// Handle token limits
+		trimmedMessages := w.handleTokenLimits(messages)
+
+		req := &provider.ChatCompletionRequest{
+			Model:       w.provider.Config.Model,
+			Messages:    trimmedMessages,
+			Temperature: 0.7,
+		}
+
+		log.Printf("[ActionLoop] Iteration %d/%d for task %s (messages: %d)", iteration+1, maxIter, task.ID, len(trimmedMessages))
+
+		resp, err := w.provider.Protocol.CreateChatCompletion(ctx, req)
+		if err != nil {
+			loopResult.TerminalReason = "error"
+			loopResult.Iterations = iteration + 1
+			loopResult.Actions = allActions
+			loopResult.Success = false
+			loopResult.Error = err.Error()
+			loopResult.CompletedAt = time.Now()
+			return loopResult, fmt.Errorf("LLM call failed on iteration %d: %w", iteration+1, err)
+		}
+
+		if len(resp.Choices) == 0 {
+			loopResult.TerminalReason = "error"
+			loopResult.Iterations = iteration + 1
+			loopResult.Actions = allActions
+			loopResult.Success = false
+			loopResult.Error = "no response from provider"
+			loopResult.CompletedAt = time.Now()
+			return loopResult, fmt.Errorf("no response from provider on iteration %d", iteration+1)
+		}
+
+		llmResponse := resp.Choices[0].Message.Content
+		loopResult.Response = llmResponse
+		loopResult.TokensUsed += resp.Usage.TotalTokens
+
+		// Add assistant message to conversation
+		messages = append(messages, provider.ChatMessage{Role: "assistant", Content: llmResponse})
+		if conversationCtx != nil {
+			conversationCtx.AddMessage("assistant", llmResponse, resp.Usage.CompletionTokens)
+		}
+
+		// Parse actions
+		env, parseErr := actions.DecodeLenient([]byte(llmResponse))
+		if parseErr != nil {
+			consecutiveParseFailures++
+			if consecutiveParseFailures >= 2 {
+				loopResult.TerminalReason = "parse_failures"
+				loopResult.Iterations = iteration + 1
+				loopResult.Actions = allActions
+				loopResult.Success = false
+				loopResult.Error = fmt.Sprintf("two consecutive parse failures: %v", parseErr)
+				loopResult.CompletedAt = time.Now()
+				return loopResult, nil
+			}
+
+			feedback := fmt.Sprintf("## Parse Error\n\nFailed to parse your response as valid JSON actions: %v\n\nPlease respond with a valid JSON object containing an \"actions\" array. Do not include any text outside the JSON.", parseErr)
+			messages = append(messages, provider.ChatMessage{Role: "user", Content: feedback})
+			if conversationCtx != nil {
+				conversationCtx.AddMessage("user", feedback, len(feedback)/4)
+			}
+			log.Printf("[ActionLoop] Parse error on iteration %d: %v", iteration+1, parseErr)
+			continue
+		}
+		consecutiveParseFailures = 0
+
+		// Check for empty actions (agent just provided analysis)
+		if len(env.Actions) == 0 {
+			loopResult.TerminalReason = "no_actions"
+			loopResult.Iterations = iteration + 1
+			loopResult.Actions = allActions
+			loopResult.CompletedAt = time.Now()
+			return loopResult, nil
+		}
+
+		// Execute actions
+		results, execErr := config.Router.Execute(ctx, env, config.ActionContext)
+		if execErr != nil {
+			loopResult.TerminalReason = "error"
+			loopResult.Iterations = iteration + 1
+			loopResult.Actions = allActions
+			loopResult.Success = false
+			loopResult.Error = execErr.Error()
+			loopResult.CompletedAt = time.Now()
+			return loopResult, nil
+		}
+
+		allActions = append(allActions, results...)
+
+		// Log the iteration
+		loopResult.ActionLog = append(loopResult.ActionLog, ActionLogEntry{
+			Iteration: iteration + 1,
+			Actions:   env.Actions,
+			Results:   results,
+			Timestamp: time.Now(),
+		})
+
+		// Check for terminal actions
+		termReason := checkTerminalCondition(env, results)
+		if termReason != "" {
+			loopResult.TerminalReason = termReason
+			loopResult.Iterations = iteration + 1
+			loopResult.Actions = allActions
+			loopResult.CompletedAt = time.Now()
+
+			// Record lessons from build failures
+			w.recordBuildLessons(config, env, results)
+
+			break
+		}
+
+		// Record lessons from build failures even on non-terminal iterations
+		w.recordBuildLessons(config, env, results)
+
+		// Inner loop detection: hash the actions and check for repeats
+		hash := hashActions(env.Actions)
+		actionHashes[hash]++
+		if actionHashes[hash] >= 10 {
+			loopResult.TerminalReason = "inner_loop"
+			loopResult.Iterations = iteration + 1
+			loopResult.Actions = allActions
+			loopResult.Success = false
+			loopResult.Error = "detected stuck inner loop (same actions repeated 10 times)"
+			loopResult.CompletedAt = time.Now()
+
+			if config.LessonsProvider != nil {
+				_ = config.LessonsProvider.RecordLesson(
+					task.ProjectID, "loop_pattern",
+					"Agent stuck in action loop",
+					fmt.Sprintf("Agent repeated the same actions 10 times. Actions hash: %s", hash),
+					task.BeadID, w.agent.ID,
+				)
+			}
+			return loopResult, nil
+		}
+		if actionHashes[hash] >= 5 {
+			log.Printf("[ActionLoop] Warning: same actions repeated %d times (hash %s)", actionHashes[hash], hash[:8])
+		}
+
+		// Format results as user message and continue
+		feedback := actions.FormatResultsAsUserMessage(results)
+		messages = append(messages, provider.ChatMessage{Role: "user", Content: feedback})
+		if conversationCtx != nil {
+			conversationCtx.AddMessage("user", feedback, len(feedback)/4)
+		}
+
+		// Persist conversation context periodically
+		if conversationCtx != nil && config.DB != nil && (iteration%3 == 2 || iteration == maxIter-1) {
+			if err := config.DB.UpdateConversationContext(conversationCtx); err != nil {
+				log.Printf("[ActionLoop] Warning: Failed to persist conversation: %v", err)
+			}
+		}
+	}
+
+	// If we exhausted iterations without terminal condition
+	if loopResult.TerminalReason == "" {
+		loopResult.TerminalReason = "max_iterations"
+		loopResult.Iterations = maxIter
+		loopResult.Actions = allActions
+		loopResult.CompletedAt = time.Now()
+	}
+
+	// Final persist
+	if conversationCtx != nil && config.DB != nil {
+		if err := config.DB.UpdateConversationContext(conversationCtx); err != nil {
+			log.Printf("[ActionLoop] Warning: Failed to persist final conversation: %v", err)
+		}
+	}
+
+	return loopResult, nil
+}
+
+// buildEnhancedSystemPrompt builds the system prompt with lessons and progress context.
+func (w *Worker) buildEnhancedSystemPrompt(lp LessonsProvider, projectID, progressCtx string) string {
+	persona := w.agent.Persona
+	prompt := ""
+
+	if persona == nil {
+		prompt = fmt.Sprintf("You are %s, an AI agent.\n\n", w.agent.Name)
+	} else {
+		if persona.Character != "" {
+			prompt += fmt.Sprintf("# Your Character\n%s\n\n", persona.Character)
+		}
+		if persona.Mission != "" {
+			prompt += fmt.Sprintf("# Your Mission\n%s\n\n", persona.Mission)
+		}
+		if persona.Personality != "" {
+			prompt += fmt.Sprintf("# Your Personality\n%s\n\n", persona.Personality)
+		}
+		if len(persona.Capabilities) > 0 {
+			prompt += "# Your Capabilities\n"
+			for _, cap := range persona.Capabilities {
+				prompt += fmt.Sprintf("- %s\n", cap)
+			}
+			prompt += "\n"
+		}
+		if persona.AutonomyInstructions != "" {
+			prompt += fmt.Sprintf("# Autonomy Guidelines\n%s\n\n", persona.AutonomyInstructions)
+		}
+		if persona.DecisionInstructions != "" {
+			prompt += fmt.Sprintf("# Decision Making\n%s\n\n", persona.DecisionInstructions)
+		}
+	}
+
+	// Get lessons
+	var lessons string
+	if lp != nil && projectID != "" {
+		lessons = lp.GetLessonsForPrompt(projectID)
+	}
+
+	prompt += fmt.Sprintf("# Required Output Format\n%s\n\n", actions.BuildEnhancedPrompt(lessons, progressCtx))
+
+	return prompt
+}
+
+// checkTerminalCondition checks if any action in the envelope signals termination.
+func checkTerminalCondition(env *actions.ActionEnvelope, results []actions.Result) string {
+	for _, a := range env.Actions {
+		switch a.Type {
+		case actions.ActionCloseBead:
+			return "completed"
+		case actions.ActionDone:
+			return "completed"
+		case actions.ActionEscalateCEO:
+			return "escalated"
+		}
+	}
+	return ""
+}
+
+// recordBuildLessons checks action results for build/test failures and records lessons.
+func (w *Worker) recordBuildLessons(config *LoopConfig, env *actions.ActionEnvelope, results []actions.Result) {
+	if config.LessonsProvider == nil {
+		return
+	}
+
+	for i, r := range results {
+		if r.Status != "error" && r.Status != "executed" {
+			continue
+		}
+
+		var category, title, detail string
+
+		switch r.ActionType {
+		case actions.ActionBuildProject:
+			if r.Status == "error" || (r.Metadata != nil && r.Metadata["success"] == false) {
+				category = "compiler_error"
+				title = "Build failure"
+				output, _ := r.Metadata["output"].(string)
+				if output == "" {
+					output = r.Message
+				}
+				detail = truncateForLesson(output)
+			}
+		case actions.ActionRunTests:
+			if r.Status == "error" || (r.Metadata != nil && r.Metadata["success"] == false) {
+				category = "test_failure"
+				title = "Test failure"
+				output, _ := r.Metadata["output"].(string)
+				if output == "" {
+					output = r.Message
+				}
+				detail = truncateForLesson(output)
+			}
+		case actions.ActionApplyPatch, actions.ActionEditCode:
+			if r.Status == "error" {
+				category = "edit_failure"
+				title = "Patch/edit failure"
+				detail = truncateForLesson(r.Message)
+			}
+		}
+
+		if category != "" {
+			_ = i // suppress unused warning
+			_ = config.LessonsProvider.RecordLesson(
+				config.ActionContext.ProjectID,
+				category, title, detail,
+				config.ActionContext.BeadID,
+				w.agent.ID,
+			)
+		}
+	}
+}
+
+func truncateForLesson(s string) string {
+	if len(s) <= 500 {
+		return s
+	}
+	return s[:500]
+}
+
+// hashActions computes a deterministic hash of action types and key fields.
+func hashActions(acts []actions.Action) string {
+	var sb strings.Builder
+	for _, a := range acts {
+		sb.WriteString(a.Type)
+		sb.WriteString("|")
+		sb.WriteString(a.Path)
+		sb.WriteString("|")
+		sb.WriteString(a.Command)
+		sb.WriteString("|")
+	}
+	h := sha256.Sum256([]byte(sb.String()))
+	return hex.EncodeToString(h[:8])
 }

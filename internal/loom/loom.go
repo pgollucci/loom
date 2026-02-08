@@ -250,6 +250,17 @@ func New(cfg *config.Config) (*Loom, error) {
 	arb.actionRouter = actionRouter
 	agentMgr.SetActionRouter(actionRouter)
 
+	// Enable multi-turn action loop
+	agentMgr.SetActionLoopEnabled(true)
+	agentMgr.SetMaxLoopIterations(15)
+	if db != nil {
+		agentMgr.SetDatabase(db)
+		lessonsProvider := dispatch.NewLessonsProvider(db)
+		if lessonsProvider != nil {
+			agentMgr.SetLessonsProvider(lessonsProvider)
+		}
+	}
+
 	arb.dispatcher = dispatch.NewDispatcher(arb.beadsManager, arb.projectManager, arb.agentManager, arb.providerRegistry, eb)
 	arb.readinessCache = make(map[string]projectReadinessState)
 	arb.readinessFailures = make(map[string]time.Time)

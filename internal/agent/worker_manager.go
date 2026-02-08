@@ -10,6 +10,7 @@ import (
 
 	"github.com/jordanhubbard/loom/internal/actions"
 	"github.com/jordanhubbard/loom/internal/analytics"
+	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/observability"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
@@ -19,15 +20,19 @@ import (
 
 // WorkerManager manages agents with worker pool integration
 type WorkerManager struct {
-	agents           map[string]*models.Agent
-	workerPool       *worker.Pool
-	providerRegistry *provider.Registry
-	eventBus         *eventbus.EventBus
-	agentPersister   interface{ UpsertAgent(*models.Agent) error }
-	actionRouter     *actions.Router
-	analyticsLogger  *analytics.Logger
-	mu               sync.RWMutex
-	maxAgents        int
+	agents             map[string]*models.Agent
+	workerPool         *worker.Pool
+	providerRegistry   *provider.Registry
+	eventBus           *eventbus.EventBus
+	agentPersister     interface{ UpsertAgent(*models.Agent) error }
+	actionRouter       *actions.Router
+	analyticsLogger    *analytics.Logger
+	actionLoopEnabled  bool
+	maxLoopIterations  int
+	lessonsProvider    worker.LessonsProvider
+	db                 *database.Database
+	mu                 sync.RWMutex
+	maxAgents          int
 }
 
 // NewWorkerManager creates a new agent manager with worker pool
@@ -57,6 +62,30 @@ func (m *WorkerManager) SetAnalyticsLogger(l *analytics.Logger) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.analyticsLogger = l
+}
+
+func (m *WorkerManager) SetActionLoopEnabled(enabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.actionLoopEnabled = enabled
+}
+
+func (m *WorkerManager) SetMaxLoopIterations(max int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.maxLoopIterations = max
+}
+
+func (m *WorkerManager) SetLessonsProvider(lp worker.LessonsProvider) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lessonsProvider = lp
+}
+
+func (m *WorkerManager) SetDatabase(db *database.Database) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.db = db
 }
 
 func (m *WorkerManager) persistAgent(agent *models.Agent) {
@@ -359,7 +388,114 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 		}
 	}
 
-	// Execute task through worker pool
+	// Action loop mode: delegate full loop to the worker
+	router := m.actionRouter
+	if m.actionLoopEnabled && router != nil {
+		workerInstance, workerErr := m.workerPool.GetWorker(agentID)
+		if workerErr != nil {
+			return nil, fmt.Errorf("failed to get worker for loop: %w", workerErr)
+		}
+
+		// Set database on worker if available
+		if m.db != nil {
+			workerInstance.SetDatabase(m.db)
+		}
+
+		maxIter := m.maxLoopIterations
+		if maxIter <= 0 {
+			maxIter = 15
+		}
+
+		loopConfig := &worker.LoopConfig{
+			MaxIterations: maxIter,
+			Router:        router,
+			ActionContext: actions.ActionContext{
+				AgentID:   agentID,
+				BeadID:    task.BeadID,
+				ProjectID: task.ProjectID,
+			},
+			LessonsProvider: m.lessonsProvider,
+			DB:              m.db,
+		}
+
+		loopResult, loopErr := workerInstance.ExecuteTaskWithLoop(ctx, task, loopConfig)
+		if loopErr != nil {
+			elapsed := time.Since(startTime)
+			observability.Error("agent.task_complete", map[string]interface{}{
+				"agent_id":    agent.ID,
+				"project_id":  projectID,
+				"provider_id": agent.ProviderID,
+				"task_id":     taskID,
+				"bead_id":     beadID,
+				"duration_ms": elapsed.Milliseconds(),
+				"success":     false,
+				"loop_mode":   true,
+			}, loopErr)
+			return nil, fmt.Errorf("action loop failed: %w", loopErr)
+		}
+
+		result := loopResult.TaskResult
+		if result == nil {
+			result = &worker.TaskResult{
+				TaskID:   task.ID,
+				WorkerID: agentID,
+				AgentID:  agentID,
+			}
+		}
+
+		// Store loop metadata
+		result.LoopIterations = loopResult.Iterations
+		result.LoopTerminalReason = loopResult.TerminalReason
+
+		_ = m.UpdateHeartbeat(agentID)
+
+		elapsed := time.Since(startTime)
+		if task != nil {
+			observability.Info("agent.task_complete", map[string]interface{}{
+				"agent_id":        agent.ID,
+				"project_id":      projectID,
+				"provider_id":     agent.ProviderID,
+				"task_id":         taskID,
+				"bead_id":         beadID,
+				"duration_ms":     elapsed.Milliseconds(),
+				"success":         result.Success,
+				"error":           result.Error,
+				"loop_iterations": loopResult.Iterations,
+				"terminal_reason": loopResult.TerminalReason,
+				"loop_mode":       true,
+			})
+		}
+		log.Printf("Agent %s completed task %s via action loop (%d iterations, reason: %s)",
+			agent.Name, task.ID, loopResult.Iterations, loopResult.TerminalReason)
+
+		if al := m.analyticsLogger; al != nil && result != nil {
+			statusCode := 200
+			if !result.Success {
+				statusCode = 500
+			}
+			_ = al.LogRequest(ctx, &analytics.RequestLog{
+				UserID:      "agent:" + agent.Name,
+				Method:      "POST",
+				Path:        "/internal/worker/execute-loop",
+				ProviderID:  agent.ProviderID,
+				TotalTokens: int64(result.TokensUsed),
+				LatencyMs:   elapsed.Milliseconds(),
+				StatusCode:  statusCode,
+				ErrorMessage: result.Error,
+				Metadata: map[string]string{
+					"agent_id":        agent.ID,
+					"bead_id":         beadID,
+					"task_id":         taskID,
+					"loop_iterations": fmt.Sprintf("%d", loopResult.Iterations),
+					"terminal_reason": loopResult.TerminalReason,
+				},
+			})
+		}
+
+		return result, nil
+	}
+
+	// Execute task through worker pool (legacy single-shot mode)
 	result, err := m.workerPool.ExecuteTask(ctx, task, agentID)
 	if err != nil {
 		elapsed := time.Since(startTime)
