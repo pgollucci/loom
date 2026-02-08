@@ -1940,3 +1940,93 @@ button.small {
     font-size: 0.85rem;
     white-space: nowrap;
 }
+
+/* Bead viewer/editor modal */
+.bead-modal-viewer {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.bead-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.bead-modal-header code {
+    font-size: 0.8rem;
+    background: rgba(0,0,0,0.05);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+}
+
+.bead-modal-fields {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 0.75rem;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+.bead-modal-fields label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding-top: 0.35rem;
+}
+
+.bead-modal-fields input,
+.bead-modal-fields select,
+.bead-modal-fields textarea {
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+.bead-modal-fields textarea {
+    grid-column: 2;
+    min-height: 4rem;
+    resize: vertical;
+}
+
+.bead-modal-assign {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.bead-modal-assign strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.bead-modal-assign-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.bead-modal-assign-row select {
+    flex: 1;
+}
+
+.bead-modal-assign-row button {
+    white-space: nowrap;
+}
+
+.bead-modal-meta {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.bead-modal-meta summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.bead-modal-meta > div {
+    margin-bottom: 0.25rem;
+}

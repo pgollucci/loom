@@ -2821,46 +2821,166 @@ function viewBead(beadId) {
     const bead = state.beads.find(b => b.id === beadId);
     if (!bead) return;
 
-    const tags = Array.isArray(bead.tags) && bead.tags.length > 0 ? bead.tags.map((t) => `<span class="badge">${escapeHtml(String(t))}</span>`).join(' ') : '<em>none</em>';
-    const assigned = bead.assigned_to ? escapeHtml(bead.assigned_to) : '<em>unassigned</em>';
+    const statusClass = getCondensedBeadStatusClass(bead);
     const blockedBy = Array.isArray(bead.blocked_by) ? bead.blocked_by : [];
     const blocks = Array.isArray(bead.blocks) ? bead.blocks : [];
-    const statusClass = getCondensedBeadStatusClass(bead);
+    const tagsValue = Array.isArray(bead.tags) ? bead.tags.join(', ') : '';
+    const contextJson = bead.context ? JSON.stringify(bead.context, null, 2) : '';
+
+    const statusOptions = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'ready', 'tombstone', 'pinned']
+        .map(s => `<option value="${s}"${bead.status === s ? ' selected' : ''}>${s}</option>`)
+        .join('');
+    const priorityOptions = [0, 1, 2, 3, 4]
+        .map(p => `<option value="${p}"${bead.priority === p ? ' selected' : ''}>P${p}</option>`)
+        .join('');
+
+    const availableAgents = (state.agents || []).filter(a => a.status !== 'terminated');
+    const agentOptions = '<option value="">-- select agent --</option>' +
+        availableAgents.map(a => `<option value="${escapeHtml(a.id)}"${bead.assigned_to === a.id ? ' selected' : ''}>${escapeHtml(a.id)}</option>`).join('');
+
     const body = `
-        <div class="bead-condensed ${statusClass}">
-            <div style="margin-bottom: 0.5rem;"><span class="badge priority-${bead.priority}">P${bead.priority}</span> <span class="badge">${escapeHtml(bead.type)}</span> <span class="badge">${escapeHtml(bead.status)}</span></div>
-            <div><strong>ID:</strong> ${escapeHtml(bead.id)}</div>
-            <div><strong>Assigned to:</strong> ${assigned}</div>
-            <div style="margin-top: 0.5rem;"><strong>Tags:</strong> ${tags}</div>
-            <div style="margin-top: 0.5rem;">
-                <strong>Blocked by:</strong> ${blockedBy.length ? escapeHtml(blockedBy.join(', ')) : '<em>none</em>'}
+        <div class="bead-modal-viewer bead-condensed ${statusClass}">
+            <div class="bead-modal-header">
+                <code>${escapeHtml(bead.id)}</code>
+                <span class="badge priority-${bead.priority}">P${bead.priority}</span>
+                <span class="badge">${escapeHtml(bead.type)}</span>
+                <span class="badge">${escapeHtml(bead.status)}</span>
             </div>
-            <div style="margin-top: 0.25rem;">
-                <strong>Blocks:</strong> ${blocks.length ? escapeHtml(blocks.join(', ')) : '<em>none</em>'}
+
+            <div class="bead-modal-fields">
+                <label for="bead-modal-title">Title</label>
+                <input id="bead-modal-title" type="text" value="${escapeHtml(bead.title || '')}" />
+
+                <label for="bead-modal-status">Status</label>
+                <select id="bead-modal-status">${statusOptions}</select>
+
+                <label for="bead-modal-priority">Priority</label>
+                <select id="bead-modal-priority">${priorityOptions}</select>
+
+                <label for="bead-modal-tags">Tags</label>
+                <input id="bead-modal-tags" type="text" value="${escapeHtml(tagsValue)}" placeholder="comma-separated" />
+
+                <label for="bead-modal-desc">Description</label>
+                <textarea id="bead-modal-desc" rows="4">${escapeHtml(bead.description || '')}</textarea>
             </div>
-            <div style="margin-top: 1rem; white-space: pre-wrap;">${escapeHtml(bead.description || 'No description')}</div>
-            <div class="bead-status-legend">
-                <span class="bead-status-chip bead-status-open">Open</span>
-                <span class="bead-status-chip bead-status-in_progress">In Progress</span>
-                <span class="bead-status-chip bead-status-blocked">Blocked</span>
-                <span class="bead-status-chip bead-status-deferred">Deferred</span>
-                <span class="bead-status-chip bead-status-ready">Ready</span>
-                <span class="bead-status-chip bead-status-closed">Closed</span>
-                <span class="bead-status-chip bead-status-tombstone">Tombstone</span>
-                <span class="bead-status-chip bead-status-pinned">Pinned</span>
+
+            <div class="bead-modal-assign">
+                <strong>Agent Assignment</strong>
+                <div class="bead-modal-assign-row">
+                    <select id="bead-modal-agent">${agentOptions}</select>
+                    <button type="button" id="bead-modal-dispatch-btn" class="secondary">Assign &amp; Dispatch</button>
+                </div>
             </div>
+
+            <details class="bead-modal-meta">
+                <summary>Metadata</summary>
+                <div><strong>Assigned to:</strong> ${bead.assigned_to ? escapeHtml(bead.assigned_to) : '<em>unassigned</em>'}</div>
+                <div><strong>Project:</strong> ${escapeHtml(bead.project_id || '')}</div>
+                <div><strong>Blocked by:</strong> ${blockedBy.length ? escapeHtml(blockedBy.join(', ')) : '<em>none</em>'}</div>
+                <div><strong>Blocks:</strong> ${blocks.length ? escapeHtml(blocks.join(', ')) : '<em>none</em>'}</div>
+                <div><strong>Created:</strong> ${bead.created_at ? new Date(bead.created_at).toLocaleString() : 'unknown'}</div>
+                <div><strong>Updated:</strong> ${bead.updated_at ? new Date(bead.updated_at).toLocaleString() : 'unknown'}</div>
+                ${contextJson ? `<div style="margin-top:0.5rem"><strong>Context:</strong><pre style="max-height:10rem;overflow:auto;font-size:0.8rem">${escapeHtml(contextJson)}</pre></div>` : ''}
+            </details>
         </div>
     `;
 
     openAppModal({
-        title: bead.title,
+        title: 'Bead Details',
         bodyHtml: body,
         actions: [
+            { label: 'Save Changes', variant: '', onClick: () => saveBeadFromModal(bead.id) },
             { label: 'Redispatch', variant: 'secondary', onClick: () => redispatchBead(bead.id) },
-            { label: 'Escalate to CEO', variant: 'secondary', onClick: () => escalateBead(bead.id) },
-            { label: 'Close', variant: 'secondary', onClick: () => closeAppModal() }
+            { label: 'Close Bead', variant: 'secondary', onClick: () => closeBeadFromModal(bead.id) },
+            { label: 'Dismiss', variant: 'secondary', onClick: () => closeAppModal() }
         ]
     });
+
+    // Wire up dispatch button after modal is in the DOM
+    const dispatchBtn = document.getElementById('bead-modal-dispatch-btn');
+    if (dispatchBtn) {
+        dispatchBtn.addEventListener('click', () => dispatchBeadFromModal(bead.id));
+    }
+}
+
+async function saveBeadFromModal(beadId) {
+    const title = (document.getElementById('bead-modal-title') || {}).value;
+    const status = (document.getElementById('bead-modal-status') || {}).value;
+    const priority = Number((document.getElementById('bead-modal-priority') || {}).value);
+    const tags = String((document.getElementById('bead-modal-tags') || {}).value || '')
+        .split(',').map(t => t.trim()).filter(t => t.length > 0);
+    const description = (document.getElementById('bead-modal-desc') || {}).value;
+
+    const payload = {};
+    if (title !== undefined) payload.title = title;
+    if (status) payload.status = status;
+    if (!isNaN(priority)) payload.priority = priority;
+    payload.tags = tags;
+    if (description !== undefined) payload.description = description;
+
+    try {
+        setBusy(`editBead:${beadId}`, true);
+        await saveBeadUpdate(beadId, payload, { successMessage: 'Bead updated' });
+        closeAppModal();
+    } catch (error) {
+        // Error already handled by saveBeadUpdate
+    } finally {
+        setBusy(`editBead:${beadId}`, false);
+    }
+}
+
+async function dispatchBeadFromModal(beadId) {
+    const agentSelect = document.getElementById('bead-modal-agent');
+    const agentId = agentSelect ? agentSelect.value : '';
+    if (!agentId) {
+        showToast('Select an agent first.', 'error');
+        return;
+    }
+
+    const ok = await confirmModal({
+        title: 'Assign & Dispatch?',
+        body: `Claim bead ${beadId} for agent ${agentId}? This sets status to in_progress and kicks the workflow engine.`,
+        confirmText: 'Dispatch',
+        cancelText: 'Cancel'
+    });
+    if (!ok) return;
+
+    try {
+        setBusy(`dispatchBead:${beadId}`, true);
+        await apiCall(`/beads/${beadId}/claim`, {
+            method: 'POST',
+            body: JSON.stringify({ agent_id: agentId })
+        });
+        showToast('Bead dispatched to ' + agentId, 'success');
+        closeAppModal();
+        loadAll();
+    } catch (error) {
+        // Error already handled by apiCall
+    } finally {
+        setBusy(`dispatchBead:${beadId}`, false);
+    }
+}
+
+async function closeBeadFromModal(beadId) {
+    const ok = await confirmModal({
+        title: 'Close bead?',
+        body: `Close bead ${beadId}? This will mark it as closed.`,
+        confirmText: 'Close',
+        cancelText: 'Cancel',
+        danger: true
+    });
+    if (!ok) return;
+
+    try {
+        setBusy(`closeBead:${beadId}`, true);
+        await saveBeadUpdate(beadId, { status: 'closed' }, { successMessage: 'Bead closed' });
+        closeAppModal();
+        loadAll();
+    } catch (error) {
+        // Error already handled
+    } finally {
+        setBusy(`closeBead:${beadId}`, false);
+    }
 }
 
 async function dispatchBeadToAgent(beadId) {
