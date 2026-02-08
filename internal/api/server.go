@@ -240,6 +240,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/chat/completions/stream", s.handleStreamChatCompletion)
 	mux.HandleFunc("/api/v1/chat/completions", s.handleChatCompletion)
 
+	// Pair-programming chat (SSE streaming with conversation persistence)
+	mux.HandleFunc("/api/v1/pair", s.handlePairChat)
+
 	// Git operations
 	mux.HandleFunc("/api/v1/projects/git/sync", s.handleGitSync)
 	mux.HandleFunc("/api/v1/projects/git/commit", s.handleGitCommit)
@@ -479,6 +482,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			r.URL.Path == "/api/v1/events/stream" ||
 			r.URL.Path == "/api/v1/chat/completions/stream" ||
 			r.URL.Path == "/api/v1/chat/completions" ||
+			r.URL.Path == "/api/v1/pair" ||
 			strings.HasPrefix(r.URL.Path, "/static/") {
 			next.ServeHTTP(w, r)
 			return

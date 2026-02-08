@@ -6,12 +6,13 @@
     <title>Loom - Autonomous Agent Orchestration</title>
     <link rel="stylesheet" href="/static/css/style.css?v=8">
     <script src="/static/js/diagnostic.js?v=6"></script>
-    <link rel="stylesheet" href="/static/css/bootstrap.css?v=2">
+    <link rel="stylesheet" href="/static/css/bootstrap.css?v=3">
     <script src="/static/js/bootstrap.js"></script>
     <script src="/static/js/projects-table.js"></script>
     <script src="/static/js/conversations.js"></script>
     <script src="/static/js/create-bead.js"></script>
     <script src="/static/js/file-locks.js"></script>
+    <script src="/static/js/pair.js?v=1"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -864,6 +865,25 @@
         </div>
     </div>
 
+    <!-- Pair-Programming Panel (slide-out right panel) -->
+    <div id="pair-panel" class="pair-panel" role="complementary" aria-label="Pair Programming">
+        <div class="pair-header">
+            <div class="pair-header-info">
+                <strong>Pair Programming</strong>
+                <span id="pair-bead-info" class="pair-bead-id"></span>
+            </div>
+            <div class="pair-header-controls">
+                <select id="pair-agent-select" aria-label="Select agent"></select>
+                <button type="button" id="pair-close-btn" class="secondary" aria-label="Close pair panel">Close</button>
+            </div>
+        </div>
+        <div id="pair-messages" class="pair-messages"></div>
+        <div class="pair-input-area">
+            <textarea id="pair-input" rows="2" placeholder="Type a message... (Enter to send, Shift+Enter for newline)" aria-label="Chat message"></textarea>
+            <button type="button" id="pair-send-btn" class="primary">Send</button>
+        </div>
+    </div>
+
     <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <footer>
@@ -874,7 +894,7 @@
     <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
     <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
     <script src="https://unpkg.com/cytoscape-svg@0.4.0/cytoscape-svg.js"></script>
-    <script src="/static/js/app.js?v=15"></script>
+    <script src="/static/js/app.js?v=16"></script>
     <script src="/static/js/logs.js?v=6"></script>
     <script src="/static/js/diagrams.js?v=3"></script>
 

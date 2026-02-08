@@ -682,6 +682,7 @@ async function loadAPIKeys() {
 // Render functions
 function render() {
     if (modalState.activeId) return; // Skip render while a modal is open
+    if (window.pairState && window.pairState.open) return; // Skip render while pair panel is open
     renderSystemStatus();
     renderProjectViewer();
     renderKanban();
@@ -2927,6 +2928,11 @@ function viewBead(beadId) {
         bodyHtml: body,
         actions: [
             { label: 'Save Changes', variant: '', onClick: () => saveBeadFromModal(bead.id) },
+            { label: 'Pair', variant: 'secondary', onClick: () => {
+                const agentId = (document.getElementById('bead-modal-agent') || {}).value || '';
+                closeAppModal();
+                if (typeof openPairPanel === 'function') openPairPanel(bead.id, agentId);
+            }},
             { label: 'Redispatch', variant: 'secondary', onClick: () => redispatchBead(bead.id) },
             { label: 'Close Bead', variant: 'secondary', onClick: () => closeBeadFromModal(bead.id) },
             { label: 'Dismiss', variant: 'secondary', onClick: () => closeAppModal() }
