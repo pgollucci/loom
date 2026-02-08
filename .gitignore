@@ -49,3 +49,5 @@ agenticorp-self/
 # Runtime data
 data/
 logs/
+loom.log
+.loom.pid

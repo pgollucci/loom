@@ -176,6 +176,11 @@
     };
 
     window.fileApiBug = function(details = {}) {
+        // Only auto-file server errors (5xx), not client errors (4xx)
+        const status = details.status || 0;
+        if (status >= 400 && status < 500) {
+            return;
+        }
         autoFileError({
             message: details.message || `API Error: ${details.method || 'GET'} ${details.endpoint || ''}`.trim(),
             source: 'frontend',
@@ -187,7 +192,7 @@
             context: {
                 endpoint: details.endpoint || '',
                 method: details.method || 'GET',
-                status: details.status || 0,
+                status: status,
                 response: details.response || ''
             }
         });

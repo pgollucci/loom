@@ -117,7 +117,7 @@ projects:
 
 web_ui:
   enabled: true
-  static_path: /app/src/web/static  # Use volume-mounted files for live updates
+  static_path: ./web/static
   refresh_interval: 5  # seconds
 
 hot_reload:

@@ -659,7 +659,7 @@ async function loadSystemStatus() {
 
 async function loadUsers() {
     try {
-        state.users = await apiCall('/users', { suppressToast: true });
+        state.users = await apiCall('/auth/users', { suppressToast: true, skipAutoFile: true });
     } catch (error) {
         // Users endpoint may not be available without auth
         state.users = [];
@@ -668,7 +668,7 @@ async function loadUsers() {
 
 async function loadAPIKeys() {
     try {
-        state.apiKeys = await apiCall('/apikeys', { suppressToast: true });
+        state.apiKeys = await apiCall('/auth/api-keys', { suppressToast: true, skipAutoFile: true });
     } catch (error) {
         // API keys endpoint may not be available without auth
         state.apiKeys = [];

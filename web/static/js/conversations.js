@@ -5,7 +5,8 @@ async function renderConversationsView() {
     if (!container) return;
 
     try {
-        const conversations = await apiCall('/conversations');
+        const projectId = (state.projects && state.projects[0]) ? state.projects[0].id : '';
+        const conversations = await apiCall(`/conversations${projectId ? '?project_id=' + encodeURIComponent(projectId) : ''}`);
 
         if (!conversations || conversations.length === 0) {
             container.innerHTML = renderEmptyState(

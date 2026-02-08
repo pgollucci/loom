@@ -1,4 +1,4 @@
-.PHONY: all build build-all run restart test test-api coverage fmt vet deps clean distclean install config dev-setup docker-build docker-run docker-stop docker-clean help lint lint-yaml lint-docs release release-major release-minor release-patch
+.PHONY: all build build-all run restart start stop test test-api coverage fmt vet deps clean distclean install config dev-setup docker-build docker-run docker-stop docker-clean help lint lint-yaml lint-docs release release-major release-minor release-patch
 
 # Build variables
 BINARY_NAME=loom
@@ -81,6 +81,42 @@ run: build
 restart: build
 	@docker compose down
 	$(call run_with_failure_bead,run,docker compose up --build)
+
+PIDFILE=.loom.pid
+
+# Start loom locally (native, no Docker)
+start:
+	@if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
+		echo "Loom is already running (PID $$(cat $(PIDFILE)))"; \
+	else \
+		echo "Building loom..."; \
+		go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/loom; \
+		echo "Starting loom (logging to loom.log)..."; \
+		bash -c './$(BINARY_NAME) > loom.log 2>&1 & echo $$! > $(PIDFILE)'; \
+		sleep 2; \
+		if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
+			echo "Loom started (PID $$(cat $(PIDFILE)), http://localhost:8081)"; \
+		else \
+			echo "Loom failed to start. Check loom.log"; \
+			rm -f $(PIDFILE); \
+			exit 1; \
+		fi; \
+	fi
+
+# Stop locally-running loom
+stop:
+	@if [ -f $(PIDFILE) ]; then \
+		pid=$$(cat $(PIDFILE)); \
+		if kill -0 $$pid 2>/dev/null; then \
+			echo "Stopping loom (PID $$pid)..."; \
+			kill $$pid && rm -f $(PIDFILE) && echo "Stopped"; \
+		else \
+			echo "Loom not running (stale pidfile)"; \
+			rm -f $(PIDFILE); \
+		fi; \
+	else \
+		echo "Loom not running (no pidfile)"; \
+	fi
 
 # Run tests
 test:
@@ -183,10 +219,12 @@ help:
 	@echo "Loom - Makefile Commands"
 	@echo ""
 	@echo "Development:"
+	@echo "  make start        - Build and start loom locally (native)"
+	@echo "  make stop         - Stop locally-running loom"
 	@echo "  make build        - Build the application"
 	@echo "  make build-all    - Build for multiple platforms"
-	@echo "  make run          - Build and run the application"
-	@echo "  make restart      - Build, stop containers, and run"
+	@echo "  make run          - Build and run the application (Docker)"
+	@echo "  make restart      - Build, stop containers, and run (Docker)"
 	@echo "  make test         - Run unit tests"
 	@echo "  make test-api     - Run post-flight API tests"
 	@echo "  make coverage     - Run tests with coverage report"
