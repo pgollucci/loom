@@ -32,6 +32,13 @@ beads.left.meta.json
 beads.right.jsonl
 beads.right.meta.json
 
+# Dolt database (local-only, large binaries)
+dolt/
+dolt-access.lock
+
+# Backup files
+*.backup
+
 # Sync state (local-only, per-machine)
 # These files are machine-specific and should not be shared across clones
 .sync.lock
