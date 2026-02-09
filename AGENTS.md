@@ -21,7 +21,7 @@ Then reference the specific guides below:
 ### 1. Start the System
 
 ```bash
-docker compose up -d
+make start
 ```
 
 Access at `http://localhost:8080`
@@ -282,14 +282,15 @@ See [TEMPORAL_DSL.md](docs/TEMPORAL_DSL.md) for complete reference.
 
 ### Makefile Targets
 
-**IMPORTANT: Always use `make` targets to manage the loom process. Never use `pkill`, `kill`, `docker compose` commands, or other manual process management directly.**
+**IMPORTANT: Always use `make` targets to manage loom. Never use `pkill`, `kill`, or raw `docker compose` commands directly. Loom always runs in Docker containers.**
 
 | Target | Description | When to Use |
 |--------|-------------|-------------|
-| `make start` | Build and start loom natively, PID in `.loom.pid`, logs to `loom.log`, serves on `http://localhost:8081` | Local development |
-| `make stop` | Stop the locally-running loom process | End of dev session |
-| `make restart` | Stop then rebuild and restart loom | After code changes |
-| `make build` | Build the Go binary | Compile without running |
+| `make start` | Build container and start full stack (background) | Start loom |
+| `make stop` | Stop all containers | Stop loom |
+| `make restart` | Rebuild and restart all containers | After code changes |
+| `make logs` | Follow loom container logs | Debugging |
+| `make build` | Build the Go binary (local, not Docker) | Compile check, install |
 | `make build-all` | Cross-compile for linux/darwin/windows | Release builds |
 | `make test` | Run unit tests locally (`go test ./...`) | Pre-commit, quick check |
 | `make test-docker` | Run tests in Docker with Temporal | Full integration tests |
@@ -301,60 +302,58 @@ See [TEMPORAL_DSL.md](docs/TEMPORAL_DSL.md) for complete reference.
 | `make deps` | `go mod download && go mod tidy` | After dependency changes |
 | `make clean` | Remove binaries and coverage files | Quick cleanup |
 | `make distclean` | Stop containers, remove images, prune Docker, clear Go cache | Full reset |
-| `make run` | `docker compose up --build` (foreground) | Full Docker stack |
-| `make docker-build` | Build Docker images | Before Docker deploy |
-| `make docker-up` | Start containers (background) | Docker deployment |
-| `make docker-down` | Stop containers | Stop Docker stack |
 | `make release` | Create patch release (x.y.Z) | Versioned release |
 | `make release-minor` | Create minor release (x.Y.0) | Feature release |
 | `make release-major` | Create major release (X.0.0) | Breaking change release |
 
 ### Local Development Workflow
 
-**Prerequisites:**
 ```bash
-# Start Temporal infrastructure (required)
-docker compose up -d temporal-postgresql temporal temporal-ui
-
-# Start loom
+# Start loom (builds container, starts Temporal + loom)
 make start
 
 # Verify
-curl -s http://localhost:8081/health | jq .status
+curl -s http://localhost:8080/health | jq .status
+
+# After code changes
+make restart
+
+# View logs
+make logs
+
+# Stop
+make stop
 ```
 
-**Logs:** `tail -f loom.log`
-**PID file:** `.loom.pid`
+Loom runs at `http://localhost:8080` (Docker maps 8080 -> container port 8081).
+Temporal UI is at `http://localhost:8088`.
 
-**After code changes:** `make restart`
-**Stop:** `make stop`
-
-**IMPORTANT:** Always use `make start`, `make stop`, and `make restart` to manage the loom process. Do not use `pkill loom`, `kill`, or raw `docker compose` commands — the Makefile tracks the PID and ensures clean lifecycle management.
+**IMPORTANT:** Always use `make start`, `make stop`, and `make restart`. Do not use `pkill`, `kill`, or raw `docker compose` commands.
 
 ### Telemetry & Observability APIs
 
-All endpoints are at `http://localhost:8081` (native) or `http://localhost:8080` (Docker).
+All endpoints are at `http://localhost:8080`.
 
 #### Analytics Endpoints
 
 ```bash
 # Request logs — filter by provider, time range
-curl 'http://localhost:8081/api/v1/analytics/logs?provider_id=prov-1&start_time=2026-01-01T00:00:00Z'
+curl 'http://localhost:8080/api/v1/analytics/logs?provider_id=prov-1&start_time=2026-01-01T00:00:00Z'
 
 # Aggregated stats — total requests, tokens, costs
-curl 'http://localhost:8081/api/v1/analytics/stats'
+curl 'http://localhost:8080/api/v1/analytics/stats'
 
 # Cost breakdown by provider and user
-curl 'http://localhost:8081/api/v1/analytics/costs'
+curl 'http://localhost:8080/api/v1/analytics/costs'
 
 # Export logs as CSV
-curl 'http://localhost:8081/api/v1/analytics/export?format=csv'
+curl 'http://localhost:8080/api/v1/analytics/export?format=csv'
 
 # Export stats as JSON
-curl 'http://localhost:8081/api/v1/analytics/export-stats?format=json'
+curl 'http://localhost:8080/api/v1/analytics/export-stats?format=json'
 
 # Batching optimization recommendations
-curl 'http://localhost:8081/api/v1/analytics/batching?max_recommendations=5&window_minutes=60'
+curl 'http://localhost:8080/api/v1/analytics/batching?max_recommendations=5&window_minutes=60'
 ```
 
 **Analytics log fields:** timestamp, user, method, path, provider, model, tokens (input/output), latency_ms, status, cost_usd
@@ -363,47 +362,47 @@ curl 'http://localhost:8081/api/v1/analytics/batching?max_recommendations=5&wind
 
 ```bash
 # Recent events (with optional filters)
-curl 'http://localhost:8081/api/v1/events?project_id=myapp&type=bead.status_change&limit=50'
+curl 'http://localhost:8080/api/v1/events?project_id=myapp&type=bead.status_change&limit=50'
 
 # Event bus statistics
-curl 'http://localhost:8081/api/v1/events/stats'
+curl 'http://localhost:8080/api/v1/events/stats'
 
 # Live SSE event stream (real-time)
-curl -N 'http://localhost:8081/api/v1/events/stream?project_id=myapp'
+curl -N 'http://localhost:8080/api/v1/events/stream?project_id=myapp'
 ```
 
 #### Health & Readiness
 
 ```bash
 # Detailed health with dependency checks
-curl 'http://localhost:8081/health'
+curl 'http://localhost:8080/health'
 
 # Kubernetes liveness probe
-curl 'http://localhost:8081/health/live'
+curl 'http://localhost:8080/health/live'
 
 # Kubernetes readiness probe (checks DB, providers)
-curl 'http://localhost:8081/health/ready'
+curl 'http://localhost:8080/health/ready'
 
 # Prometheus metrics
-curl 'http://localhost:8081/metrics'
+curl 'http://localhost:8080/metrics'
 ```
 
 ### Monitoring & Debugging
 
 **Check agent status:**
 ```bash
-curl -s http://localhost:8081/api/v1/agents | jq '.[] | {name, status, provider_id, current_bead}'
+curl -s http://localhost:8080/api/v1/agents | jq '.[] | {name, status, provider_id, current_bead}'
 ```
 
 **Check provider health:**
 ```bash
-curl -s http://localhost:8081/api/v1/providers | jq '.[] | {id, status, model}'
+curl -s http://localhost:8080/api/v1/providers | jq '.[] | {id, status, model}'
 ```
 Provider status must be `"healthy"` (set by heartbeat workflow), not `"active"`.
 
 **Check dispatch status:**
 ```bash
-curl -s http://localhost:8081/api/v1/dispatch/status | jq .
+curl -s http://localhost:8080/api/v1/dispatch/status | jq .
 ```
 
 **Loop detection:** When Ralph detects a stuck agent loop (dispatch_count exceeds max_hops with no progress), it auto-blocks the bead and records:
@@ -535,7 +534,7 @@ make distclean
 ### Dispatch not working
 - Readiness mode `"block"` + failed `git ls-remote` = no beads dispatched
 - Check readiness mode in config (default: `"warn"`)
-- Verify idle agents exist: `curl http://localhost:8081/api/v1/agents | jq '.[] | select(.status=="idle")'`
+- Verify idle agents exist: `curl http://localhost:8080/api/v1/agents | jq '.[] | select(.status=="idle")'`
 
 ### Auth errors in development
 - `AUTH_ENABLED=false` skips auth for all endpoints

@@ -1,14 +1,13 @@
-.PHONY: all build build-all run start stop restart test test-docker test-api coverage fmt vet lint lint-yaml lint-docs deps clean distclean install config dev-setup docker-build docker-up docker-down help release release-major release-minor release-patch
+.PHONY: all build build-all start stop restart test test-docker test-api coverage fmt vet lint lint-yaml lint-docs deps clean distclean install config dev-setup help release release-major release-minor release-patch
 
 # Build variables
 BINARY_NAME=loom
 VERSION?=dev
 LDFLAGS=-ldflags "-X main.version=$(VERSION)"
-PIDFILE=.loom.pid
 
 all: build
 
-# Build the Go binary
+# Build the Go binary (for local tooling, install, cross-compile)
 build:
 	go build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/loom
 
@@ -20,40 +19,22 @@ build-all: lint-yaml
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-arm64 ./cmd/loom
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-windows-amd64.exe ./cmd/loom
 
-# Start loom locally (native, no Docker)
-start: build
-	@if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
-		echo "Loom is already running (PID $$(cat $(PIDFILE)))"; \
-	else \
-		echo "Starting loom (logging to loom.log)..."; \
-		bash -c './$(BINARY_NAME) > loom.log 2>&1 & echo $$! > $(PIDFILE)'; \
-		sleep 2; \
-		if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
-			echo "Loom started (PID $$(cat $(PIDFILE)), http://localhost:8081)"; \
-		else \
-			echo "Loom failed to start. Check loom.log"; \
-			rm -f $(PIDFILE); \
-			exit 1; \
-		fi; \
-	fi
+# Start loom (build container + start full stack in background)
+start:
+	docker compose up -d --build
 
-# Stop locally-running loom
+# Stop loom
 stop:
-	@if [ -f $(PIDFILE) ]; then \
-		pid=$$(cat $(PIDFILE)); \
-		if kill -0 $$pid 2>/dev/null; then \
-			echo "Stopping loom (PID $$pid)..."; \
-			kill $$pid && rm -f $(PIDFILE) && echo "Stopped"; \
-		else \
-			echo "Loom not running (stale pidfile)"; \
-			rm -f $(PIDFILE); \
-		fi; \
-	else \
-		echo "Loom not running (no pidfile)"; \
-	fi
+	docker compose down
 
-# Restart locally-running loom (stop + start)
-restart: stop start
+# Rebuild and restart loom
+restart:
+	docker compose down
+	docker compose up -d --build
+
+# View loom container logs (follow)
+logs:
+	docker compose logs -f loom
 
 # Run tests locally
 test:
@@ -126,21 +107,7 @@ config:
 # Development setup
 dev-setup: deps config
 	@echo "Development environment setup complete"
-	@echo "Run 'make start' to start the server"
-
-# Docker targets
-docker-build:
-	docker compose build
-
-docker-up:
-	docker compose up -d
-
-docker-down:
-	docker compose down
-
-# Run full stack in Docker (foreground)
-run:
-	docker compose up --build
+	@echo "Run 'make start' to start loom"
 
 # Release automation
 release:
@@ -155,12 +122,15 @@ release-major:
 help:
 	@echo "Loom - Makefile Commands"
 	@echo ""
+	@echo "Service:"
+	@echo "  make start        - Build and start loom (Docker, background)"
+	@echo "  make stop         - Stop loom"
+	@echo "  make restart      - Rebuild and restart loom"
+	@echo "  make logs         - Follow loom container logs"
+	@echo ""
 	@echo "Development:"
 	@echo "  make build        - Build the Go binary"
 	@echo "  make build-all    - Cross-compile for linux/darwin/windows"
-	@echo "  make start        - Build and start loom locally (native)"
-	@echo "  make stop         - Stop locally-running loom"
-	@echo "  make restart      - Stop and restart loom locally"
 	@echo "  make test         - Run tests locally"
 	@echo "  make test-docker  - Run tests in Docker (with Temporal)"
 	@echo "  make test-api     - Run post-flight API tests"
@@ -172,12 +142,6 @@ help:
 	@echo "  make install      - Install binary to GOPATH/bin"
 	@echo "  make config       - Create config.yaml from example"
 	@echo "  make dev-setup    - Set up development environment"
-	@echo ""
-	@echo "Docker:"
-	@echo "  make run          - Run full stack in Docker (foreground)"
-	@echo "  make docker-build - Build Docker images"
-	@echo "  make docker-up    - Start containers (background)"
-	@echo "  make docker-down  - Stop containers"
 	@echo ""
 	@echo "Release:"
 	@echo "  make release       - Patch release (x.y.Z)"
