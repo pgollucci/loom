@@ -70,8 +70,9 @@ COPY --from=builder /build/workflows /app/workflows
 # Copy web static files
 COPY --from=builder /build/web/static /app/web/static
 
-# Copy entrypoint script
-COPY --from=builder /build/scripts/entrypoint.sh /app/entrypoint.sh
+# Copy scripts (entrypoint + beads schema SQL)
+COPY --from=builder /build/scripts /app/scripts
+RUN chmod +x /app/scripts/entrypoint.sh
 
 # Create SSH directory for mounted keys and set permissions
 RUN mkdir -p /home/loom/.ssh && \
@@ -79,7 +80,7 @@ RUN mkdir -p /home/loom/.ssh && \
     chmod 700 /home/loom/.ssh
 
 # Create data directory for SQLite database and project clones
-RUN mkdir -p /app/data/projects && chown -R loom:loom /app/data
+RUN mkdir -p /app/data/projects /app/data/keys && chown -R loom:loom /app/data
 
 # Change ownership
 RUN chown -R loom:loom /app
@@ -94,4 +95,4 @@ RUN git config --global core.sshCommand "ssh -o UserKnownHostsFile=/home/loom/.s
 EXPOSE 8080
 
 # Set entrypoint (starts Dolt server, then loom)
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]

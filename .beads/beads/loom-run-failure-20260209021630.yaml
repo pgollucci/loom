@@ -1,0 +1,175 @@
+id: loom-run-failure-20260209021630
+type: task
+title: "P0 - run failed"
+description: |
+  Command: docker compose up --build
+  Exit code: 1
+
+  Output:
+    time="2026-02-08T18:14:55-08:00" level=warning msg="The \"LOOM_PASSWORD\" variable is not set. Defaulting to a blank string."
+     Image loom:latest Building 
+     Image loom-loom-test Building 
+    #1 [internal] load local bake definitions
+    #1 reading from stdin 914B done
+    #1 DONE 0.0s
+    
+    #2 [loom-test internal] load build definition from Dockerfile
+    #2 transferring dockerfile: 2.77kB done
+    #2 DONE 0.0s
+    
+    #3 [loom-test internal] load metadata for docker.io/library/golang:1.25-alpine
+    #3 ...
+    
+    #4 [loom internal] load metadata for docker.io/library/alpine:latest
+    #4 DONE 0.5s
+    
+    #3 [loom internal] load metadata for docker.io/library/golang:1.25-alpine
+    #3 DONE 0.5s
+    
+    #5 [loom-test internal] load .dockerignore
+    #5 transferring context: 353B done
+    #5 DONE 0.0s
+    
+    #6 [loom stage-1  1/15] FROM docker.io/library/alpine:latest@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+    #6 resolve docker.io/library/alpine:latest@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659 0.0s done
+    #6 DONE 0.0s
+    
+    #7 [loom-test builder  1/10] FROM docker.io/library/golang:1.25-alpine@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced
+    #7 resolve docker.io/library/golang:1.25-alpine@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced 0.0s done
+    #7 DONE 0.0s
+    
+    #8 [loom-test internal] load build context
+    #8 transferring context: 9.65MB 0.4s done
+    #8 DONE 0.4s
+    
+    #9 [loom-test builder  4/10] COPY go.mod ./
+    #9 CACHED
+    
+    #10 [loom-test builder  6/10] RUN go mod download
+    #10 CACHED
+    
+    #11 [loom-test builder  7/10] RUN git clone --depth 1 https://github.com/steveyegge/beads.git /tmp/beads &&     cd /tmp/beads &&     CGO_ENABLED=1 go build -o /go/bin/bd ./cmd/bd &&     rm -rf /tmp/beads
+    #11 CACHED
+    
+    #12 [loom-test builder  2/10] RUN apk add --no-cache git ca-certificates tzdata gcc g++ musl-dev openssh-client icu-dev
+    #12 CACHED
+    
+    #13 [loom-test builder  5/10] COPY go.sum ./
+    #13 CACHED
+    
+    #14 [loom-test builder  3/10] WORKDIR /build
+    #14 CACHED
+    
+    #15 [loom-test builder  8/10] RUN DOLT_VERSION=$(wget -qO- https://api.github.com/repos/dolthub/dolt/releases/latest | grep tag_name | cut -d '"' -f 4) &&     wget -q "https://github.com/dolthub/dolt/releases/download/${DOLT_VERSION}/dolt-linux-amd64.tar.gz" &&     tar -xzf dolt-linux-amd64.tar.gz &&     mv dolt-linux-amd64/bin/dolt /go/bin/dolt &&     rm -rf dolt-linux-amd64 dolt-linux-amd64.tar.gz
+    #15 CACHED
+    
+    #16 [loom-test builder  9/10] COPY . .
+    #16 DONE 3.7s
+    
+    #17 [loom builder 10/10] RUN CGO_ENABLED=1 GOOS=linux go build     -ldflags="-w -s"     -o loom     ./cmd/loom
+    #17 DONE 71.6s
+    
+    #18 [loom-test] exporting to image
+    #18 exporting layers
+    #18 ...
+    
+    #19 [loom stage-1  4/15] WORKDIR /app
+    #19 CACHED
+    
+    #20 [loom stage-1  5/15] COPY --from=builder /build/loom /app/loom
+    #20 CACHED
+    
+    #21 [loom stage-1  9/15] COPY --from=builder /build/personas /app/personas
+    #21 CACHED
+    
+    #22 [loom stage-1 10/15] COPY --from=builder /build/workflows /app/workflows
+    #22 CACHED
+    
+    #23 [loom stage-1  2/15] RUN apk add --no-cache ca-certificates tzdata git openssh-client
+    #23 CACHED
+    
+    #24 [loom stage-1 11/15] COPY --from=builder /build/web/static /app/web/static
+    #24 CACHED
+    
+    #25 [loom stage-1  8/15] COPY --from=builder /build/config.yaml /app/config.yaml
+    #25 CACHED
+    
+    #26 [loom stage-1 13/15] RUN mkdir -p /app/data/projects && chown -R loom:loom /app/data
+    #26 CACHED
+    
+    #27 [loom stage-1  6/15] COPY --from=builder /go/bin/bd /usr/local/bin/bd
+    #27 CACHED
+    
+    #28 [loom stage-1 12/15] RUN mkdir -p /home/loom/.ssh &&     chown -R loom:loom /home/loom/.ssh &&     chmod 700 /home/loom/.ssh
+    #28 CACHED
+    
+    #29 [loom stage-1 14/15] RUN chown -R loom:loom /app
+    #29 CACHED
+    
+    #30 [loom stage-1  3/15] RUN addgroup -g 1000 loom &&     adduser -D -u 1000 -G loom loom
+    #30 CACHED
+    
+    #31 [loom stage-1  7/15] COPY --from=builder /go/bin/dolt /usr/local/bin/dolt
+    #31 CACHED
+    
+    #32 [loom stage-1 15/15] RUN git config --global core.sshCommand "ssh -o UserKnownHostsFile=/home/loom/.ssh/known_hosts -o StrictHostKeyChecking=accept-new"
+    #32 CACHED
+    
+    #33 [loom] exporting to image
+    #33 exporting layers done
+    #33 exporting manifest sha256:70bd80436d2e727b3623d017768c56f7030430ad52e729072a6173baa19059b3 done
+    #33 exporting config sha256:da23cedb630e04fab81c3a00f33c79315fce07b72111c4d135ddb6c941dd500c done
+    #33 exporting attestation manifest sha256:f71e6b9dcd6815f9ca1059f452379843da1d7d03d779f6539100b917a220ae5c 0.0s done
+    #33 exporting manifest list sha256:ac1c0e65a3b2eeb51623cd8121b5c39ed2ecd63c43dd864a42a76807e5c268a7 done
+    #33 naming to docker.io/library/loom:latest done
+    #33 unpacking to docker.io/library/loom:latest 0.0s done
+    #33 DONE 0.1s
+    
+    #18 [loom-test] exporting to image
+    #18 ...
+    
+    #34 [loom] resolving provenance for metadata file
+    #34 DONE 0.0s
+    
+    #18 [loom-test] exporting to image
+    #18 exporting layers 11.9s done
+    #18 exporting manifest sha256:043545fee7a42664b0bb447191c3bf62674d2b7720e05579163fbbc4a6cda4c5
+    #18 exporting manifest sha256:043545fee7a42664b0bb447191c3bf62674d2b7720e05579163fbbc4a6cda4c5 0.0s done
+    #18 exporting config sha256:e4dd7ab59ccdc9c612110726d1d6985e3fded729699ae2abf02a9de380c24862 done
+    #18 exporting attestation manifest sha256:cfba1eb3a8641904a85bc5841f3323c39d1bd7cd2d7d79a7598afca9bde45ff8 0.0s done
+    #18 exporting manifest list sha256:4bbbdec0e75a2d03187901bdcd47bd63b4b125cc9a8558f8d213c6a1c13e5aad done
+    #18 naming to docker.io/library/loom-loom-test:latest done
+    #18 unpacking to docker.io/library/loom-loom-test:latest
+    #18 unpacking to docker.io/library/loom-loom-test:latest 5.8s done
+    #18 DONE 17.8s
+    
+    #35 [loom-test] resolving provenance for metadata file
+    #35 DONE 0.0s
+     Image loom-loom-test Built 
+     Image loom:latest Built 
+     Container temporal-postgresql Running 
+     Container temporal Running 
+     Container loom-test Creating 
+     Container temporal-ui Running 
+     Container loom Creating 
+     Container loom-test Error response from daemon: Conflict. The container name "/loom-test" is already in use by container "3e8da201f286a0ac4f2f792f8d925cea48811ca41464f0b86bbbe727a707433e". You have to remove (or rename) that container to be able to reuse that name. 
+    Error response from daemon: Conflict. The container name "/loom-test" is already in use by container "3e8da201f286a0ac4f2f792f8d925cea48811ca41464f0b86bbbe727a707433e". You have to remove (or rename) that container to be able to reuse that name.
+
+status: open
+priority: 0
+project_id: loom
+assigned_to: null
+blocked_by: []
+blocks: []
+parent: null
+children: []
+tags:
+  - p0
+  - failure
+  - run
+created_at: 2026-02-09T02:16:30Z
+updated_at: 2026-02-09T02:16:30Z
+closed_at: null
+context:
+  source: makefile
+  target: run

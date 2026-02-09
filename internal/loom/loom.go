@@ -150,7 +150,9 @@ func New(cfg *config.Config) (*Loom, error) {
 	if projectKeyDir == "" {
 		projectKeyDir = "/app/data/projects"
 	}
-	gitopsMgr, err := gitops.NewManager(projectKeyDir, projectKeyDir, db, nil)
+	// SSH keys go in a separate directory from clones so git stash/clean can't destroy them
+	sshKeyDir := filepath.Join(filepath.Dir(projectKeyDir), "keys")
+	gitopsMgr, err := gitops.NewManager(projectKeyDir, sshKeyDir, db, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize gitops manager: %w", err)
 	}
@@ -515,36 +517,26 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				}
 			}
 
-			// Initialize beads database if it doesn't exist yet
-			beadsDir := filepath.Join(workDir, p.BeadsPath)
-			if _, err := os.Stat(beadsDir); err == nil {
-				bdPath := a.config.Beads.BDPath
-				if bdPath == "" {
-					bdPath = "bd"
-				}
-				// Remove empty dolt/ stub left by git clone (bd init refuses if it exists)
-				if a.config.Beads.Backend == "dolt" {
-					doltStub := filepath.Join(beadsDir, "dolt")
-					if entries, err := os.ReadDir(doltStub); err == nil && len(entries) == 0 {
-						os.Remove(doltStub)
+			// Initialize beads database if needed (sqlite only — dolt schema is
+			// created by the entrypoint script before loom starts)
+			if a.config.Beads.Backend != "dolt" {
+				beadsDir := filepath.Join(workDir, p.BeadsPath)
+				if _, err := os.Stat(beadsDir); err == nil {
+					bdPath := a.config.Beads.BDPath
+					if bdPath == "" {
+						bdPath = "bd"
 					}
-				}
-				// Always attempt bd init — it's idempotent for sqlite,
-				// and needed for dolt to create schema after entrypoint starts the server
-				initArgs := []string{"init", "--from-jsonl"}
-				if a.config.Beads.Backend == "dolt" {
-					initArgs = append(initArgs, "--backend", "dolt")
-				}
-				initCmd := exec.Command(bdPath, initArgs...)
-				initCmd.Dir = workDir
-				if out, err := initCmd.CombinedOutput(); err != nil {
-					// Not a hard error — may already be initialized
-					outStr := strings.TrimSpace(string(out))
-					if !strings.Contains(outStr, "already initialized") {
-						fmt.Fprintf(os.Stderr, "Warning: bd init failed for %s: %v (%s)\n", p.ID, err, outStr)
+					initArgs := []string{"init", "--from-jsonl"}
+					initCmd := exec.Command(bdPath, initArgs...)
+					initCmd.Dir = workDir
+					if out, err := initCmd.CombinedOutput(); err != nil {
+						outStr := strings.TrimSpace(string(out))
+						if !strings.Contains(outStr, "already initialized") {
+							fmt.Fprintf(os.Stderr, "Warning: bd init failed for %s: %v (%s)\n", p.ID, err, outStr)
+						}
+					} else {
+						fmt.Printf("Initialized beads database for project %s\n", p.ID)
 					}
-				} else {
-					fmt.Printf("Initialized beads database for project %s\n", p.ID)
 				}
 			}
 

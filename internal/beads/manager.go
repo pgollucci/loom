@@ -699,7 +699,7 @@ type bdIssue struct {
 }
 
 func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
-	cmd := exec.Command(m.bdPath, "list", "--json", "--limit", "0")
+	cmd := exec.Command(m.bdPath, "list", "--json", "--limit", "0", "--allow-stale")
 	if dir := beadsRootDir(beadsPath); dir != "" {
 		cmd.Dir = dir
 	}
@@ -711,6 +711,11 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 	trimmed := strings.TrimSpace(string(output))
 	if trimmed == "" {
 		return nil
+	}
+
+	// Strip any non-JSON prefix lines (e.g. --allow-stale warning)
+	if idx := strings.Index(trimmed, "["); idx > 0 {
+		trimmed = trimmed[idx:]
 	}
 
 	var issues []bdIssue
