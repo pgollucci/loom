@@ -37,10 +37,10 @@ description: |-
     - [ ] Responses flow back to Loom and unblock dependent work
     - [ ] Integration is opt-in per project (config flag)
     - [ ] Works without openclaw (graceful degradation)
-status: in_progress
+status: open
 priority: 2
 projectid: loom-self
-assignedto: agent-1770537362-CEO (Default)
+assignedto: ""
 blockedby: []
 blocks: []
 relatedto: []
@@ -48,31 +48,11 @@ parent: ""
 children: []
 tags: []
 context:
-    agent_id: agent-1770537362-CEO (Default)
-    agent_output: |-
-        {
-          "action": "done",
-          "reason": "Created a note to contact openclaw for SDK documentation. Further steps will be taken after receiving the necessary information.",
-          "notes": "Waiting for response from openclaw before proceeding with the integration design."
-        }
-    agent_task_id: task-loom-r7acp-1770669361022173000
-    agent_tokens: "4691"
-    agent_worker_id: worker-agent-1770537362-CEO (Default)-1770666986
-    conversation_session_id: 547e32ee-2662-4aa0-9b7b-a382a1e0611b
-    dispatch_count: "50"
-    dispatch_history: '["agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)"]'
-    last_run_at: "2026-02-09T20:36:35Z"
-    last_run_error: 'action loop failed: context deadline exceeded'
-    loop_detected: "false"
-    loop_iterations: "1"
-    provider_id: sparky-local
-    provider_model: Qwen/Qwen2.5-Coder-32B-Instruct
     redispatch_requested: "true"
-    redispatch_requested_at: "2026-02-09T20:36:18Z"
-    terminal_reason: completed
+    redispatch_requested_at: "2026-02-09T21:46:13Z"
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-09T09:21:46Z
-updatedat: 2026-02-09T12:36:35.900255-08:00
+updatedat: 2026-02-09T13:46:13.477745-08:00
 closedat: null
