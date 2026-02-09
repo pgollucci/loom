@@ -461,9 +461,8 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 						break // Found workflow-matched agent
 					}
 
-					// No agent with required role available
-					skippedReasons["workflow_role_not_available"]++
-					continue
+					// No agent with exact role — fall through to persona/any-agent dispatch
+					log.Printf("[Dispatcher] Bead %s needs workflow role %q but no idle agent has it - falling through to any-agent dispatch", b.ID, workflowRoleRequired)
 				}
 			}
 		}
