@@ -22,12 +22,12 @@ beads:
   compact_old_days: 90  # Compact closed beads older than 90 days
   backend: dolt          # "sqlite" or "dolt"
   federation:
-    enabled: false       # Enable after migration + peer setup
+    enabled: true
     auto_sync: true
     sync_interval: 10m
     sync_strategy: ours
     sync_mode: dolt-native
-    peers: []            # Add peers after migration
+    peers: []            # Add peers via API or config for multi-container sync
 
 agents:
   max_concurrent: 6

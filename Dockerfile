@@ -70,6 +70,9 @@ COPY --from=builder /build/workflows /app/workflows
 # Copy web static files
 COPY --from=builder /build/web/static /app/web/static
 
+# Copy entrypoint script
+COPY --from=builder /build/scripts/entrypoint.sh /app/entrypoint.sh
+
 # Create SSH directory for mounted keys and set permissions
 RUN mkdir -p /home/loom/.ssh && \
     chown -R loom:loom /home/loom/.ssh && \
@@ -90,5 +93,5 @@ RUN git config --global core.sshCommand "ssh -o UserKnownHostsFile=/home/loom/.s
 # Expose port (if needed in future)
 EXPOSE 8080
 
-# Set entrypoint
-ENTRYPOINT ["/app/loom"]
+# Set entrypoint (starts Dolt server, then loom)
+ENTRYPOINT ["/app/entrypoint.sh"]
