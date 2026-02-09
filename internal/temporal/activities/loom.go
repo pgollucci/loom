@@ -79,13 +79,19 @@ func (a *LoomActivities) resolveStuckBeads() int {
 		return 0
 	}
 
-	allBeads, err := a.beadsMgr.ListBeads(nil)
+	// Only query open/in-progress beads — closed beads can't be stuck.
+	openBeads, err := a.beadsMgr.ListBeads(map[string]interface{}{"status": models.BeadStatusOpen})
 	if err != nil {
 		return 0
 	}
+	inProgressBeads, err := a.beadsMgr.ListBeads(map[string]interface{}{"status": models.BeadStatusInProgress})
+	if err != nil {
+		return 0
+	}
+	candidates := append(openBeads, inProgressBeads...)
 
 	resolved := 0
-	for _, b := range allBeads {
+	for _, b := range candidates {
 		if b == nil || b.Context == nil {
 			continue
 		}
@@ -94,10 +100,6 @@ func (a *LoomActivities) resolveStuckBeads() int {
 		}
 		// Skip if already resolved by Ralph or escalated to CEO
 		if b.Context["ralph_blocked_at"] != "" || b.Context["escalated_to_ceo_decision_id"] != "" {
-			continue
-		}
-		// Skip already-closed or already-blocked beads
-		if b.Status == models.BeadStatusClosed || b.Status == models.BeadStatusBlocked {
 			continue
 		}
 

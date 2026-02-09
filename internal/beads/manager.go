@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -699,27 +700,44 @@ type bdIssue struct {
 }
 
 func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
-	cmd := exec.Command(m.bdPath, "list", "--json", "--limit", "0", "--allow-stale")
-	if dir := beadsRootDir(beadsPath); dir != "" {
-		cmd.Dir = dir
+	// Only load non-closed beads to avoid loading thousands of historical entries.
+	// Closed beads are not needed for dispatch, routing, or stuck detection.
+	var allOutput []byte
+	dir := beadsRootDir(beadsPath)
+	for _, status := range []string{"open", "in_progress", "blocked"} {
+		cmd := exec.Command(m.bdPath, "list", "--json", "--limit", "0", "--allow-stale", "--status="+status)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[BeadManager] bd list --status=%s failed: %v: %s", status, err, strings.TrimSpace(string(output)))
+			continue
+		}
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed == "" || trimmed == "[]" {
+			continue
+		}
+		// Strip array brackets and accumulate entries
+		if idx := strings.Index(trimmed, "["); idx >= 0 {
+			trimmed = trimmed[idx+1:]
+		}
+		if idx := strings.LastIndex(trimmed, "]"); idx >= 0 {
+			trimmed = trimmed[:idx]
+		}
+		trimmed = strings.TrimSpace(trimmed)
+		if trimmed == "" {
+			continue
+		}
+		if len(allOutput) > 0 {
+			allOutput = append(allOutput, ',')
+		}
+		allOutput = append(allOutput, []byte(trimmed)...)
 	}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("bd list failed: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-
-	trimmed := strings.TrimSpace(string(output))
-	if trimmed == "" {
-		return nil
-	}
-
-	// Strip any non-JSON prefix lines (e.g. --allow-stale warning)
-	if idx := strings.Index(trimmed, "["); idx > 0 {
-		trimmed = trimmed[idx:]
-	}
+	combined := "[" + string(allOutput) + "]"
 
 	var issues []bdIssue
-	if err := json.Unmarshal([]byte(trimmed), &issues); err != nil {
+	if err := json.Unmarshal([]byte(combined), &issues); err != nil {
 		return fmt.Errorf("failed to parse bd list output: %w", err)
 	}
 
