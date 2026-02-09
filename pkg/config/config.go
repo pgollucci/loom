@@ -193,8 +193,11 @@ func LoadConfigFromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
+	// Expand environment variables (e.g. ${NVIDIA_API_KEY}) before parsing YAML
+	expanded := os.ExpandEnv(string(data))
+
 	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := yaml.Unmarshal([]byte(expanded), &config); err != nil {
 		return nil, err
 	}
 
