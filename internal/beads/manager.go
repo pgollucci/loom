@@ -710,6 +710,7 @@ type bdIssue struct {
 func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 	// Only load non-closed beads to avoid loading thousands of historical entries.
 	// Closed beads are not needed for dispatch, routing, or stuck detection.
+	issuePrefix := m.GetProjectPrefix(projectID)
 	var allOutput []byte
 	dir := beadsRootDir(beadsPath)
 	for _, status := range []string{"open", "in_progress", "blocked"} {
@@ -759,8 +760,13 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 		// original project assignment. This prevents a shared Dolt database
 		// from clobbering project IDs on every refresh cycle.
 		existingProjectID := projectID
-		if existing, ok := m.beads[issue.ID]; ok && existing.ProjectID != "" {
+		if existing, ok := m.beads[issue.ID]; ok && existing.ProjectID != "" && existing.ProjectID != projectID {
 			existingProjectID = existing.ProjectID
+		}
+		// If the bead's ID prefix doesn't match the issuePrefix for this
+		// project's beads dir, skip it — it belongs to another project.
+		if issuePrefix != "" && !strings.HasPrefix(issue.ID, issuePrefix) {
+			continue
 		}
 
 		bead := &models.Bead{
