@@ -755,6 +755,14 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 			beadType = "task"
 		}
 
+		// If this bead was already loaded by a different project, keep the
+		// original project assignment. This prevents a shared Dolt database
+		// from clobbering project IDs on every refresh cycle.
+		existingProjectID := projectID
+		if existing, ok := m.beads[issue.ID]; ok && existing.ProjectID != "" {
+			existingProjectID = existing.ProjectID
+		}
+
 		bead := &models.Bead{
 			ID:          issue.ID,
 			Type:        beadType,
@@ -762,7 +770,7 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 			Description: issue.Description,
 			Status:      models.BeadStatus(issue.Status),
 			Priority:    models.BeadPriority(issue.Priority),
-			ProjectID:   projectID,
+			ProjectID:   existingProjectID,
 			AssignedTo:  issue.Assignee,
 			BlockedBy:   issue.BlockedBy,
 			Blocks:      issue.Blocks,
