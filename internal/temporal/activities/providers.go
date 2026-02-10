@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -109,9 +110,12 @@ func (a *ProviderActivities) ProviderHeartbeatActivity(ctx context.Context, inpu
 	}
 	// Capture context window from model metadata (vLLM provides max_model_len)
 	for _, m := range models {
-		if m.MaxModelLen > 0 && (m.ID == selected || selected == "") {
-			record.ContextWindow = m.MaxModelLen
-			break
+		if m.MaxModelLen > 0 {
+			log.Printf("[Heartbeat] Provider %s model %s has max_model_len=%d", input.ProviderID, m.ID, m.MaxModelLen)
+			if m.ID == selected || selected == "" {
+				record.ContextWindow = m.MaxModelLen
+				break
+			}
 		}
 	}
 
