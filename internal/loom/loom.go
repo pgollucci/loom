@@ -2862,6 +2862,19 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 			// (LoomHeartbeatActivity). CEO escalation is only available via
 			// explicit CLI/REPL commands.
 
+			// Refresh bead cache from Dolt to pick up beads created externally
+			for _, p := range a.projectManager.ListProjects() {
+				if p.BeadsPath != "" {
+					beadsRoot := p.BeadsPath
+					if p.WorkDir != "" {
+						beadsRoot = filepath.Join(p.WorkDir, p.BeadsPath)
+					}
+					if err := a.beadsManager.RefreshBeads(p.ID, beadsRoot); err != nil {
+						log.Printf("[Maintenance] Bead refresh failed for %s: %v", p.ID, err)
+					}
+				}
+			}
+
 			// Periodic federation sync
 			if a.config.Beads.Federation.Enabled && a.config.Beads.Federation.SyncInterval > 0 {
 				if time.Since(lastFederationSync) >= a.config.Beads.Federation.SyncInterval {

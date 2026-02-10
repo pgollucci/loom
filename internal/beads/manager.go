@@ -619,6 +619,12 @@ func (m *Manager) matchesFilters(bead *models.Bead, filters map[string]interface
 	return true
 }
 
+// RefreshBeads reloads the bead cache from the bd CLI / Dolt database.
+// Call periodically to pick up beads created after startup.
+func (m *Manager) RefreshBeads(projectID, beadsPath string) error {
+	return m.LoadBeadsFromFilesystem(projectID, beadsPath)
+}
+
 // LoadBeadsFromFilesystem loads beads using bd CLI when available, with YAML fallback.
 func (m *Manager) LoadBeadsFromFilesystem(projectID, beadsPath string) error {
 	m.mu.Lock()
