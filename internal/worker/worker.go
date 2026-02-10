@@ -968,10 +968,14 @@ func (w *Worker) buildEnhancedSystemPrompt(lp LessonsProvider, projectID, progre
 }
 
 // checkTerminalCondition checks if any action in the envelope signals termination.
+// Terminal actions must have succeeded — a failed close_bead should not terminate.
 func checkTerminalCondition(env *actions.ActionEnvelope, results []actions.Result) string {
-	for _, a := range env.Actions {
+	for i, a := range env.Actions {
 		switch a.Type {
 		case actions.ActionCloseBead:
+			if i < len(results) && results[i].Status == "error" {
+				continue // close failed, don't terminate
+			}
 			return "completed"
 		case actions.ActionDone:
 			return "completed"
