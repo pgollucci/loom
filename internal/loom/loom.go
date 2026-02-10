@@ -742,7 +742,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 	// Start Temporal worker if configured
 	if a.temporalManager != nil {
 		a.temporalManager.RegisterActivity(temporalactivities.NewDispatchActivities(a.dispatcher))
-		a.temporalManager.RegisterActivity(temporalactivities.NewProviderActivities(a.providerRegistry, a.database, a.eventBus, a.modelCatalog))
+		a.temporalManager.RegisterActivity(temporalactivities.NewProviderActivities(a.providerRegistry, a.database, a.eventBus, a.modelCatalog, a.keyManager))
 		a.temporalManager.RegisterActivity(temporalactivities.NewLoomActivities(a.database, a.dispatcher, a.beadsManager, a.agentManager))
 
 		if err := a.temporalManager.Start(); err != nil {

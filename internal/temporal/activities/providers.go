@@ -49,16 +49,22 @@ type ProviderQueryResult struct {
 	LatencyMs  int64  `json:"latency_ms"`
 }
 
+// KeyRetriever retrieves decrypted API keys by ID.
+type KeyRetriever interface {
+	GetKey(id string) (string, error)
+}
+
 // ProviderActivities supplies heartbeat and query activities.
 type ProviderActivities struct {
 	registry *provider.Registry
 	database *database.Database
 	eventBus *eventbus.EventBus
 	catalog  *modelcatalog.Catalog
+	keys     KeyRetriever
 }
 
-func NewProviderActivities(registry *provider.Registry, db *database.Database, eb *eventbus.EventBus, catalog *modelcatalog.Catalog) *ProviderActivities {
-	return &ProviderActivities{registry: registry, database: db, eventBus: eb, catalog: catalog}
+func NewProviderActivities(registry *provider.Registry, db *database.Database, eb *eventbus.EventBus, catalog *modelcatalog.Catalog, keys KeyRetriever) *ProviderActivities {
+	return &ProviderActivities{registry: registry, database: db, eventBus: eb, catalog: catalog, keys: keys}
 }
 
 // ProviderHeartbeatActivity checks provider responsiveness and updates status.
@@ -292,6 +298,15 @@ func (a *ProviderActivities) discoverAndListModels(ctx context.Context, provider
 		return record, nil, "", "", err
 	}
 
+	// Retrieve API key from key manager if provider requires one
+	if record.KeyID != "" && a.keys != nil {
+		if apiKey, err := a.keys.GetKey(record.KeyID); err == nil && apiKey != "" {
+			for i := range candidates {
+				candidates[i].APIKey = apiKey
+			}
+		}
+	}
+
 	// Try the registered Protocol first (has auth credentials baked in)
 	if a.registry != nil {
 		if reg, regErr := a.registry.Get(providerID); regErr == nil && reg.Protocol != nil {
@@ -411,6 +426,9 @@ func probeModels(ctx context.Context, c providerCandidate) ([]provider.Model, er
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			return nil, err
+		}
+		if c.APIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.APIKey)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
