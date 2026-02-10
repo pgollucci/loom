@@ -512,6 +512,11 @@ func (a *Loom) Initialize(ctx context.Context) error {
 
 			// Check if already cloned
 			workDir := a.gitopsManager.GetProjectWorkDir(p.ID)
+			p.WorkDir = workDir
+			// Persist WorkDir so maintenance loop and dispatcher can find project files
+			if mgdProject, _ := a.projectManager.GetProject(p.ID); mgdProject != nil {
+				mgdProject.WorkDir = workDir
+			}
 			if _, err := os.Stat(filepath.Join(workDir, ".git")); os.IsNotExist(err) {
 				// Clone the repository
 				fmt.Printf("Cloning project %s from %s...\n", p.ID, p.GitRepo)
@@ -582,6 +587,11 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			}
 		} else {
 			// Local project (Loom itself), load beads directly
+			cwd, _ := os.Getwd()
+			p.WorkDir = cwd
+			if mgdProject, _ := a.projectManager.GetProject(p.ID); mgdProject != nil {
+				mgdProject.WorkDir = cwd
+			}
 			a.beadsManager.SetBeadsPath(p.BeadsPath)
 			// Load project prefix from config
 			_ = a.beadsManager.LoadProjectPrefixFromConfig(p.ID, p.BeadsPath)
