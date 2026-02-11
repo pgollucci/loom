@@ -2245,10 +2245,7 @@ async function sendReplQuery() {
     }
 }
 
-// CEO REPL session bead ID — created once per page session for continuity
-let ceoReplBeadId = null;
-
-// Unified CEO REPL query — routes through /pair endpoint so actions are executed
+// CEO REPL — supports "agent: message" routing and general queries
 async function sendCeoReplQuery() {
     const input = document.getElementById('ceo-repl-input');
     const responseEl = document.getElementById('ceo-repl-response');
@@ -2261,128 +2258,77 @@ async function sendCeoReplQuery() {
         return;
     }
 
-    // Find a CEO agent to route through
-    const ceoAgentIds = getCeoAgentIds();
-    const ceoAgent = ceoAgentIds.length > 0
-        ? (state.agents || []).find(a => ceoAgentIds.includes(normalizeAssignee(a.id)))
-        : null;
-
-    if (!ceoAgent) {
-        // Fall back to raw chat completion if no CEO agent exists
-        return sendCeoReplFallback(message);
+    // Parse "agent: message" pattern for direct agent dispatch
+    const agentMatch = message.match(/^([a-zA-Z][a-zA-Z0-9 _-]+):\s+(.+)/s);
+    if (agentMatch) {
+        const agentQuery = agentMatch[1].trim().toLowerCase();
+        const taskMessage = agentMatch[2].trim();
+        return ceoReplDispatchToAgent(agentQuery, taskMessage, responseEl, sendBtn);
     }
 
-    // Get or create a REPL session bead
-    if (!ceoReplBeadId) {
-        try {
-            const selectedProjectId = uiState.project.selectedId
-                || ceoAgent.project_id
-                || ((state.projects || [])[0] || {}).id
-                || '';
-            if (!selectedProjectId) {
-                return sendCeoReplFallback(message);
-            }
-            const bead = await apiCall('/beads', {
-                method: 'POST',
-                skipAutoFile: true,
-                body: JSON.stringify({
-                    title: 'CEO REPL Session',
-                    description: 'Interactive CEO command session',
-                    type: 'task',
-                    priority: 1,
-                    project_id: selectedProjectId
-                })
-            });
-            ceoReplBeadId = bead.id;
-        } catch (e) {
-            console.warn('[CEO REPL] Bead creation failed, using fallback:', e.message);
-            return sendCeoReplFallback(message);
-        }
+    // General query — use streaming chat completion
+    return ceoReplStreamQuery(message, responseEl, sendBtn);
+}
+
+// Dispatch a task to a specific agent via "agent: message" syntax
+async function ceoReplDispatchToAgent(agentQuery, taskMessage, responseEl, sendBtn) {
+    const projectId = uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
+    if (!projectId) {
+        responseEl.innerHTML = '<span style="color:var(--danger-color)">No project selected. Select a project first.</span>';
+        return;
+    }
+
+    // Find matching agent in the current project
+    const projectAgents = (state.agents || []).filter(a => a.project_id === projectId);
+    const matchedAgent = projectAgents.find(a => {
+        const name = (a.name || '').toLowerCase();
+        const role = (a.role || '').toLowerCase();
+        const persona = (a.persona_name || '').toLowerCase();
+        return name.includes(agentQuery) || role.includes(agentQuery) || persona.includes(agentQuery);
+    });
+
+    if (!matchedAgent) {
+        const available = projectAgents.map(a => {
+            const display = a.name || a.role || a.persona_name;
+            return `  - ${display} (${a.status})`;
+        }).join('\n');
+        responseEl.innerHTML = `<span style="color:var(--danger-color)">No agent matching "${escapeHtml(agentQuery)}" found in this project.</span>\n\n<strong>Available agents:</strong>\n${escapeHtml(available || '  (none)')}`;
+        return;
     }
 
     try {
         setBusy('ceo-repl', true);
         sendBtn.disabled = true;
-        sendBtn.textContent = 'Streaming…';
+        sendBtn.textContent = 'Dispatching…';
         responseEl.textContent = '';
-        responseEl.classList.add('streaming');
 
-        const response = await fetch(`${API_BASE}/pair`, {
+        // Create a bead with the task
+        const bead = await apiCall('/beads', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}) },
+            skipAutoFile: true,
             body: JSON.stringify({
-                agent_id: ceoAgent.id,
-                bead_id: ceoReplBeadId,
-                message: message
+                title: taskMessage.substring(0, 100),
+                description: taskMessage,
+                type: 'task',
+                priority: 1,
+                project_id: projectId
             })
         });
 
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ error: response.statusText }));
-            throw new Error(err.error || 'Request failed');
-        }
+        // Assign to the matched agent
+        await apiCall(`/beads/${bead.id}`, {
+            method: 'PATCH',
+            skipAutoFile: true,
+            body: JSON.stringify({ assigned_to: matchedAgent.id })
+        });
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let streamedText = '';
-        let actionResults = [];
-        let currentEvent = '';
+        const agentDisplay = matchedAgent.name || matchedAgent.role || matchedAgent.persona_name;
+        responseEl.innerHTML = `<strong style="color:var(--success-color)">Task dispatched!</strong>\n\nBead: <code>${escapeHtml(bead.id)}</code>\nAssigned to: <strong>${escapeHtml(agentDisplay)}</strong>\nTitle: ${escapeHtml(bead.title)}\n\nThe dispatcher will pick this up on the next cycle.`;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                if (line.startsWith('event: ')) {
-                    currentEvent = line.substring(7).trim();
-                    continue;
-                }
-                if (!line.startsWith('data: ')) continue;
-                const data = line.substring(6);
-                try {
-                    const parsed = JSON.parse(data);
-                    if (currentEvent === 'chunk' && parsed.choices && parsed.choices[0]) {
-                        const delta = parsed.choices[0].delta;
-                        if (delta && delta.content) {
-                            streamedText += delta.content;
-                            responseEl.textContent = streamedText;
-                            responseEl.scrollTop = responseEl.scrollHeight;
-                        }
-                    } else if (currentEvent === 'actions' && parsed.results) {
-                        actionResults = parsed.results;
-                    } else if (currentEvent === 'error' && parsed.error) {
-                        responseEl.textContent += '\n\n[Error: ' + parsed.error + ']';
-                    }
-                } catch (e) { /* ignore parse errors */ }
-                currentEvent = '';
-            }
-        }
-
-        responseEl.classList.remove('streaming');
-        responseEl.classList.add('complete');
-
-        // Append action execution results
-        if (actionResults.length > 0) {
-            let actionSummary = '\n\n--- Actions Executed ---\n';
-            for (const r of actionResults) {
-                const icon = r.status === 'error' ? '[FAIL]' : '[OK]';
-                actionSummary += `${icon} ${r.action_type}: ${r.message}\n`;
-            }
-            responseEl.textContent += actionSummary;
-        }
-
-        // Refresh data after actions (beads may have been created/modified)
-        if (actionResults.length > 0) {
-            setTimeout(() => loadAll(), 1000);
-        }
+        // Refresh data
+        setTimeout(() => loadAll(), 1000);
     } catch (e) {
-        responseEl.classList.remove('streaming');
-        responseEl.textContent = 'Request failed: ' + (e.message || 'Unknown error');
+        responseEl.innerHTML = `<span style="color:var(--danger-color)">Failed to dispatch: ${escapeHtml(e.message)}</span>`;
     } finally {
         setBusy('ceo-repl', false);
         sendBtn.disabled = false;
@@ -2390,12 +2336,8 @@ async function sendCeoReplQuery() {
     }
 }
 
-// Fallback when no CEO agent exists — raw chat completion (no action execution)
-async function sendCeoReplFallback(message) {
-    const responseEl = document.getElementById('ceo-repl-response');
-    const sendBtn = document.getElementById('ceo-repl-send');
-    if (!responseEl || !sendBtn) return;
-
+// Stream a general CEO query via chat completion
+async function ceoReplStreamQuery(message, responseEl, sendBtn) {
     try {
         setBusy('ceo-repl', true);
         sendBtn.disabled = true;
@@ -2405,14 +2347,34 @@ async function sendCeoReplFallback(message) {
 
         const healthyProviders = (state.providers || []).filter(p => p.status === 'healthy' || p.status === 'active');
         if (healthyProviders.length === 0) {
-            throw new Error('No active providers available. Spawn a CEO agent for action execution.');
+            throw new Error('No active providers available.');
         }
         const providerId = healthyProviders[0].id;
+
+        // Build context about current project state
+        const projectId = uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
+        const project = state.projects.find(p => p.id === projectId);
+        const projectAgents = (state.agents || []).filter(a => a.project_id === projectId);
+        const agentSummary = projectAgents.map(a => `${a.name || a.role} (${a.status}${a.current_bead ? ', working on ' + a.current_bead : ''})`).join(', ');
+        const beadCounts = {
+            open: (state.beads || []).filter(b => b.status === 'open' && b.project_id === projectId).length,
+            in_progress: (state.beads || []).filter(b => b.status === 'in_progress' && b.project_id === projectId).length,
+        };
+
+        const systemPrompt = `You are the CEO dashboard assistant for Loom, an autonomous agent orchestration system.
+Current project: ${project ? project.name : 'unknown'} (${projectId})
+Agents: ${agentSummary || 'none'}
+Beads: ${beadCounts.open} open, ${beadCounts.in_progress} in progress
+
+To dispatch a task to an agent, the user should type: agent_name: task description
+For example: "code reviewer: Review the authentication module for security issues"
+
+Answer questions concisely about the system state, agents, and beads.`;
 
         const requestBody = {
             provider_id: providerId,
             messages: [
-                { role: 'system', content: 'You are the CEO of Loom. Respond concisely and helpfully. Note: no CEO agent is spawned, so actions cannot be executed.' },
+                { role: 'system', content: systemPrompt },
                 { role: 'user', content: message }
             ]
         };
