@@ -845,6 +845,7 @@ function renderProjectAgentsList(agents, projectId) {
                     </div>
                 </div>
                 <div style="display: flex; gap: 0.25rem;">
+                    ${a.current_bead ? `<button type="button" class="secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="viewAgentConversation('${escapeHtml(a.current_bead)}')" title="View conversation log">Log</button>` : ''}
                     <button type="button" class="secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="showEditAgentModal('${escapeHtml(a.id)}')" title="Edit">Edit</button>
                     <button type="button" class="secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="showCloneAgentModal('${escapeHtml(a.id)}')" title="Clone">Clone</button>
                     <button type="button" class="danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="removeAgentFromProject('${escapeHtml(projectId)}', '${escapeHtml(a.id)}')">Remove</button>
@@ -1877,6 +1878,7 @@ function renderAgents() {
                     ${agent.current_bead ? `<strong>Working on:</strong> ${agent.current_bead}` : ''}
                 </div>
                 <div style="margin-top: 1rem;">
+                    ${agent.current_bead ? `<button class="secondary" onclick="viewAgentConversation('${escapeHtml(agent.current_bead)}')" title="View conversation log">Log</button>` : ''}
                     <button class="secondary" onclick="cloneAgentPersona('${agent.id}')" ${isBusy(`cloneAgent:${agent.id}`) ? 'disabled' : ''}>${isBusy(`cloneAgent:${agent.id}`) ? 'Cloning…' : 'Clone Persona'}</button>
                     <button class="danger" onclick="stopAgent('${agent.id}')" ${isBusy(`stopAgent:${agent.id}`) ? 'disabled' : ''}>${isBusy(`stopAgent:${agent.id}`) ? 'Stopping…' : 'Stop Agent'}</button>
                 </div>
@@ -2243,12 +2245,14 @@ async function sendReplQuery() {
     }
 }
 
-// Unified CEO REPL query (uses ceo-repl-* element IDs)
+// CEO REPL session bead ID — created once per page session for continuity
+let ceoReplBeadId = null;
+
+// Unified CEO REPL query — routes through /pair endpoint so actions are executed
 async function sendCeoReplQuery() {
     const input = document.getElementById('ceo-repl-input');
     const responseEl = document.getElementById('ceo-repl-response');
     const sendBtn = document.getElementById('ceo-repl-send');
-    const streamToggle = document.getElementById('ceo-repl-stream-toggle');
     if (!input || !responseEl || !sendBtn) return;
 
     const message = (input.value || '').trim();
@@ -2257,59 +2261,171 @@ async function sendCeoReplQuery() {
         return;
     }
 
-    const useStreaming = streamToggle ? streamToggle.checked : true;
+    // Find a CEO agent to route through
+    const ceoAgentIds = getCeoAgentIds();
+    const ceoAgent = ceoAgentIds.length > 0
+        ? (state.agents || []).find(a => ceoAgentIds.includes(normalizeAssignee(a.id)))
+        : null;
+
+    if (!ceoAgent) {
+        // Fall back to raw chat completion if no CEO agent exists
+        return sendCeoReplFallback(message);
+    }
+
+    // Get or create a REPL session bead
+    if (!ceoReplBeadId) {
+        try {
+            const selectedProjectId = uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
+            const bead = await apiCall('/beads', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: 'CEO REPL Session',
+                    description: 'Interactive CEO command session',
+                    type: 'task',
+                    priority: 1,
+                    project_id: selectedProjectId,
+                    assigned_to: ceoAgent.id
+                })
+            });
+            ceoReplBeadId = bead.id;
+        } catch (e) {
+            showToast('Failed to create REPL session: ' + e.message, 'error');
+            return sendCeoReplFallback(message);
+        }
+    }
 
     try {
         setBusy('ceo-repl', true);
         sendBtn.disabled = true;
-        sendBtn.textContent = useStreaming ? 'Streaming…' : 'Sending…';
+        sendBtn.textContent = 'Streaming…';
+        responseEl.textContent = '';
+        responseEl.classList.add('streaming');
+
+        const response = await fetch(`${API_BASE}/pair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}) },
+            body: JSON.stringify({
+                agent_id: ceoAgent.id,
+                bead_id: ceoReplBeadId,
+                message: message
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: response.statusText }));
+            throw new Error(err.error || 'Request failed');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamedText = '';
+        let actionResults = [];
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            let currentEvent = '';
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.substring(7).trim();
+                    continue;
+                }
+                if (!line.startsWith('data: ')) continue;
+                const data = line.substring(6);
+                try {
+                    const parsed = JSON.parse(data);
+                    if (currentEvent === 'chunk' && parsed.choices && parsed.choices[0]) {
+                        const delta = parsed.choices[0].delta;
+                        if (delta && delta.content) {
+                            streamedText += delta.content;
+                            responseEl.textContent = streamedText;
+                            responseEl.scrollTop = responseEl.scrollHeight;
+                        }
+                    } else if (currentEvent === 'actions' && parsed.results) {
+                        actionResults = parsed.results;
+                    } else if (currentEvent === 'error' && parsed.error) {
+                        responseEl.textContent += '\n\n[Error: ' + parsed.error + ']';
+                    }
+                } catch (e) { /* ignore parse errors */ }
+                currentEvent = '';
+            }
+        }
+
+        responseEl.classList.remove('streaming');
+        responseEl.classList.add('complete');
+
+        // Append action execution results
+        if (actionResults.length > 0) {
+            let actionSummary = '\n\n--- Actions Executed ---\n';
+            for (const r of actionResults) {
+                const icon = r.status === 'error' ? '[FAIL]' : '[OK]';
+                actionSummary += `${icon} ${r.action_type}: ${r.message}\n`;
+            }
+            responseEl.textContent += actionSummary;
+        }
+
+        // Refresh data after actions (beads may have been created/modified)
+        if (actionResults.length > 0) {
+            setTimeout(() => loadAll(), 1000);
+        }
+    } catch (e) {
+        responseEl.classList.remove('streaming');
+        responseEl.textContent = 'Request failed: ' + (e.message || 'Unknown error');
+    } finally {
+        setBusy('ceo-repl', false);
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+    }
+}
+
+// Fallback when no CEO agent exists — raw chat completion (no action execution)
+async function sendCeoReplFallback(message) {
+    const responseEl = document.getElementById('ceo-repl-response');
+    const sendBtn = document.getElementById('ceo-repl-send');
+    if (!responseEl || !sendBtn) return;
+
+    try {
+        setBusy('ceo-repl', true);
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Streaming…';
         responseEl.textContent = '';
         responseEl.classList.add('streaming');
 
         const healthyProviders = (state.providers || []).filter(p => p.status === 'healthy' || p.status === 'active');
         if (healthyProviders.length === 0) {
-            throw new Error('No active providers available');
+            throw new Error('No active providers available. Spawn a CEO agent for action execution.');
         }
         const providerId = healthyProviders[0].id;
 
         const requestBody = {
             provider_id: providerId,
             messages: [
-                { role: 'system', content: 'You are the CEO of Loom. Respond concisely and helpfully.' },
+                { role: 'system', content: 'You are the CEO of Loom. Respond concisely and helpfully. Note: no CEO agent is spawned, so actions cannot be executed.' },
                 { role: 'user', content: message }
             ]
         };
 
-        if (useStreaming) {
-            await createStreamingRequest('/chat/completions', requestBody, {
-                useStreaming: true,
-                onChunk: (chunk, fullContent) => {
-                    responseEl.textContent = fullContent;
-                    responseEl.scrollTop = responseEl.scrollHeight;
-                },
-                onComplete: (fullContent) => {
-                    responseEl.classList.remove('streaming');
-                    responseEl.classList.add('complete');
-                },
-                onError: (error) => {
-                    responseEl.classList.remove('streaming');
-                    responseEl.textContent += '\n\n[Error: ' + error + ']';
-                }
-            });
-        } else {
-            const res = await apiCall('/chat/completions', {
-                method: 'POST',
-                body: JSON.stringify(requestBody)
-            });
-
-            if (res.choices && res.choices[0] && res.choices[0].message) {
-                responseEl.textContent = res.choices[0].message.content || 'No response';
-            } else {
-                responseEl.textContent = 'No response returned.';
+        await createStreamingRequest('/chat/completions', requestBody, {
+            useStreaming: true,
+            onChunk: (chunk, fullContent) => {
+                responseEl.textContent = fullContent;
+                responseEl.scrollTop = responseEl.scrollHeight;
+            },
+            onComplete: () => {
+                responseEl.classList.remove('streaming');
+                responseEl.classList.add('complete');
+            },
+            onError: (error) => {
+                responseEl.classList.remove('streaming');
+                responseEl.textContent += '\n\n[Error: ' + error + ']';
             }
-            responseEl.classList.remove('streaming');
-            responseEl.classList.add('complete');
-        }
+        });
     } catch (e) {
         responseEl.classList.remove('streaming');
         responseEl.textContent = 'Request failed: ' + (e.message || 'Unknown error');
@@ -3578,6 +3694,10 @@ document.addEventListener('keydown', (event) => {
 });
 
 function closeAppModal() {
+    if (typeof stopConversationAutoRefresh === 'function') stopConversationAutoRefresh();
+    // Reset modal width if it was changed
+    const modalContent = document.querySelector('#app-modal .modal-content');
+    if (modalContent) modalContent.style.maxWidth = '';
     closeModal('app-modal');
 }
 
@@ -4606,3 +4726,116 @@ document.getElementById('refresh-motivations-btn')?.addEventListener('click', lo
 document.getElementById('motivation-type-filter')?.addEventListener('change', renderMotivationsTable);
 document.getElementById('motivation-role-filter')?.addEventListener('change', renderMotivationsTable);
 document.getElementById('motivation-status-filter')?.addEventListener('change', renderMotivationsTable);
+
+// --- Agent Conversation Viewer ---
+
+let conversationAutoRefreshTimer = null;
+
+function stopConversationAutoRefresh() {
+    if (conversationAutoRefreshTimer) {
+        clearInterval(conversationAutoRefreshTimer);
+        conversationAutoRefreshTimer = null;
+    }
+}
+
+async function viewAgentConversation(beadId) {
+    stopConversationAutoRefresh();
+
+    const bodyHtml = `<div id="conv-container" class="conv-container"><div class="loading">Loading conversation...</div></div>`;
+    openAppModal({ title: 'Agent Conversation', bodyHtml });
+
+    // Make the modal wider for conversation view
+    const modalContent = document.querySelector('#app-modal .modal-content');
+    if (modalContent) modalContent.style.maxWidth = '900px';
+
+    await refreshConversation(beadId);
+
+    // Auto-refresh every 10s while modal is open
+    conversationAutoRefreshTimer = setInterval(() => {
+        if (modalState.activeId === 'app-modal') {
+            refreshConversation(beadId);
+        } else {
+            stopConversationAutoRefresh();
+        }
+    }, 10000);
+}
+
+async function refreshConversation(beadId) {
+    const container = document.getElementById('conv-container');
+    if (!container) return;
+
+    try {
+        const session = await apiCall(`/beads/${encodeURIComponent(beadId)}/conversation`);
+        if (!session || !session.messages || session.messages.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No conversation messages yet.</p></div>';
+            return;
+        }
+        container.innerHTML = renderConversationMessages(session.messages);
+        // Scroll to bottom
+        container.scrollTop = container.scrollHeight;
+    } catch (error) {
+        if (container.innerHTML.includes('Loading')) {
+            container.innerHTML = `<div class="empty-state"><p>No conversation found for this bead.</p></div>`;
+        }
+    }
+}
+
+function renderConversationMessages(messages) {
+    return messages.map(msg => {
+        const roleClass = msg.role === 'system' ? 'conv-system' :
+                         msg.role === 'user' ? 'conv-user' : 'conv-assistant';
+        const roleLabel = msg.role === 'system' ? 'System' :
+                         msg.role === 'user' ? 'Feedback' : 'Agent';
+        const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '';
+
+        return `
+            <div class="conv-message ${roleClass}">
+                <div class="conv-message-header">
+                    <span class="conv-role">${roleLabel}</span>
+                    ${time ? `<span class="conv-time">${time}</span>` : ''}
+                </div>
+                <div class="conv-message-body">${formatConversationContent(msg.content, msg.role)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function formatConversationContent(content, role) {
+    if (!content) return '';
+    let text = escapeHtml(content);
+
+    // Truncate very long system prompts
+    if (role === 'system' && text.length > 500) {
+        const preview = text.substring(0, 500);
+        return `<div class="conv-truncated">${preview.replace(/\n/g, '<br>')}...<br><small>[System prompt truncated]</small></div>`;
+    }
+
+    // For assistant messages, try to show JSON actions compactly
+    if (role === 'assistant') {
+        try {
+            const parsed = JSON.parse(content);
+            if (parsed.actions && Array.isArray(parsed.actions)) {
+                const summary = parsed.actions.map(a => {
+                    let detail = a.type;
+                    if (a.path) detail += `: ${a.path}`;
+                    else if (a.command) detail += `: ${a.command.substring(0, 60)}`;
+                    else if (a.bead && a.bead.title) detail += `: ${a.bead.title}`;
+                    return `<span class="conv-action-tag">${escapeHtml(detail)}</span>`;
+                }).join(' ');
+                let html = `<div class="conv-actions-summary">${summary}</div>`;
+                if (parsed.thinking) {
+                    html = `<div class="conv-thinking">${escapeHtml(parsed.thinking.substring(0, 300))}${parsed.thinking.length > 300 ? '...' : ''}</div>` + html;
+                }
+                return html;
+            }
+        } catch (e) { /* not JSON, render as text */ }
+    }
+
+    // Basic markdown formatting
+    text = text.replace(/```([^`]+)```/g, '<pre class="conv-code">$1</pre>');
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/## ([^\n]+)/g, '<strong>$1</strong>');
+    text = text.replace(/\n/g, '<br>');
+    return text;
+}

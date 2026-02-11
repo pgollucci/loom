@@ -666,6 +666,8 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 		},
 	}
 
+	tracker := NewProgressTracker(maxIter)
+
 	var allActions []actions.Result
 	consecutiveParseFailures := 0
 	consecutiveValidationFailures := 0
@@ -808,6 +810,7 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 		}
 
 		allActions = append(allActions, results...)
+		tracker.Update(iteration+1, results)
 
 		// Log the iteration
 		loopResult.ActionLog = append(loopResult.ActionLog, ActionLogEntry{
@@ -859,8 +862,8 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 			log.Printf("[ActionLoop] Warning: same actions repeated %d times (hash %s)", actionHashes[hash], hash[:8])
 		}
 
-		// Format results as user message and continue
-		feedback := actions.FormatResultsAsUserMessage(results)
+		// Format results as user message, prepended with progress summary
+		feedback := tracker.Summary(iteration+1) + actions.FormatResultsAsUserMessage(results)
 		messages = append(messages, provider.ChatMessage{Role: "user", Content: feedback})
 		if conversationCtx != nil {
 			conversationCtx.AddMessage("user", feedback, len(feedback)/4)
