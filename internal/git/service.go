@@ -214,19 +214,8 @@ func (s *GitService) Push(ctx context.Context, req PushRequest) (*PushResult, er
 		}
 	}
 
-	// Validate branch name (must match configured prefix)
-	if !strings.HasPrefix(branch, s.branchPrefix) {
-		err := fmt.Errorf("can only push to %s* branches, got: %s", s.branchPrefix, branch)
-		s.auditLogger.LogOperation("push", req.BeadID, branch, false, err)
-		return nil, err
-	}
-
-	// Check if pushing to protected branch
-	if isProtectedBranch(branch) {
-		err := fmt.Errorf("cannot push to protected branch: %s", branch)
-		s.auditLogger.LogOperation("push", req.BeadID, branch, false, err)
-		return nil, err
-	}
+	// Agents can push to any branch. Protected branch enforcement
+	// is left to the remote (GitHub branch protection rules).
 
 	// Block force push unless explicitly allowed
 	if req.Force {
