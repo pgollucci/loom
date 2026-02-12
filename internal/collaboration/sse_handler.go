@@ -238,10 +238,10 @@ func (h *SSEHandler) HandleUpdateData(w http.ResponseWriter, r *http.Request) {
 	ctx.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "updated",
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "updated",
 		"bead_id": req.BeadID,
-		"key": req.Key,
+		"key":     req.Key,
 		"version": currentVersion,
 	})
 }
@@ -278,9 +278,9 @@ func (h *SSEHandler) HandleAddActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "activity_added",
-		"bead_id": req.BeadID,
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "activity_added",
+		"bead_id":       req.BeadID,
 		"activity_type": req.ActivityType,
 	})
 }

@@ -303,7 +303,10 @@ func (s *Server) handleBootstrapProject(w http.ResponseWriter, r *http.Request) 
 	)
 
 	// Ensure workspace directory exists
-	os.MkdirAll(workspaceDir, 0755)
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		s.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create workspace directory: %v", err))
+		return
+	}
 
 	// Bootstrap the project
 	result, err := bootstrapService.Bootstrap(r.Context(), req)

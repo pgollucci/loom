@@ -531,11 +531,6 @@ var (
 	}
 )
 
-// validateBranchName validates that a branch name follows the expected prefix pattern
-func validateBranchName(branchName string) error {
-	return validateBranchNameWithPrefix(branchName, "agent/")
-}
-
 // validateBranchNameWithPrefix validates branch name with a configurable prefix
 func validateBranchNameWithPrefix(branchName, prefix string) error {
 	if !strings.HasPrefix(branchName, prefix) {

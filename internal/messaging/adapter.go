@@ -63,10 +63,8 @@ func (s *ActionMessageSender) SendMessage(ctx context.Context, fromAgentID, toAg
 
 	// Build context from payload
 	context := make(map[string]interface{})
-	if payload != nil {
-		for k, v := range payload {
-			context[k] = v
-		}
+	for k, v := range payload {
+		context[k] = v
 	}
 
 	// Create and send message

@@ -217,7 +217,7 @@ func TestIsStuckInLoop_RepeatedActionWithProgress(t *testing.T) {
 				"file_path": "test.go",
 			},
 		}
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 		time.Sleep(10 * time.Millisecond) // Small delay to ensure different timestamps
 	}
 
@@ -245,7 +245,7 @@ func TestIsStuckInLoop_VariedActions(t *testing.T) {
 	}
 
 	for _, action := range actions {
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	stuck, reason := ld.IsStuckInLoop(bead)
@@ -318,7 +318,7 @@ func TestGetProgressSummary(t *testing.T) {
 	}
 
 	for _, action := range actions {
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	summary = ld.GetProgressSummary(bead)
@@ -342,7 +342,7 @@ func TestResetProgress(t *testing.T) {
 	}
 
 	// Record some actions
-	ld.RecordAction(bead, ActionRecord{
+	_ = ld.RecordAction(bead, ActionRecord{
 		Timestamp:  time.Now(),
 		AgentID:    "agent-1",
 		ActionType: "read_file",
@@ -459,7 +459,7 @@ func TestHistoryLimit(t *testing.T) {
 			ActionType: "read_file",
 			ActionData: map[string]interface{}{"file_path": "test.go"},
 		}
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	history, err := ld.getActionHistory(bead)
@@ -496,7 +496,7 @@ func TestConcurrentActionRecording(t *testing.T) {
 				ActionType: "read_file",
 				ActionData: map[string]interface{}{"index": idx},
 			}
-			ld.RecordAction(bead, action)
+			_ = ld.RecordAction(bead, action)
 			done <- true
 		}(i)
 	}
@@ -539,7 +539,7 @@ func TestGetActionHistoryJSON(t *testing.T) {
 	}
 
 	for _, action := range actions {
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	historyJSON = ld.GetActionHistoryJSON(bead)
@@ -589,7 +589,7 @@ func TestSuggestNextSteps_OnlyReads(t *testing.T) {
 			ActionType: "read_file",
 			ActionData: map[string]interface{}{"file_path": fmt.Sprintf("file%d.go", i)},
 		}
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	suggestions := ld.SuggestNextSteps(bead, "read files but no changes")
@@ -629,7 +629,7 @@ func TestSuggestNextSteps_SingleFile(t *testing.T) {
 			ActionType: "read_file",
 			ActionData: map[string]interface{}{"file_path": "same.go"},
 		}
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	suggestions := ld.SuggestNextSteps(bead, "stuck on single file")
@@ -665,7 +665,7 @@ func TestSuggestNextSteps_EditsNoTests(t *testing.T) {
 	}
 
 	for _, action := range actions {
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	suggestions := ld.SuggestNextSteps(bead, "made changes but no validation")
@@ -703,7 +703,7 @@ func TestSuggestNextSteps_ManyActionsStillStuck(t *testing.T) {
 	}
 
 	for _, action := range actions {
-		ld.RecordAction(bead, action)
+		_ = ld.RecordAction(bead, action)
 	}
 
 	suggestions := ld.SuggestNextSteps(bead, "tried many approaches")
