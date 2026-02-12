@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[0;34mℹ️  Generating changelog from v0.0.1 to HEAD...[0m
+## [0.1.2] - 2026-02-12
+
+### Added
+- conversations redesign — Cytoscape action-flow graph
+- D3.js visualization layer — donuts, bars, gauges, sparklines, treemaps
+- Dolt multi-reader/multi-writer coordinator for per-project beads
+- Action progress tracker, conversation viewer, CEO REPL fix
+- Pre-push test gate — build and test must pass before git push
+
+### Fixed
+- users page blank when auth disabled, logs UI blank, duplicate formatAgentDisplayName
+- error toast cascade, bead modal layout, default dispatch to Engineering Manager
+- UI improvements — agent names, bead modal, kanban project filter, spawn naming
+- last lint — ineffectual output assignment in branch delete
+- lint round 3 — staticcheck, ineffassign, gosimple
+- remaining lint errors — unused funcs, errcheck, gosimple
+- CI failures — test, lint errcheck, gosec SARIF upload
+- auto-file circuit breaker, bd auto-init, bootstrap health check
+- bead creation fallback, conversation UI field mapping
+- streaming timeouts, SSH deploy key handling, conversations UI
+- CEO REPL agent routing and context-aware queries
+- CEO REPL bead creation uses agent project_id, skips auto-file
+
 ## [0.1.0] - 2026-02-10
 
 ### Added
