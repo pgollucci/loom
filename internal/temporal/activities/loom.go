@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/agent"
@@ -109,9 +110,10 @@ func (a *LoomActivities) resolveStuckBeads() int {
 			reason = "loop detected"
 		}
 
+		triageAgent := a.findDefaultTriageAgent(b.ProjectID)
 		updates := map[string]interface{}{
 			"status":      models.BeadStatusBlocked,
-			"assigned_to": "",
+			"assigned_to": triageAgent,
 			"context": map[string]string{
 				"ralph_blocked_at":     time.Now().UTC().Format(time.RFC3339),
 				"ralph_blocked_reason": fmt.Sprintf("auto-blocked by Ralph: %s", reason),
@@ -122,8 +124,39 @@ func (a *LoomActivities) resolveStuckBeads() int {
 			log.Printf("[Ralph] Failed to auto-block stuck bead %s: %v", b.ID, err)
 			continue
 		}
-		log.Printf("[Ralph] Auto-blocked stuck bead %s: %s", b.ID, reason)
+		log.Printf("[Ralph] Auto-blocked stuck bead %s: %s (reassigned to %s)", b.ID, reason, triageAgent)
 		resolved++
 	}
 	return resolved
+}
+
+func (a *LoomActivities) findDefaultTriageAgent(projectID string) string {
+	if a.agentMgr == nil {
+		return ""
+	}
+	agents := a.agentMgr.ListAgentsByProject(projectID)
+	if len(agents) == 0 {
+		agents = a.agentMgr.ListAgents()
+	}
+	var fallback string
+	for _, ag := range agents {
+		role := strings.TrimSpace(strings.ToLower(ag.Role))
+		role = strings.ReplaceAll(role, "_", "-")
+		role = strings.ReplaceAll(role, " ", "-")
+		if role == "cto" || role == "chief-technology-officer" {
+			return ag.ID
+		}
+		if role == "engineering-manager" && fallback == "" {
+			fallback = ag.ID
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	for _, ag := range agents {
+		if ag.ProjectID == projectID || ag.ProjectID == "" {
+			return ag.ID
+		}
+	}
+	return ""
 }

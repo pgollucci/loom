@@ -2520,6 +2520,53 @@ func (a *Loom) ReleaseFileAccess(projectID, filePath, agentID string) error {
 	return a.fileLockManager.ReleaseLock(projectID, filePath, agentID)
 }
 
+// findDefaultAssignee returns the ID of the best default triage agent for a project.
+// Preference order: CTO > Engineering Manager > any agent assigned to the project.
+func (a *Loom) findDefaultAssignee(projectID string) string {
+	if a.agentManager == nil {
+		return ""
+	}
+	agents := a.agentManager.ListAgentsByProject(projectID)
+	if len(agents) == 0 {
+		agents = a.agentManager.ListAgents()
+	}
+	var fallback string
+	for _, ag := range agents {
+		role := normalizeRole(ag.Role)
+		if role == "cto" || role == "chief-technology-officer" {
+			return ag.ID
+		}
+		if role == "engineering-manager" && fallback == "" {
+			fallback = ag.ID
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	// Last resort: first agent for this project
+	for _, ag := range agents {
+		if ag.ProjectID == projectID || ag.ProjectID == "" {
+			return ag.ID
+		}
+	}
+	return ""
+}
+
+// normalizeRole lowercases and normalizes a role string for comparison.
+func normalizeRole(role string) string {
+	role = strings.TrimSpace(strings.ToLower(role))
+	if strings.Contains(role, "/") {
+		parts := strings.Split(role, "/")
+		role = parts[len(parts)-1]
+	}
+	if idx := strings.Index(role, "("); idx != -1 {
+		role = strings.TrimSpace(role[:idx])
+	}
+	role = strings.ReplaceAll(role, "_", "-")
+	role = strings.ReplaceAll(role, " ", "-")
+	return role
+}
+
 // CreateBead creates a new work bead
 func (a *Loom) CreateBead(title, description string, priority models.BeadPriority, beadType, projectID string) (*models.Bead, error) {
 	// Verify project exists
@@ -2532,11 +2579,26 @@ func (a *Loom) CreateBead(title, description string, priority models.BeadPriorit
 		return nil, err
 	}
 
+	// Auto-assign to default triage agent (CTO > Engineering Manager > any)
+	if bead.AssignedTo == "" {
+		if defaultAgent := a.findDefaultAssignee(projectID); defaultAgent != "" {
+			bead.AssignedTo = defaultAgent
+			if updateErr := a.beadsManager.UpdateBead(bead.ID, map[string]interface{}{
+				"assigned_to": defaultAgent,
+			}); updateErr != nil {
+				log.Printf("[Loom] Warning: failed to auto-assign bead %s to %s: %v", bead.ID, defaultAgent, updateErr)
+			} else {
+				log.Printf("[Loom] Auto-assigned new bead %s to default agent %s", bead.ID, defaultAgent)
+			}
+		}
+	}
+
 	if a.eventBus != nil {
 		_ = a.eventBus.PublishBeadEvent(eventbus.EventTypeBeadCreated, bead.ID, projectID, map[string]interface{}{
-			"title":    title,
-			"type":     beadType,
-			"priority": priority,
+			"title":       title,
+			"type":        beadType,
+			"priority":    priority,
+			"assigned_to": bead.AssignedTo,
 		})
 	}
 
@@ -2547,7 +2609,6 @@ func (a *Loom) CreateBead(title, description string, priority models.BeadPriorit
 			// Log error but don't fail bead creation
 			fmt.Printf("Warning: failed to start bead workflow: %v\n", err)
 		}
-
 	}
 
 	return bead, nil
@@ -2879,12 +2940,18 @@ func (a *Loom) applyCEODecisionToParent(decisionID string) error {
 	case "approve":
 		_, _ = a.UpdateBead(parentID, map[string]interface{}{"status": models.BeadStatusClosed})
 	case "deny":
+		// Reassign to default triage agent instead of leaving unassigned
+		denyAssignee := ""
+		if parentBead, err := a.beadsManager.GetBead(parentID); err == nil {
+			denyAssignee = a.findDefaultAssignee(parentBead.ProjectID)
+		}
 		_, _ = a.UpdateBead(parentID, map[string]interface{}{
 			"status":      models.BeadStatusOpen,
-			"assigned_to": "",
+			"assigned_to": denyAssignee,
 			"context": map[string]string{
-				"ceo_denied_at": time.Now().UTC().Format(time.RFC3339),
-				"ceo_comment":   d.Rationale,
+				"ceo_denied_at":      time.Now().UTC().Format(time.RFC3339),
+				"ceo_comment":        d.Rationale,
+				"reassigned_to_role": "default-triage",
 			},
 		})
 	case "needs_more_info":

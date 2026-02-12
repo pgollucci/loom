@@ -383,13 +383,16 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 					ctxUpdates["conversation_session_id"] = sessionID
 				}
 
+				triageAgent := d.findDefaultTriageAgent(b.ProjectID)
 				updates := map[string]interface{}{
 					"status":      models.BeadStatusBlocked,
-					"assigned_to": "",
+					"assigned_to": triageAgent,
 					"context":     ctxUpdates,
 				}
 				if err := d.beads.UpdateBead(b.ID, updates); err != nil {
 					log.Printf("[Ralph] Failed to block bead %s: %v", b.ID, err)
+				} else if triageAgent != "" {
+					log.Printf("[Ralph] Blocked bead %s reassigned to triage agent %s", b.ID, triageAgent)
 				}
 
 				if d.eventBus != nil {
@@ -682,11 +685,12 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		}
 		updates := map[string]interface{}{"context": ctxUpdates}
 		if loopDetected {
+			triageAgent := d.findDefaultTriageAgent(candidate.ProjectID)
 			updates["priority"] = models.BeadPriorityP0
 			updates["status"] = models.BeadStatusOpen
-			updates["assigned_to"] = ""
+			updates["assigned_to"] = triageAgent
+			log.Printf("[Dispatcher] Loop detected for bead %s, reassigning to triage agent %s", candidate.ID, triageAgent)
 		}
-		// FIX #7: Log errors instead of silently discarding them
 		if err := d.beads.UpdateBead(candidate.ID, updates); err != nil {
 			log.Printf("[Dispatcher] CRITICAL: Failed to update bead %s with context/loop detection: %v", candidate.ID, err)
 		}
@@ -756,11 +760,12 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 
 	updates := map[string]interface{}{"context": ctxUpdates}
 	if loopDetected {
+		triageAgent := d.findDefaultTriageAgent(candidate.ProjectID)
 		updates["priority"] = models.BeadPriorityP0
 		updates["status"] = models.BeadStatusOpen
-		updates["assigned_to"] = ""
+		updates["assigned_to"] = triageAgent
+		log.Printf("[Dispatcher] Task failure loop for bead %s, reassigning to triage agent %s", candidate.ID, triageAgent)
 	}
-	// FIX #7: Log errors instead of silently discarding them
 	if err := d.beads.UpdateBead(candidate.ID, updates); err != nil {
 		log.Printf("[Dispatcher] CRITICAL: Failed to update bead %s after task failure: %v", candidate.ID, err)
 	}
@@ -1243,4 +1248,35 @@ func normalizeRoleName(role string) string {
 	}
 	role = strings.Trim(role, "-")
 	return role
+}
+
+// findDefaultTriageAgent returns the ID of the best default triage agent for a project.
+// Preference: CTO > Engineering Manager > any project agent.
+func (d *Dispatcher) findDefaultTriageAgent(projectID string) string {
+	if d.agents == nil {
+		return ""
+	}
+	agents := d.agents.ListAgentsByProject(projectID)
+	if len(agents) == 0 {
+		agents = d.agents.ListAgents()
+	}
+	var fallback string
+	for _, ag := range agents {
+		role := normalizeRoleName(ag.Role)
+		if role == "cto" || role == "chief-technology-officer" {
+			return ag.ID
+		}
+		if role == "engineering-manager" && fallback == "" {
+			fallback = ag.ID
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	for _, ag := range agents {
+		if ag.ProjectID == projectID || ag.ProjectID == "" {
+			return ag.ID
+		}
+	}
+	return ""
 }
