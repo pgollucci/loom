@@ -670,12 +670,20 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		}, execErr)
 
 		historyJSON, loopDetected, loopReason := buildDispatchHistory(candidate, ag.ID)
+
+		// Check if the error is due to max_iterations - if so, don't redispatch
+		shouldRedispatch := "true"
+		if candidate.Context != nil && candidate.Context["terminal_reason"] == "max_iterations" {
+			shouldRedispatch = "false"
+			log.Printf("[Dispatcher] Bead %s previously hit max_iterations, not redispatching after error", candidate.ID)
+		}
+
 		ctxUpdates := map[string]string{
 			"last_run_at":          time.Now().UTC().Format(time.RFC3339),
 			"last_run_error":       execErr.Error(),
 			"agent_id":             ag.ID,
 			"provider_id":          ag.ProviderID,
-			"redispatch_requested": "true",
+			"redispatch_requested": shouldRedispatch,
 			"dispatch_history":     historyJSON,
 			"loop_detected":        fmt.Sprintf("%t", loopDetected),
 		}
@@ -740,6 +748,15 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		// If the loop completed successfully, the agent finished the work
 		if result.LoopTerminalReason == "completed" {
 			ctxUpdates["redispatch_requested"] = "false"
+		}
+
+		// If the agent hit max_iterations, disable redispatch to prevent infinite loops
+		// The agent couldn't finish the work within the iteration limit, so continuing
+		// to redispatch will just waste resources. Instead, escalate or block the bead.
+		if result.LoopTerminalReason == "max_iterations" {
+			ctxUpdates["redispatch_requested"] = "false"
+			ctxUpdates["max_iterations_reached_at"] = time.Now().UTC().Format(time.RFC3339)
+			log.Printf("[Dispatcher] Bead %s hit max_iterations, disabling redispatch to prevent infinite loop", candidate.ID)
 		}
 
 		// On failure, set cooldown to prevent re-dispatching the same bead
