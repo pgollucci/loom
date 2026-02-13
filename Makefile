@@ -1,4 +1,4 @@
-.PHONY: all build build-all start stop restart bootstrap test test-docker test-api coverage fmt vet lint lint-yaml lint-docs deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch
+.PHONY: all build build-all start stop restart bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-yaml lint-docs deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch
 
 # Build variables
 BINARY_NAME=loom
@@ -75,10 +75,14 @@ test-api:
 	@echo "Running post-flight API tests..."
 	@./tests/postflight/api_test.sh $(BASE_URL)
 
-# Run tests with coverage
+# Run tests with coverage (simple)
 coverage:
 	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+
+# Run tests with coverage analysis and threshold checking
+test-coverage:
+	@./scripts/test-coverage.sh
 
 # Format code
 fmt:

@@ -296,6 +296,7 @@ See [TEMPORAL_DSL.md](docs/TEMPORAL_DSL.md) for complete reference.
 | `make test-docker` | Run tests in Docker with Temporal | Full integration tests |
 | `make test-api` | Run post-flight API validation | After deployment |
 | `make coverage` | Run tests with coverage HTML report | Code review |
+| `make test-coverage` | Full coverage analysis with 75% threshold | Before PRs, releases |
 | `make lint` | fmt + vet + lint-yaml + lint-docs | Full lint pass |
 | `make fmt` | `go fmt ./...` | Before committing |
 | `make vet` | `go vet ./...` | Before committing |
@@ -505,6 +506,56 @@ make lint
 # Clean reset (wipes database)
 make distclean
 ```
+
+### Testing Standards & Coverage Requirements
+
+**Minimum Coverage Requirement: 75%**
+
+All code changes must maintain or improve test coverage. Use `make test-coverage` to verify:
+
+```bash
+# Run full coverage analysis with threshold checking
+make test-coverage
+
+# Generate coverage report without threshold check
+make coverage
+
+# Set custom threshold
+MIN_COVERAGE=80 make test-coverage
+```
+
+**Coverage Report Output:**
+- Overall coverage percentage
+- Per-package coverage breakdown
+- List of files below threshold
+- HTML report (opens in browser)
+
+**Before Committing:**
+1. ✅ Run `make test` - all tests must pass
+2. ✅ Run `make test-coverage` - coverage ≥ 75%
+3. ✅ Run `make lint` - no linting errors
+4. ✅ Add tests for new code paths
+5. ✅ Update tests when refactoring
+
+**When Coverage Falls Below 75%:**
+1. Identify uncovered code: check HTML report (`coverage.html`)
+2. Write tests for critical paths first (error handling, business logic)
+3. Add integration tests for complex workflows
+4. Use table-driven tests for multiple scenarios
+5. Mock external dependencies (event bus, providers, databases)
+
+**Test Organization:**
+- Unit tests: `*_test.go` in same package
+- Integration tests: `tests/integration/`
+- API tests: `tests/postflight/`
+- Test helpers: `internal/testing/`
+
+**Coverage Gaps to Prioritize:**
+1. Error handling paths
+2. Edge cases and boundary conditions
+3. Concurrent operations (goroutines, channels)
+4. State transitions (agent lifecycle, bead status)
+5. Temporal workflows and activities
 
 ## Troubleshooting
 
