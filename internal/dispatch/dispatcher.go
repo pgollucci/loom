@@ -285,6 +285,14 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 			continue
 		}
 
+		// Skip beads that require human configuration (SSH keys, infrastructure, etc.)
+		// These should be handled manually or escalated to CEO, not auto-assigned to agents
+		if d.hasTag(b, "requires-human-config") {
+			skippedReasons["requires_human_config"]++
+			log.Printf("[Dispatcher] Skipping bead %s: requires human configuration", b.ID)
+			continue
+		}
+
 		// Check if this is an auto-filed bug that needs routing
 		if routeInfo := d.autoBugRouter.AnalyzeBugForRouting(b); routeInfo.ShouldRoute {
 			log.Printf("[Dispatcher] Auto-bug detected: %s - routing to %s (%s)", b.ID, routeInfo.PersonaHint, routeInfo.RoutingReason)
@@ -1265,6 +1273,20 @@ func normalizeRoleName(role string) string {
 	}
 	role = strings.Trim(role, "-")
 	return role
+}
+
+// hasTag checks if a bead has a specific tag
+func (d *Dispatcher) hasTag(bead *models.Bead, tag string) bool {
+	if bead == nil || len(bead.Tags) == 0 {
+		return false
+	}
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	for _, t := range bead.Tags {
+		if strings.ToLower(strings.TrimSpace(t)) == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // findDefaultTriageAgent returns the ID of the best default triage agent for a project.

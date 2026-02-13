@@ -1478,7 +1478,7 @@ func (a *Loom) maybeFileReadinessBead(project *models.Project, issues []string, 
 	}
 
 	_ = a.beadsManager.UpdateBead(bead.ID, map[string]interface{}{
-		"tags": []string{"auto-filed", "readiness", "p3"},
+		"tags": []string{"auto-filed", "readiness", "requires-human-config", "p3"},
 	})
 }
 
