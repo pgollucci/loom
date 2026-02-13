@@ -173,10 +173,10 @@ providers: []
 projects:
   - id: loom-self
     name: Loom Self-Improvement
-    git_repo: git@github.com:jordanhubbard/loom.git
+    git_repo: .  # Local development mode - use current directory
     branch: main
     beads_path: .beads
-    git_auth_method: ssh
+    git_auth_method: none  # No auth needed for local repo
     git_strategy: direct
     is_perpetual: true
     is_sticky: true
