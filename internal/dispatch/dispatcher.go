@@ -73,8 +73,31 @@ type Dispatcher struct {
 	maxDispatchHops     int
 	loopDetector        *LoopDetector
 
+	// Commit serialization (Gap #2)
+	commitLock        sync.Mutex        // Global commit lock
+	commitQueue       chan commitRequest // Queue for waiting commits
+	commitLockTimeout time.Duration     // Max time to hold lock (5 min)
+	commitInProgress  *commitState      // Current commit state
+	commitStateMutex  sync.RWMutex      // Protects commitInProgress
+
 	mu     sync.RWMutex
 	status SystemStatus
+}
+
+// commitRequest represents a request to acquire the commit lock
+type commitRequest struct {
+	BeadID    string
+	AgentID   string
+	Timestamp time.Time
+	ResultCh  chan error // Send result back to requester
+}
+
+// commitState tracks the current commit in progress
+type commitState struct {
+	BeadID    string
+	AgentID   string
+	StartedAt time.Time
+	Node      *workflow.WorkflowNode
 }
 
 // Escalator provides CEO escalation for dispatcher guardrails.
@@ -94,12 +117,18 @@ func NewDispatcher(beadsMgr *beads.Manager, projMgr *project.Manager, agentMgr *
 		complexityEstimator: provider.NewComplexityEstimator(),
 		loopDetector:        NewLoopDetector(),
 		readinessMode:       ReadinessWarn,
+		commitQueue:         make(chan commitRequest, 100), // Buffer 100 waiting commits
+		commitLockTimeout:   5 * time.Minute,
 		status: SystemStatus{
 			State:     StatusParked,
 			Reason:    "not started",
 			UpdatedAt: time.Now(),
 		},
 	}
+
+	// Start commit queue processor goroutine
+	go d.processCommitQueue()
+
 	return d
 }
 
@@ -150,6 +179,85 @@ func (d *Dispatcher) SetReadinessMode(mode ReadinessMode) {
 		return // Keep current default if mode is unrecognized/empty
 	}
 	d.readinessMode = mode
+}
+
+// processCommitQueue processes commit requests sequentially to prevent git conflicts
+func (d *Dispatcher) processCommitQueue() {
+	for req := range d.commitQueue {
+		// Acquire global commit lock
+		d.commitLock.Lock()
+
+		// Set commit state
+		d.commitStateMutex.Lock()
+		d.commitInProgress = &commitState{
+			BeadID:    req.BeadID,
+			AgentID:   req.AgentID,
+			StartedAt: time.Now(),
+		}
+		d.commitStateMutex.Unlock()
+
+		log.Printf("[Commit] Processing commit for bead %s (agent %s)", req.BeadID, req.AgentID)
+
+		// Signal that lock is acquired (requester can proceed with commit)
+		req.ResultCh <- nil
+
+		// Lock will be released by releaseCommitLock() after commit completes
+	}
+}
+
+// acquireCommitLock acquires the global commit lock for a bead
+func (d *Dispatcher) acquireCommitLock(ctx context.Context, beadID, agentID string) error {
+	// Check for timeout from previous commit
+	d.commitStateMutex.RLock()
+	if d.commitInProgress != nil {
+		elapsed := time.Since(d.commitInProgress.StartedAt)
+		if elapsed > d.commitLockTimeout {
+			log.Printf("[Commit] WARNING: Previous commit by agent %s timed out after %v, forcibly releasing lock",
+				d.commitInProgress.AgentID, elapsed)
+			d.commitStateMutex.RUnlock()
+			d.releaseCommitLock()
+		} else {
+			d.commitStateMutex.RUnlock()
+		}
+	} else {
+		d.commitStateMutex.RUnlock()
+	}
+
+	// Send commit request to queue
+	req := commitRequest{
+		BeadID:    beadID,
+		AgentID:   agentID,
+		Timestamp: time.Now(),
+		ResultCh:  make(chan error, 1),
+	}
+
+	select {
+	case d.commitQueue <- req:
+		log.Printf("[Commit] Bead %s queued for commit (agent %s)", beadID, agentID)
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while waiting for commit queue")
+	}
+
+	// Wait for commit to be processed
+	select {
+	case err := <-req.ResultCh:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while waiting for commit")
+	}
+}
+
+// releaseCommitLock releases the global commit lock
+func (d *Dispatcher) releaseCommitLock() {
+	d.commitStateMutex.Lock()
+	if d.commitInProgress != nil {
+		log.Printf("[Commit] Releasing commit lock for bead %s (held for %v)",
+			d.commitInProgress.BeadID, time.Since(d.commitInProgress.StartedAt))
+		d.commitInProgress = nil
+	}
+	d.commitStateMutex.Unlock()
+
+	d.commitLock.Unlock()
 }
 
 // DispatchOnce finds at most one ready bead and asks an idle agent to work on it.
@@ -667,6 +775,24 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 	dispatchResult := &DispatchResult{Dispatched: true, ProjectID: selectedProjectID, BeadID: candidate.ID, AgentID: ag.ID, ProviderID: ag.ProviderID}
 
 	go func() {
+		// Check if this is a commit node that needs serialization (Gap #2)
+		if d.workflowEngine != nil {
+			execution, err := d.workflowEngine.GetDatabase().GetWorkflowExecutionByBeadID(candidate.ID)
+			if err == nil && execution != nil {
+				node, err := d.workflowEngine.GetCurrentNode(execution.ID)
+				if err == nil && node != nil && node.NodeType == workflow.NodeTypeCommit {
+					// Acquire commit lock before executing
+					if err := d.acquireCommitLock(ctx, candidate.ID, ag.ID); err != nil {
+						log.Printf("[Commit] Failed to acquire commit lock for bead %s: %v", candidate.ID, err)
+						// Continue without lock (fallback behavior)
+					} else {
+						defer d.releaseCommitLock()
+						log.Printf("[Commit] Acquired commit lock for bead %s (agent %s)", candidate.ID, ag.ID)
+					}
+				}
+			}
+		}
+
 		result, execErr := d.agents.ExecuteTask(ctx, ag.ID, task)
 	if execErr != nil {
 		d.setStatus(StatusParked, "execution failed")
