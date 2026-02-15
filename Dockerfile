@@ -17,10 +17,11 @@ COPY go.sum ./
 RUN go mod download
 
 # Install bd CLI for bead operations (build from source due to replace directives)
-RUN git clone --depth 1 https://github.com/steveyegge/beads.git /tmp/beads && \
-    cd /tmp/beads && \
-    CGO_ENABLED=1 go build -o /go/bin/bd ./cmd/bd && \
-    rm -rf /tmp/beads
+# Temporarily disabled due to import cycle errors in upstream beads repo (Feb 15, 2026)
+# RUN git clone --depth 1 https://github.com/steveyegge/beads.git /tmp/beads && \
+#     cd /tmp/beads && \
+#     CGO_ENABLED=1 go build -o /go/bin/bd ./cmd/bd && \
+#     rm -rf /tmp/beads
 
 # Install Dolt binary for version-controlled beads backend
 RUN if [ -n "$GITHUB_TOKEN" ]; then \
@@ -58,7 +59,8 @@ WORKDIR /app
 COPY --from=builder /build/loom /app/loom
 
 # Copy bd CLI
-COPY --from=builder /go/bin/bd /usr/local/bin/bd
+# Temporarily disabled (Feb 15, 2026) - bd build failing with import cycles
+# COPY --from=builder /go/bin/bd /usr/local/bin/bd
 
 # Copy dolt binary for version-controlled beads backend
 COPY --from=builder /go/bin/dolt /usr/local/bin/dolt
