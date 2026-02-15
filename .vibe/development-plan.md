@@ -215,6 +215,33 @@ Deploy workflow system to enable autonomous self-healing.
 - **Critical Path**: Engineering Manager must handle commits/pushes
 - **Safety**: Single commit node per workflow to prevent conflicts
 
+### Design Phase Discovery (2026-02-15):
+**MAJOR DISCOVERY**: Workflow system infrastructure is **100% COMPLETE** (Phases 1-5, implemented 2026-01-27)
+
+**What Exists:**
+- ✅ Database schema (5 tables) with migrations
+- ✅ Workflow engine (`internal/workflow/engine.go`, 16KB) with full state machine
+- ✅ Dispatcher integration (`internal/dispatch/dispatcher.go:460-831`)
+- ✅ Default workflows (bug.yaml, feature.yaml, ui.yaml, self-improvement.yaml)
+- ✅ YAML loader (`internal/workflow/loader.go`)
+- ✅ Database access layer (`internal/database/workflows.go`)
+- ✅ Cycle detection (escalates after 3 cycles)
+- ✅ Max attempts enforcement (default 3 per node)
+- ✅ CEO escalation with auto-created decision beads
+- ✅ Role-based routing (QA, Engineering Manager, Product Manager)
+- ✅ REST API + visualization UI (Phase 4)
+- ✅ Real-time monitoring + analytics (Phase 5)
+
+**Critical Gaps Identified:**
+- ⚠️ **Gap #1**: Multi-dispatch `redispatch_requested` flag NOT implemented (blocks investigation continuation)
+- ⚠️ **Gap #2**: Commit serialization NOT verified (potential concurrent git conflicts)
+- ⚠️ **Gap #3**: Agent role assignment incomplete (falls back to persona matching)
+
+**Task Scope Change:**
+- **Original Plan**: Implement workflow system from scratch
+- **Actual Task**: Close 2-3 integration gaps in existing system (est. 5-8 hours) + comprehensive testing (est. 4-6 hours)
+- **Total**: ~9-14 hours to achieve full autonomous self-healing
+
 ---
 
 ## Notes
