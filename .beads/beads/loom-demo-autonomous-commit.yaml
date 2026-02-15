@@ -1,0 +1,48 @@
+entitymetadata:
+    schemaversion: ""
+    attributes: {}
+    migratedat: null
+    migratedfrom: ""
+id: loom-demo-autonomous
+type: task
+title: "[Self-Improvement] Demonstrate autonomous commit capability"
+description: |-
+    Create a simple demonstration that Loom can autonomously fix issues and commit changes.
+
+    Task: Add a comment to the README.md file demonstrating autonomous operation
+
+    Steps:
+    1. Read README.md
+    2. Add a comment at the top: "<!-- Autonomous agent capability enabled 2026-02-15 -->"
+    3. Test that the change is valid
+    4. Commit with message: "feat: add autonomous agent marker to README"
+    5. Report success
+
+    This demonstrates the complete autonomous workflow:
+    - Agent receives task from workflow
+    - Agent makes code changes
+    - Agent creates git commit with agent attribution
+    - Commit shows in git log as autonomous agent work
+
+    Expected result: Git log shows commit by agent, not human author
+status: open
+priority: 2
+projectid: loom-self
+assignedto: ""
+blockedby: []
+blocks: []
+relatedto: []
+parent: ""
+children: []
+tags:
+    - self-improvement
+    - autonomous
+    - demo
+context:
+    workflow_type: self-improvement
+duedate: null
+milestoneid: ""
+estimatedtime: 30
+createdat: 2026-02-15T19:40:00Z
+updatedat: 2026-02-15T19:40:00Z
+closedat: null
