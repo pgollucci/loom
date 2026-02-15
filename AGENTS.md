@@ -459,6 +459,131 @@ Dispatch: 5
 - Agent is stuck in a loop (Ralph auto-blocks and recommends revert range)
 - Tests regress after changes
 
+### Autonomous Commit Capability (Enabled Feb 15, 2026)
+
+**STATUS: ✅ FULLY ENABLED** - Loom agents can now commit code autonomously with proper attribution.
+
+#### Infrastructure Components
+
+**1. GitOps Manager** (`internal/gitops/gitops.go`)
+- `Commit()` function: Fully implemented (was placeholder until Feb 15, 2026)
+- Creates commits with agent name as author: `"agent-xyz <agent@loom.autonomous>"`
+- Automatically appends: `Co-Authored-By: Loom <noreply@loom.dev>`
+
+**2. Workflow System** (`internal/workflow/`)
+- `NodeTypeCommit`: Special workflow nodes that trigger git commits
+- Workflows route through: investigate → implement → verify → commit → complete
+- Four workflows with commit capability: `wf-self-improvement`, `wf-bug-default`, `wf-feature-default`, `wf-ui-default`
+
+**3. Actions System** (`internal/actions/`)
+- `ActionGitCommit`: Action type agents can use in their loops
+- Integrates with GitOps Manager for actual commit execution
+
+#### How It Works
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  AUTONOMOUS SELF-HEALING PIPELINE                       │
+└─────────────────────────────────────────────────────────┘
+
+1. DETECT     → System diagnostics auto-file beads
+2. ROUTE      → Workflows assign to appropriate agents
+3. FIX        → Agents implement solutions
+4. COMMIT     → Agents create git commits with attribution
+5. TRACK      → Beads closed, workflow completed
+```
+
+#### Verifying Autonomous Commits
+
+```bash
+# Check git log for agent commits
+git log --all --pretty=format:"%h %an <%ae> %s" | grep agent
+
+# Should see commits like:
+# abc1234 agent-xyz <agent@loom.autonomous> feat: fix validation bug
+# def5678 Loom Agent <agent@loom.autonomous> refactor: improve error handling
+```
+
+#### Historical Evidence
+
+**January 18, 2026** - copilot-swe-agent[bot] made autonomous commits:
+- Cleaned 2,705 lines of duplicate code (commit `83455d6`)
+- Fixed compilation errors (commit `b3b4524`)
+- Conducted UX review and filed 6 beads (commit `1657dc2`)
+- Generated comprehensive documentation (commit `0009268`)
+
+**February 1-14, 2026** - Capability went dormant (placeholder code)
+
+**February 15, 2026** - RE-ENABLED with proper implementation (commit `eaad002`)
+
+#### Starting Workflows for Autonomous Work
+
+```bash
+# Start the service
+make start
+
+# Register a provider
+curl -X POST http://localhost:8080/api/v1/providers \
+  -H "Content-Type: application/json" \
+  -d '{"id":"provider","name":"Provider","type":"openai",
+       "endpoint":"http://llm:8000/v1","model":"model-name"}'
+
+# Trigger workflow on a bead
+curl -X POST http://localhost:8080/api/v1/workflows/start \
+  -H "Content-Type: application/json" \
+  -d '{"bead_id":"bead-id","workflow_id":"wf-self-improvement",
+       "project_id":"loom-self"}'
+
+# Watch for autonomous commits
+watch -n 2 'git log --oneline -3'
+```
+
+#### Workflows Supporting Autonomous Commits
+
+**Self-Improvement Workflow** (`workflows/defaults/self-improvement.yaml`)
+- NO approval gates (fully autonomous)
+- Flow: investigate → implement → verify → review → commit → complete
+- Matches beads tagged with: "self-improvement", "autonomous", "best practices"
+
+**Bug Fix Workflow** (`workflows/defaults/bug.yaml`)
+- Has `pm_review` approval gate (may escalate)
+- Flow: investigate → pm_review → apply_fix → commit_and_push → complete
+- Used for auto-filed bugs
+
+#### Implementation Details
+
+```go
+// internal/gitops/gitops.go (line 1077)
+func (m *Manager) Commit(ctx context.Context, beadID, agentID, message string, ...) {
+    // Set agent attribution
+    authorName := agentID
+    authorEmail := "agent@loom.autonomous"
+
+    // Commit with agent authorship
+    m.CommitChanges(ctx, project, message, authorName, authorEmail)
+
+    log.Printf("[GitOps] Agent %s created commit %s", agentID, commitHash[:8])
+    return result, nil
+}
+```
+
+#### Port Configuration (CRITICAL)
+
+**External Ports (docker-compose.yml):**
+- Loom UI/API: `http://localhost:8080` (maps to internal 8081)
+- Temporal UI: `http://localhost:8088` (maps to internal 8080)
+- Dolt SQL: `localhost:3307`
+
+**Always use external port 8080 for API calls, NOT 8081.**
+
+#### Documentation
+
+See `AUTONOMOUS_COMMIT_GUIDE.md` for:
+- Complete setup instructions
+- Troubleshooting guide
+- Future enhancement roadmap
+- Example demonstration bead
+
 ### Beads Workflow (bd CLI)
 
 ```bash

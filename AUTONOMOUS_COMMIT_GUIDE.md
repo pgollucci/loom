@@ -50,19 +50,27 @@ investigate → pm_review → apply_fix → commit_and_push → complete
 #### Start the Loom Server
 
 ```bash
-# Terminal 1: Start Temporal (workflow engine)
-cd /path/to/loom
-docker-compose up temporal temporal-ui postgresql
+# Start the full stack (Loom + Temporal + PostgreSQL)
+make start
 
-# Terminal 2: Start Loom server
-go run cmd/loom/main.go serve
+# Or to see logs in foreground:
+docker compose up --build
+
+# View logs from running service:
+make logs
+
+# Stop the service:
+make stop
+
+# Restart after code changes:
+make restart
 ```
 
 #### Register a Provider (LLM backend)
 
 ```bash
 # Option 1: Local Ollama
-curl -X POST http://localhost:8081/api/v1/providers \
+curl -X POST http://localhost:8080/api/v1/providers \
   -H "Content-Type: application/json" \
   -d '{
     "id": "ollama-local",
@@ -74,7 +82,7 @@ curl -X POST http://localhost:8081/api/v1/providers \
   }'
 
 # Option 2: Cloud Provider (Anthropic)
-curl -X POST http://localhost:8081/api/v1/providers \
+curl -X POST http://localhost:8080/api/v1/providers \
   -H "Content-Type: application/json" \
   -d '{
     "id": "anthropic-cloud",
@@ -91,7 +99,7 @@ curl -X POST http://localhost:8081/api/v1/providers \
 **Option A: Via API (Manual Trigger)**
 ```bash
 # Start workflow for a specific bead
-curl -X POST http://localhost:8081/api/v1/workflows/start \
+curl -X POST http://localhost:8080/api/v1/workflows/start \
   -H "Content-Type: application/json" \
   -d '{
     "bead_id": "loom-demo-autonomous",
@@ -100,7 +108,7 @@ curl -X POST http://localhost:8081/api/v1/workflows/start \
   }'
 
 # Check workflow status
-curl http://localhost:8081/api/v1/workflows/execution/{execution_id}
+curl http://localhost:8080/api/v1/workflows/execution/{execution_id}
 ```
 
 **Option B: Via Dispatch System (Automatic)**
@@ -118,7 +126,7 @@ vim config.yaml
 # Set: dispatch.auto_assign: true
 
 # Restart server
-pkill loom && go run cmd/loom/main.go serve
+make restart
 ```
 
 ### 4. Verifying Autonomous Commits
@@ -176,7 +184,7 @@ cat .beads/beads/loom-demo-autonomous.yaml
 ### 2. Start workflow
 
 ```bash
-curl -X POST http://localhost:8081/api/v1/workflows/start \
+curl -X POST http://localhost:8080/api/v1/workflows/start \
   -H "Content-Type: application/json" \
   -d '{
     "bead_id": "loom-demo-autonomous",
@@ -189,10 +197,13 @@ curl -X POST http://localhost:8081/api/v1/workflows/start \
 
 ```bash
 # Monitor workflow execution
-watch -n 1 'curl -s http://localhost:8081/api/v1/workflows/executions | jq'
+watch -n 1 'curl -s http://localhost:8080/api/v1/workflows/executions | jq'
 
-# Monitor agent activity
-tail -f /app/logs/loom.log | grep -i "agent\|commit"
+# Monitor agent activity via logs
+make logs
+
+# Or monitor in real-time via UI
+open http://localhost:8080/workflows
 
 # Watch git status
 watch -n 2 'git status --short && echo "---" && git log --oneline -3'
@@ -248,7 +259,7 @@ git show --format="%an <%ae>" -s HEAD
 
 ### "No provider configured"
 - Register a provider (see "Register a Provider" above)
-- Check: `curl http://localhost:8081/api/v1/providers`
+- Check: `curl http://localhost:8080/api/v1/providers`
 
 ### "Workflow execution escalated"
 - Bug workflow hit pm_review approval gate with no PM
@@ -258,7 +269,7 @@ git show --format="%an <%ae>" -s HEAD
 ### "Agent not spawned"
 - Check agent configuration in config.yaml
 - Verify dispatch system running
-- Manual spawn: `curl -X POST http://localhost:8081/api/v1/agents/spawn`
+- Manual spawn: `curl -X POST http://localhost:8080/api/v1/agents/spawn`
 
 ## Future Enhancements
 
