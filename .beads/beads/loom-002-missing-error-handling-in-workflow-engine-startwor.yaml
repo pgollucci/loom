@@ -1,0 +1,45 @@
+entitymetadata:
+    schemaversion: ""
+    attributes: {}
+    migratedat: null
+    migratedfrom: ""
+id: loom-002
+type: bug
+title: Missing error handling in workflow engine StartWorkflow
+description: |-
+    In internal/workflow/engine.go, the StartWorkflow function does not validate that the workflowID parameter is non-empty before calling GetWorkflow. This could lead to unexpected behavior if called with an empty string.
+
+    Expected: Function should return an error if workflowID is empty
+    Actual: No validation, proceeds to database lookup
+
+    Fix: Add validation at the start of StartWorkflow:
+    if workflowID == "" {
+        return nil, fmt.Errorf("workflowID cannot be empty")
+    }
+status: open
+priority: 3
+projectid: loom-self
+assignedto: agent-1771148987-Engineering Manager (Default)
+blockedby: []
+blocks: []
+relatedto: []
+parent: ""
+children: []
+tags: []
+context:
+    agent_id: agent-1771148987-Engineering Manager (Default)
+    conversation_session_id: 783e170d-558b-4e0e-a3ed-2696cafb7588
+    dispatch_count: "1"
+    dispatch_history: '["agent-1771148987-Engineering Manager (Default)"]'
+    last_run_at: "2026-02-15T16:06:29Z"
+    last_run_error: 'action loop failed: LLM call failed on iteration 2: failed to send request: Post "http://ollama-server.hrd.nvidia.com:8000/v1/chat/completions": context canceled'
+    loop_detected: "false"
+    provider_id: ollama-nvidia
+    redispatch_requested: "true"
+    redispatch_requested_at: "2026-02-15T16:03:58Z"
+duedate: null
+milestoneid: ""
+estimatedtime: 0
+createdat: 2026-02-15T08:03:53.734489-08:00
+updatedat: 2026-02-15T08:06:29.030595-08:00
+closedat: null

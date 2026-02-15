@@ -1,0 +1,39 @@
+entitymetadata:
+  schemaversion: ""
+  attributes: {}
+  migratedat: null
+  migratedfrom: ""
+id: loom-fix-validation
+type: bug
+title: Add input validation to StartWorkflow function
+description: |
+  The StartWorkflow function in internal/workflow/engine.go needs input validation.
+
+  File: internal/workflow/engine.go
+  Function: StartWorkflow
+  Issue: Missing validation for empty workflowID parameter
+
+  Expected: Should return error if workflowID is empty
+  Actual: No validation, proceeds to database lookup
+
+  Suggested fix:
+  if workflowID == "" {
+      return nil, fmt.Errorf("workflowID cannot be empty")
+  }
+status: open
+priority: 3
+projectid: loom-self
+assignedto: ""
+blockedby: []
+blocks: []
+relatedto: []
+parent: ""
+children: []
+tags: []
+context: {}
+duedate: null
+milestoneid: ""
+estimatedtime: 0
+createdat: 2026-02-15T08:10:00Z
+updatedat: 2026-02-15T08:10:00Z
+closedat: null
