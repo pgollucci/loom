@@ -250,3 +250,99 @@ func TestConversationContext_VersionedEntityInterface(t *testing.T) {
 		t.Error("EntityMetadata should not be nil")
 	}
 }
+
+// TestConversationContext_SetMessagesFromJSON_EdgeCases tests edge cases
+func TestConversationContext_SetMessagesFromJSON_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []byte
+		want  int
+	}{
+		{
+			name:  "empty byte array",
+			input: []byte{},
+			want:  0,
+		},
+		{
+			name:  "empty JSON array",
+			input: []byte("[]"),
+			want:  0,
+		},
+		{
+			name:  "null JSON",
+			input: []byte("null"),
+			want:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &ConversationContext{}
+			err := ctx.SetMessagesFromJSON(tt.input)
+			if err != nil {
+				t.Fatalf("SetMessagesFromJSON() error = %v", err)
+			}
+
+			if len(ctx.Messages) != tt.want {
+				t.Errorf("Messages length = %d, want %d", len(ctx.Messages), tt.want)
+			}
+		})
+	}
+}
+
+// TestConversationContext_SetMessagesFromJSON_InvalidJSON tests invalid JSON
+func TestConversationContext_SetMessagesFromJSON_InvalidJSON(t *testing.T) {
+	ctx := &ConversationContext{}
+	err := ctx.SetMessagesFromJSON([]byte("{invalid json}"))
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+}
+
+// TestConversationContext_SetMetadataFromJSON_EdgeCases tests edge cases
+func TestConversationContext_SetMetadataFromJSON_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "empty byte array",
+			input: []byte{},
+		},
+		{
+			name:  "empty JSON object",
+			input: []byte("{}"),
+		},
+		{
+			name:  "null JSON",
+			input: []byte("null"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &ConversationContext{}
+			err := ctx.SetMetadataFromJSON(tt.input)
+			if err != nil {
+				t.Fatalf("SetMetadataFromJSON() error = %v", err)
+			}
+
+			if ctx.Metadata == nil {
+				t.Error("Metadata should be initialized")
+			}
+
+			if len(ctx.Metadata) != 0 {
+				t.Errorf("Metadata length = %d, want 0", len(ctx.Metadata))
+			}
+		})
+	}
+}
+
+// TestConversationContext_SetMetadataFromJSON_InvalidJSON tests invalid JSON
+func TestConversationContext_SetMetadataFromJSON_InvalidJSON(t *testing.T) {
+	ctx := &ConversationContext{}
+	err := ctx.SetMetadataFromJSON([]byte("{invalid json}"))
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+}
