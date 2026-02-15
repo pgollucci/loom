@@ -154,3 +154,62 @@ func TestWorkflowStarter(t *testing.T) {
 
 	t.Logf("Agent status: %v", result)
 }
+
+func TestManager_GetClient(t *testing.T) {
+	if !temporalRequired() {
+		t.Skip("Temporal not available")
+	}
+
+	cfg := temporalTestConfig(false)
+	m, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer m.Stop()
+
+	client := m.GetClient()
+	if client == nil {
+		t.Error("Expected non-nil client")
+	}
+}
+
+func TestManager_GetEventBus(t *testing.T) {
+	if !temporalRequired() {
+		t.Skip("Temporal not available")
+	}
+
+	cfg := temporalTestConfig(true)
+	m, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer m.Stop()
+
+	bus := m.GetEventBus()
+	if bus == nil {
+		t.Error("Expected non-nil event bus")
+	}
+}
+
+func TestManager_RegisterMethods(t *testing.T) {
+	if !temporalRequired() {
+		t.Skip("Temporal not available")
+	}
+
+	cfg := temporalTestConfig(false)
+	m, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	defer m.Stop()
+
+	// Test workflow registration
+	testWorkflow := func(ctx context.Context) error { return nil }
+	m.RegisterWorkflow(testWorkflow)
+
+	// Test activity registration
+	testActivity := func(ctx context.Context) error { return nil }
+	m.RegisterActivity(testActivity)
+
+	// If we get here without panicking, registration worked
+}

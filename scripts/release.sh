@@ -366,7 +366,7 @@ main() {
     
     # Run tests before release
     info "Running tests..."
-    if ! make test > /dev/null 2>&1; then
+    if ! make test-docker > /dev/null 2>&1; then
         if [[ "$BATCH_MODE" == "yes" ]]; then
             error "Tests failed in batch mode. Fix tests before releasing."
         fi

@@ -3,14 +3,14 @@ entitymetadata:
     attributes: {}
     migratedat: null
     migratedfrom: ""
-id: bd-003
+id: bd-002
 type: task
-title: Test
-description: desc
+title: Bead 2
+description: Desc
 status: open
 priority: 2
-projectid: proj-9
-assignedto: agent-1771142350-Engineering Manager (Default)
+projectid: project2
+assignedto: ""
 blockedby: []
 blocks: []
 relatedto: []
@@ -21,6 +21,6 @@ context: {}
 duedate: null
 milestoneid: ""
 estimatedtime: 0
-createdat: 2026-02-14T23:59:10.302187-08:00
-updatedat: 2026-02-14T23:59:10.302285-08:00
+createdat: 2026-02-14T23:59:08.311525-08:00
+updatedat: 2026-02-14T23:59:08.311525-08:00
 closedat: null
