@@ -573,13 +573,13 @@ func Test_deriveRoleFromPersonaName(t *testing.T) {
 		personaName string
 		want        string
 	}{
-		{"default/qa-engineer", "qa-engineer"},
-		{"default/cto", "cto"},
-		{"projects/myproj/web-designer", "web-designer"},
-		{"custom/architect", "architect"},
-		{"simple", "simple"},
-		{"", ""},
-		{"  default/test  ", "test"},
+		{"default/qa-engineer", "QA"},                       // Updated: now returns workflow role
+		{"default/cto", "CEO"},                              // Updated: CEO keyword match
+		{"projects/myproj/web-designer", "Web Designer"},    // Updated: now returns workflow role
+		{"custom/architect", "architect"},                   // No match, returns extracted name
+		{"simple", "simple"},                                // No match, returns as-is
+		{"", ""},                                            // Empty stays empty
+		{"  default/test  ", "test"},                        // No match, returns extracted name
 	}
 
 	for _, tt := range tests {
@@ -597,10 +597,10 @@ func Test_deriveDisplayName(t *testing.T) {
 		personaName string
 		wantContain []string
 	}{
-		{"default/qa-engineer", []string{"Qa", "Engineer", "(Default)"}},
-		{"default/web-designer", []string{"Web", "Designer", "(Default)"}},
-		{"projects/myproj/cto", []string{"Cto", "(myproj)"}},
-		{"custom/architect", []string{"Architect", "(Custom)"}},
+		{"default/qa-engineer", []string{"QA", "(Default)"}},                // Updated: role is "QA" now
+		{"default/web-designer", []string{"Web", "Designer", "(Default)"}},  // Role is "Web Designer"
+		{"projects/myproj/cto", []string{"CEO", "(myproj)"}},                // Updated: cto matches CEO
+		{"custom/architect", []string{"Architect", "(Custom)"}},             // No match, uses extracted name
 	}
 
 	for _, tt := range tests {

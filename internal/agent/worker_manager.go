@@ -242,6 +242,7 @@ func deriveRoleFromPersonaName(personaName string) string {
 		"code-reviewer":       "Code Reviewer",
 		"reviewer":            "Code Reviewer",
 		"ceo":                 "CEO",
+		"cto":                 "CEO", // CTO also maps to CEO for executive role
 	}
 
 	// Check for matches (most specific first)
