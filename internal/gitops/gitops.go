@@ -1073,16 +1073,52 @@ func (m *Manager) CreateBranch(ctx context.Context, beadID, description, baseBra
 	}, fmt.Errorf("CreateBranch not yet implemented - requires project context")
 }
 
-// Commit creates a git commit for a bead's changes
+// Commit creates a git commit for a bead's changes with agent attribution
 func (m *Manager) Commit(ctx context.Context, beadID, agentID, message string, files []string, allowAll bool) (map[string]interface{}, error) {
-	// This would use CommitChanges internally
-	// For now, this is a placeholder implementation
+	// TODO: Get project from bead context
+	// For now, assume loom-self project (current directory)
+	project := &models.Project{
+		ID:            "loom-self",
+		GitRepo:       ".",
+		Branch:        "main",
+		GitAuthMethod: models.GitAuthNone,
+		GitStrategy:   models.GitStrategyDirect,
+	}
+
+	// Set commit author to agent name for autonomous attribution
+	authorName := agentID
+	if authorName == "" {
+		authorName = "Loom Agent"
+	}
+	authorEmail := "agent@loom.autonomous"
+
+	// Append Co-Authored-By if not already in message
+	if message != "" && !strings.Contains(message, "Co-Authored-By") {
+		message = message + "\n\nCo-Authored-By: Loom <noreply@loom.dev>"
+	}
+
+	// Commit changes with agent attribution
+	if err := m.CommitChanges(ctx, project, message, authorName, authorEmail); err != nil {
+		return nil, fmt.Errorf("failed to commit changes: %w", err)
+	}
+
+	// Get current commit hash
+	workDir := m.GetProjectWorkDir(project.ID)
+	commitHash, err := m.GetCurrentCommit(workDir)
+	if err != nil {
+		commitHash = "unknown"
+	}
+
+	log.Printf("[GitOps] Agent %s created commit %s for bead %s", agentID, commitHash[:8], beadID)
+
 	return map[string]interface{}{
-		"committed": true,
-		"message":   message,
-		"bead_id":   beadID,
-		"agent_id":  agentID,
-	}, fmt.Errorf("Commit not yet implemented - requires project context")
+		"committed":   true,
+		"message":     message,
+		"bead_id":     beadID,
+		"agent_id":    agentID,
+		"commit_hash": commitHash,
+		"author":      fmt.Sprintf("%s <%s>", authorName, authorEmail),
+	}, nil
 }
 
 // Push pushes commits to remote for a bead

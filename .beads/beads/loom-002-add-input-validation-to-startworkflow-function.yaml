@@ -20,7 +20,7 @@ description: |-
     if workflowID == "" {
         return nil, fmt.Errorf("workflowID cannot be empty")
     }
-status: open
+status: closed
 priority: 3
 projectid: loom-self
 assignedto: agent-1771148987-Engineering Manager (Default)
@@ -31,11 +31,12 @@ parent: ""
 children: []
 tags: []
 context:
-    redispatch_requested: "true"
+    redispatch_requested: "false"
     redispatch_requested_at: "2026-02-15T16:07:18Z"
+    closed_reason: "Fixed in commit d5d8785"
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-15T08:07:14.316077-08:00
-updatedat: 2026-02-15T08:07:18.063642-08:00
-closedat: null
+updatedat: 2026-02-15T19:25:00Z
+closedat: 2026-02-15T19:25:00Z
