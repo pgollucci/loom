@@ -1023,7 +1023,10 @@ func (a *Loom) kickstartOpenBeads(ctx context.Context) {
 			}
 
 			// Start Temporal workflow for the bead if Temporal is enabled
-			if a.temporalManager != nil {
+			// Skip workflow assignment for system diagnostic beads to avoid blocking dispatch
+			isSystemBead := strings.Contains(strings.ToLower(b.Title), "system diagnostic") ||
+			                strings.Contains(strings.ToLower(b.Title), "diagnostic check")
+			if a.temporalManager != nil && !isSystemBead {
 				if err := a.temporalManager.StartBeadWorkflow(ctx, b.ID, p.ID, b.Title, b.Description, int(b.Priority), b.Type); err != nil {
 					// Log error but continue with other beads
 					fmt.Printf("Warning: failed to kickstart bead workflow %s: %v\n", b.ID, err)
@@ -2651,12 +2654,17 @@ func (a *Loom) CreateBead(title, description string, priority models.BeadPriorit
 	}
 
 	// Start Temporal workflow for bead if Temporal is enabled
-	if a.temporalManager != nil {
+	// Skip workflow assignment for system diagnostic beads to avoid blocking dispatch
+	isSystemBead := strings.Contains(strings.ToLower(title), "system diagnostic") ||
+	                strings.Contains(strings.ToLower(title), "diagnostic check")
+	if a.temporalManager != nil && !isSystemBead {
 		ctx := context.Background()
 		if err := a.temporalManager.StartBeadWorkflow(ctx, bead.ID, projectID, title, description, int(priority), beadType); err != nil {
 			// Log error but don't fail bead creation
 			fmt.Printf("Warning: failed to start bead workflow: %v\n", err)
 		}
+	} else if isSystemBead {
+		log.Printf("[Loom] Skipping workflow assignment for system diagnostic bead %s", bead.ID)
 	}
 
 	return bead, nil

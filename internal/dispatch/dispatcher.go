@@ -590,10 +590,15 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 				// Check for timeout before processing
 				isReady := d.workflowEngine.IsNodeReady(execution)
 				os.WriteFile("/tmp/dispatch-workflow-check.txt", []byte(fmt.Sprintf("bead=%s execution_id=%s current_node=%s status=%s is_ready=%v\n", b.ID, execution.ID, execution.CurrentNodeKey, execution.Status, isReady)), 0644)
-				if !isReady {
+
+				// Allow dispatch for escalated workflows (they need manual intervention anyway)
+				// Only block if workflow is active but node is not ready (timeout case)
+				if !isReady && execution.Status != "escalated" {
 					skippedReasons["workflow_node_not_ready"]++
 					log.Printf("[Workflow] Bead %s workflow node not ready (may have timed out)", b.ID)
 					continue
+				} else if execution.Status == "escalated" {
+					log.Printf("[Workflow] Bead %s workflow is escalated, allowing dispatch for manual intervention", b.ID)
 				}
 
 				workflowRoleRequired = d.getWorkflowRoleRequirement(execution)
