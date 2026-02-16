@@ -80,6 +80,9 @@ COPY --from=builder /build/web/static /app/web/static
 # Copy .beads directory (bead YAML files for loom-self project)
 COPY --from=builder /build/.beads /app/.beads
 
+# Copy .git directory (makes /app a valid git repo for loom-self project)
+COPY --from=builder /build/.git /app/.git
+
 # Copy scripts (entrypoint + beads schema SQL)
 COPY --from=builder /build/scripts /app/scripts
 RUN chmod +x /app/scripts/entrypoint.sh
