@@ -104,6 +104,7 @@ func main() {
 	if err := arb.Initialize(runCtx); err != nil {
 		log.Fatalf("failed to initialize loom: %v", err)
 	}
+	os.WriteFile("/tmp/initialize-completed.txt", []byte("INITIALIZE COMPLETED\n"), 0644)
 
 	// Initialize hot-reload for development
 	var hrManager *hotreload.Manager
@@ -123,8 +124,10 @@ func main() {
 	go arb.StartMaintenanceLoop(runCtx)
 
 	// Ralph dispatch loop: drain all dispatchable work every 10 seconds.
+	os.WriteFile("/tmp/dispatch-starting.txt", []byte("DISPATCH LOOP STARTING\n"), 0644)
 	log.Printf("Starting dispatch loop goroutine")
 	go arb.StartDispatchLoop(runCtx, 10*time.Second)
+	os.WriteFile("/tmp/dispatch-started.txt", []byte("DISPATCH LOOP STARTED\n"), 0644)
 
 	// Initialize auth manager (JWT + API key support)
 	authManager := auth.NewManager(cfg.Security.JWTSecret)
@@ -154,6 +157,7 @@ func main() {
 	}
 
 	go func() {
+		os.WriteFile("/tmp/http-server-starting.txt", []byte("HTTP SERVER STARTING\n"), 0644)
 		log.Printf("Loom API listening on %s", httpSrv.Addr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("http server error: %v", err)

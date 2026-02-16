@@ -883,9 +883,13 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		}
 
 		// Start the Ralph Loop (10 second interval) — drains all dispatchable work per beat
-		_ = a.temporalManager.StartLoomHeartbeatWorkflow(ctx, 10*time.Second)
+		if err := a.temporalManager.StartLoomHeartbeatWorkflow(ctx, 10*time.Second); err != nil {
+			log.Printf("[Loom] ERROR: Failed to start Ralph Loop: %v", err)
+		}
 		// Start provider heartbeats (monitor provider health)
-		_ = a.startProviderHeartbeats(ctx)
+		if err := a.startProviderHeartbeats(ctx); err != nil {
+			log.Printf("[Loom] ERROR: Failed to start provider heartbeats: %v", err)
+		}
 	}
 
 	// Kick-start work on all open beads across registered projects.
@@ -3199,6 +3203,7 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 
 // StartDispatchLoop runs a periodic dispatcher that fills all idle agents with work.
 func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
+	os.WriteFile("/tmp/dispatch-loop-entered.txt", []byte(fmt.Sprintf("a=%v dispatcher=%v\n", a != nil, a != nil && a.dispatcher != nil)), 0644)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("[DispatchLoop] PANIC recovered: %v", r)
@@ -3206,9 +3211,11 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 	}()
 
 	if a == nil || a.dispatcher == nil {
+		os.WriteFile("/tmp/dispatch-loop-nil-dispatcher.txt", []byte("DISPATCHER IS NIL\n"), 0644)
 		log.Printf("[DispatchLoop] No dispatcher configured, skipping")
 		return
 	}
+	os.WriteFile("/tmp/dispatch-loop-past-nil-check.txt", []byte("PAST NIL CHECK\n"), 0644)
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
@@ -3222,11 +3229,15 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			os.WriteFile("/tmp/dispatch-loop-tick.txt", []byte(fmt.Sprintf("TICK at %s\n", time.Now())), 0644)
+			dispatched := 0
 			for i := 0; i < 50; i++ {
 				dr, err := a.dispatcher.DispatchOnce(ctx, "")
 				if err != nil || dr == nil || !dr.Dispatched {
+					os.WriteFile("/tmp/dispatch-loop-result.txt", []byte(fmt.Sprintf("dispatched=%d err=%v dr=%v\n", dispatched, err, dr != nil && dr.Dispatched)), 0644)
 					break
 				}
+				dispatched++
 			}
 		}
 	}
