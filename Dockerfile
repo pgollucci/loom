@@ -16,13 +16,13 @@ COPY go.sum ./
 # Download dependencies
 RUN go mod download
 
-# Install bd CLI for bead operations (download pre-built v0.50.3)
-# Using pre-built binary instead of building from source to avoid import cycle errors
-RUN wget -q https://github.com/steveyegge/beads/releases/download/v0.50.3/beads_0.50.3_linux_amd64.tar.gz && \
-    tar -xzf beads_0.50.3_linux_amd64.tar.gz && \
-    mv bd /go/bin/bd && \
+# Install bd CLI for bead operations (build from source with CGO for Dolt support)
+# Building from main branch to get latest Dolt support with CGO enabled
+RUN git clone --depth 1 https://github.com/steveyegge/beads.git /tmp/beads && \
+    cd /tmp/beads && \
+    CGO_ENABLED=1 go build -tags dolt -o /go/bin/bd ./cmd/bd && \
     chmod +x /go/bin/bd && \
-    rm -f beads_0.50.3_linux_amd64.tar.gz
+    rm -rf /tmp/beads
 
 # Install Dolt binary for version-controlled beads backend
 RUN if [ -n "$GITHUB_TOKEN" ]; then \
@@ -46,8 +46,8 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
 # Runtime stage
 FROM alpine:latest
 
-# Install runtime dependencies including git, openssh, and wget for git operations
-RUN apk add --no-cache ca-certificates tzdata git openssh-client wget
+# Install runtime dependencies including git, openssh, wget, and C++ libs for bd with CGO
+RUN apk add --no-cache ca-certificates tzdata git openssh-client wget libstdc++ libgcc icu-libs
 
 # Create non-root user
 RUN addgroup -g 1000 loom && \
