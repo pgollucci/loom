@@ -555,6 +555,8 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata: map[string]interface{}{
 				"command_id": res.ID,
 				"exit_code":  res.ExitCode,
+				"stdout":     res.Stdout,
+				"stderr":     res.Stderr,
 			},
 		}
 	case ActionRunTests:
