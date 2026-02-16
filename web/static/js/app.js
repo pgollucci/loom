@@ -16,6 +16,18 @@ let backendDown = false;
 let backendDownSince = null;
 let backendBannerEl = null;
 
+// Utility function to format dates consistently
+function formatDate(dateString) {
+    if (!dateString) return 'Never';
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
+        return date.toLocaleString();
+    } catch (e) {
+        return dateString;
+    }
+}
+
 function setBackendDown(isDown) {
     if (isDown && !backendDown) {
         backendDown = true;
@@ -5099,3 +5111,22 @@ function formatConversationContent(content, role) {
     text = text.replace(/\n/g, '<br>');
     return text;
 }
+
+// Toggle observability menu dropdown
+function toggleObservabilityMenu() {
+    const dropdown = document.getElementById('observability-dropdown');
+    if (dropdown.style.display === 'none') {
+        dropdown.style.display = 'block';
+    } else {
+        dropdown.style.display = 'none';
+    }
+}
+
+// Close observability menu when clicking outside
+document.addEventListener('click', function(event) {
+    const menu = document.querySelector('.observability-menu');
+    const dropdown = document.getElementById('observability-dropdown');
+    if (menu && dropdown && !menu.contains(event.target)) {
+        dropdown.style.display = 'none';
+    }
+});

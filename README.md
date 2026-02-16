@@ -35,6 +35,16 @@ This is the craft of software, elevated by the ancient wisdom of the loom.
 
 New to Loom? See **[QUICKSTART.md](QUICKSTART.md)** to get running in 10 minutes: start the server, connect a GPU or cloud provider, add your first project, and file beads from the CEO dashboard.
 
+### UI Ports
+
+Once Loom is running, access the various interfaces:
+
+- **Loom Main UI**: http://localhost:8080 — Main dashboard, beads, agents, projects
+- **Grafana Dashboards**: http://localhost:3000 — Metrics visualization and monitoring (admin/admin)
+- **Prometheus**: http://localhost:9090 — Metrics queries and alerts
+- **Jaeger Tracing**: http://localhost:16686 — Distributed tracing and performance analysis
+- **Temporal UI**: http://localhost:8088 — Workflow monitoring and debugging
+
 ---
 
 ## What is Loom?
@@ -103,6 +113,11 @@ Loom is a lightweight AI coding agent orchestration system that manages workflow
 - 🔁 **Multi-Turn Action Loop**: Agents iterate with LLM feedback — read, write, search, and close beads autonomously
 - 💬 **Pair-Programming Mode**: Interactive real-time chat with agents scoped to specific beads
 - ⚡ **Auto-Provider Assignment**: Zero-config — agents automatically use available providers from the shared pool
+- 📊 **OpenTelemetry Observability**: Full-stack observability with distributed tracing, metrics, and visualization
+  - Jaeger for distributed tracing with span-level detail
+  - Prometheus for metrics collection and alerting
+  - Grafana for dashboards and visualization
+  - Custom metrics for agents, dispatch, and workflows
 
 ## Default Personas
 
@@ -352,6 +367,9 @@ See `personas/loom/` for the complete persona definition.
 - [x] Auto-provider assignment (zero-config agent setup)
 - [x] Dolt database backend with federation support
 - [x] Container decoupling from host source mount
+- [x] OpenTelemetry observability stack with Jaeger, Prometheus, and Grafana
+- [x] Distributed tracing for dispatch and agent operations
+- [x] Custom metrics for performance monitoring
 
 ## Planned Features
 
@@ -362,7 +380,6 @@ See `personas/loom/` for the complete persona definition.
 - [ ] Add caching layer for frequently used models
 - [ ] Implement multi-region provider failover
 - [ ] Support for custom authentication to providers
-- [ ] Metrics and monitoring endpoints (Prometheus compatible)
 - [ ] Email/webhook notifications for alerts
 - [ ] Advanced charting and trend analysis
 

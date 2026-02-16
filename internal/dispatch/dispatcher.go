@@ -19,10 +19,13 @@ import (
 	"github.com/jordanhubbard/loom/internal/observability"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
+	"github.com/jordanhubbard/loom/internal/telemetry"
 	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
 	"github.com/jordanhubbard/loom/internal/workflow"
 	"github.com/jordanhubbard/loom/pkg/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type StatusState string
@@ -262,11 +265,22 @@ func (d *Dispatcher) releaseCommitLock() {
 
 // DispatchOnce finds at most one ready bead and asks an idle agent to work on it.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*DispatchResult, error) {
+	// Create tracing span for dispatch operation
+	ctx, span := telemetry.Tracer.Start(ctx, "dispatch.DispatchOnce")
+	defer span.End()
+
+	startTime := time.Now()
+	span.SetAttributes(attribute.String("project_id", projectID))
+
 	activeProviders := d.providers.ListActive()
 	log.Printf("[Dispatcher] DispatchOnce called for project=%s, active_providers=%d", projectID, len(activeProviders))
+
+	span.SetAttributes(attribute.Int("active_providers", len(activeProviders)))
+
 	if len(activeProviders) == 0 {
 		log.Printf("[Dispatcher] Parked - no active providers")
 		d.setStatus(StatusParked, "no active providers registered")
+		span.SetStatus(codes.Error, "no active providers")
 		return &DispatchResult{Dispatched: false, ProjectID: projectID}, nil
 	}
 
@@ -1012,6 +1026,18 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		"status":      "success",
 	})
 	}() // end async goroutine
+
+	// Record dispatch metrics
+	latency := float64(time.Since(startTime).Milliseconds())
+	telemetry.DispatchLatency.Record(ctx, latency)
+
+	span.SetAttributes(
+		attribute.String("bead_id", candidate.ID),
+		attribute.String("agent_id", ag.ID),
+		attribute.String("provider_id", ag.ProviderID),
+		attribute.Bool("dispatched", true),
+	)
+	span.SetStatus(codes.Ok, "dispatch successful")
 
 	return dispatchResult, nil
 }

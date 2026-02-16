@@ -1,0 +1,60 @@
+{
+  "dashboard": {
+    "title": "Loom - Agent Dispatch Overview",
+    "tags": ["loom", "agents", "dispatch"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Agent Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "go_goroutines{service=\"loom\"}",
+            "legendFormat": "Goroutines"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "go_memstats_alloc_bytes{service=\"loom\"}",
+            "legendFormat": "Allocated Memory"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 18, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "HTTP Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(promhttp_metric_handler_requests_total{service=\"loom\"}[1m])",
+            "legendFormat": "Requests/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "GC Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "go_gc_duration_seconds{service=\"loom\"}",
+            "legendFormat": "{{quantile}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ]
+  }
+}

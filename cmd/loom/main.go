@@ -18,7 +18,9 @@ import (
 	"github.com/jordanhubbard/loom/internal/auth"
 	"github.com/jordanhubbard/loom/internal/hotreload"
 	"github.com/jordanhubbard/loom/internal/keymanager"
+	"github.com/jordanhubbard/loom/internal/telemetry"
 	"github.com/jordanhubbard/loom/pkg/config"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const version = "0.1.0"
@@ -81,6 +83,22 @@ func main() {
 
 	arb.SetKeyManager(km)
 
+	// Initialize OpenTelemetry
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otelEndpoint == "" {
+		otelEndpoint = "otel-collector:4317"
+	}
+	shutdownTelemetry, err := telemetry.InitTelemetry(context.Background(), "loom", otelEndpoint)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+	} else {
+		defer func() {
+			if err := shutdownTelemetry(context.Background()); err != nil {
+				log.Printf("Error shutting down telemetry: %v", err)
+			}
+		}()
+	}
+
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := arb.Initialize(runCtx); err != nil {
@@ -123,6 +141,9 @@ func main() {
 		handler = mux
 		log.Println("[HotReload] WebSocket endpoint registered at /ws/hotreload")
 	}
+
+	// Wrap handler with OpenTelemetry instrumentation
+	handler = otelhttp.NewHandler(handler, "loom-http-server")
 
 	httpSrv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.HTTPPort),

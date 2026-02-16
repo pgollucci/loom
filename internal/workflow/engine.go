@@ -1,11 +1,13 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jordanhubbard/loom/internal/telemetry"
 )
 
 // Database interface for workflow operations
@@ -111,6 +113,10 @@ func (e *Engine) StartWorkflow(beadID, workflowID, projectID string) (*WorkflowE
 	}
 
 	log.Printf("[Workflow] Started workflow %s for bead %s (exec: %s)", wf.Name, beadID, exec.ID)
+
+	// Record workflow started metric
+	telemetry.WorkflowsStarted.Add(context.Background(), 1)
+
 	return exec, nil
 }
 

@@ -13,9 +13,12 @@ import (
 	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/observability"
 	"github.com/jordanhubbard/loom/internal/provider"
+	"github.com/jordanhubbard/loom/internal/telemetry"
 	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
 	"github.com/jordanhubbard/loom/pkg/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // WorkerManager manages agents with worker pool integration
@@ -383,11 +386,16 @@ func (m *WorkerManager) GetIdleAgentsByProject(projectID string) []*models.Agent
 
 // ExecuteTask assigns a task to an agent's worker
 func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *worker.Task) (*worker.TaskResult, error) {
+	// Create tracing span for agent execution
+	ctx, span := telemetry.Tracer.Start(ctx, "agent.ExecuteTask")
+	defer span.End()
+
 	m.mu.RLock()
 	agent, exists := m.agents[agentID]
 	m.mu.RUnlock()
 
 	if !exists {
+		span.SetStatus(codes.Error, "agent not found")
 		return nil, fmt.Errorf("agent not found: %s", agentID)
 	}
 
@@ -408,6 +416,16 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 			"task_id":     taskID,
 			"bead_id":     beadID,
 		})
+
+		// Set span attributes
+		span.SetAttributes(
+			attribute.String("agent_id", agent.ID),
+			attribute.String("agent_name", agent.Name),
+			attribute.String("project_id", projectID),
+			attribute.String("provider_id", agent.ProviderID),
+			attribute.String("task_id", taskID),
+			attribute.String("bead_id", beadID),
+		)
 	}
 
 	// Update agent status
@@ -545,6 +563,23 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 					"terminal_reason": loopResult.TerminalReason,
 				},
 			})
+		}
+
+		// Record telemetry metrics
+		telemetry.AgentExecutionTime.Record(ctx, float64(elapsed.Milliseconds()))
+		telemetry.AgentIterations.Add(ctx, int64(loopResult.Iterations))
+
+		// Update span with execution details
+		span.SetAttributes(
+			attribute.Int("loop_iterations", loopResult.Iterations),
+			attribute.String("terminal_reason", loopResult.TerminalReason),
+			attribute.Bool("success", result.Success),
+			attribute.Int64("duration_ms", elapsed.Milliseconds()),
+		)
+		if result.Success {
+			span.SetStatus(codes.Ok, "task completed")
+		} else {
+			span.SetStatus(codes.Error, "task failed")
 		}
 
 		return result, nil
