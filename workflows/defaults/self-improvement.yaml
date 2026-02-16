@@ -109,11 +109,23 @@ edges:
     condition: "approved"
     priority: 100
 
+  # verify → review (on success - fallback if condition mapping not applied)
+  - from_node_key: "verify"
+    to_node_key: "review"
+    condition: "success"
+    priority: 50
+
   # verify → implement (on rejection - fix issues)
   - from_node_key: "verify"
     to_node_key: "implement"
     condition: "rejected"
     priority: 100
+
+  # verify → implement (on failure - fallback)
+  - from_node_key: "verify"
+    to_node_key: "implement"
+    condition: "failure"
+    priority: 50
 
   # review → commit (on success)
   - from_node_key: "review"

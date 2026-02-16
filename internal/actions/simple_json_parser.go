@@ -7,17 +7,19 @@ import (
 
 // SimpleJSONAction is the minimal JSON structure agents produce in simple mode.
 type SimpleJSONAction struct {
-	Action  string `json:"action"`
-	Path    string `json:"path,omitempty"`
-	Query   string `json:"query,omitempty"`
-	Old     string `json:"old,omitempty"`
-	New     string `json:"new,omitempty"`
-	Content string `json:"content,omitempty"`
-	Command string `json:"command,omitempty"`
-	Pattern string `json:"pattern,omitempty"`
-	Message string `json:"message,omitempty"`
-	Reason  string `json:"reason,omitempty"`
-	Notes   string `json:"notes,omitempty"`
+	Action      string `json:"action"`
+	Path        string `json:"path,omitempty"`
+	Query       string `json:"query,omitempty"`
+	Old         string `json:"old,omitempty"`
+	New         string `json:"new,omitempty"`
+	Content     string `json:"content,omitempty"`
+	Command     string `json:"command,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
+	Message     string `json:"message,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	Notes       string `json:"notes,omitempty"`
+	BeadID      string `json:"bead_id,omitempty"`      // For read_bead_conversation, read_bead_context
+	MaxMessages int    `json:"max_messages,omitempty"` // For read_bead_conversation
 }
 
 // ParseSimpleJSON parses the minimal JSON action format into an ActionEnvelope.
@@ -123,7 +125,19 @@ func simpleToAction(s SimpleJSONAction) (Action, error) {
 	case "escalate":
 		return Action{Type: ActionEscalateCEO, Reason: s.Reason}, nil
 
+	case "read_bead_conversation":
+		if s.BeadID == "" {
+			return Action{}, &ValidationError{Err: fmt.Errorf("read_bead_conversation requires 'bead_id'")}
+		}
+		return Action{Type: ActionReadBeadConversation, BeadID: s.BeadID, MaxMessages: s.MaxMessages}, nil
+
+	case "read_bead_context":
+		if s.BeadID == "" {
+			return Action{}, &ValidationError{Err: fmt.Errorf("read_bead_context requires 'bead_id'")}
+		}
+		return Action{Type: ActionReadBeadContext, BeadID: s.BeadID}, nil
+
 	default:
-		return Action{}, &ValidationError{Err: fmt.Errorf("unknown action '%s'. Use: scope, read, search, edit, write, build, test, bash, done, close_bead, git_commit, git_push", s.Action)}
+		return Action{}, &ValidationError{Err: fmt.Errorf("unknown action '%s'. Use: scope, read, search, edit, write, build, test, bash, done, close_bead, git_commit, git_push, read_bead_conversation, read_bead_context", s.Action)}
 	}
 }

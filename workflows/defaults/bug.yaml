@@ -80,11 +80,23 @@ edges:
     condition: "approved"
     priority: 100
 
+  # pm_review → apply_fix (on success - fallback if condition mapping not applied)
+  - from_node_key: "pm_review"
+    to_node_key: "apply_fix"
+    condition: "success"
+    priority: 50
+
   # pm_review → investigate (on rejection - retry with feedback)
   - from_node_key: "pm_review"
     to_node_key: "investigate"
     condition: "rejected"
     priority: 100
+
+  # pm_review → investigate (on failure - fallback)
+  - from_node_key: "pm_review"
+    to_node_key: "investigate"
+    condition: "failure"
+    priority: 50
 
   # apply_fix → commit_and_push (on success)
   - from_node_key: "apply_fix"

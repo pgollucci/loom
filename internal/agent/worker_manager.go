@@ -302,6 +302,52 @@ func deriveDisplayName(personaName string) string {
 	return display + " (" + namespace + ")"
 }
 
+// isFullModeCapableModel returns true if the model is capable of handling the
+// full 60+ action JSON schema. Frontier models with large context windows and
+// strong instruction following get full mode; small local models get simple mode.
+func isFullModeCapableModel(model, selectedModel string, contextWindow int) bool {
+	// Use the most specific model name available
+	name := strings.ToLower(selectedModel)
+	if name == "" {
+		name = strings.ToLower(model)
+	}
+	if name == "" {
+		return false
+	}
+
+	// Frontier cloud models — always full mode
+	for _, prefix := range []string{
+		"claude", "anthropic/claude",
+		"gpt-4", "gpt-5", "o1", "o3", "o4",
+		"gemini-pro", "gemini-1.5", "gemini-2",
+	} {
+		if strings.HasPrefix(name, prefix) || strings.Contains(name, "/"+prefix) {
+			return true
+		}
+	}
+
+	// Large open-weight models (30B+) — full mode
+	for _, pattern := range []string{
+		"qwen3-coder-480b", "qwen3-coder-30b",
+		"qwen2.5-coder-32b", "qwen2.5-72b",
+		"deepseek-coder-v2-instruct", "deepseek-v3",
+		"llama-3.1-70b", "llama-3.3-70b",
+		"nemotron-3-nano-30b",
+		"mixtral-8x22b", "command-r-plus",
+	} {
+		if strings.Contains(name, pattern) {
+			return true
+		}
+	}
+
+	// Large context window (>= 32k) is a reasonable proxy for capable models
+	if contextWindow >= 32000 {
+		return true
+	}
+
+	return false
+}
+
 // RestoreAgentWorker restores an already-persisted agent and ensures it has a worker attached.
 func (m *WorkerManager) RestoreAgentWorker(ctx context.Context, agent *models.Agent) (*models.Agent, error) {
 	m.mu.Lock()
@@ -497,6 +543,16 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 			maxIter = 15
 		}
 
+		// Determine TextMode based on model capability.
+		// Frontier models (large context, strong instruction following) use full
+		// 60+ action schema; small local models use the simplified 14-action set.
+		textMode := true // safe default for unknown/small models
+		if agent.ProviderID != "" && m.providerRegistry != nil {
+			if rp, err := m.providerRegistry.Get(agent.ProviderID); err == nil && rp.Config != nil {
+				textMode = !isFullModeCapableModel(rp.Config.Model, rp.Config.SelectedModel, rp.Config.ContextWindow)
+			}
+		}
+
 		loopConfig := &worker.LoopConfig{
 			MaxIterations: maxIter,
 			Router:        router,
@@ -507,7 +563,7 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 			},
 			LessonsProvider: m.lessonsProvider,
 			DB:              m.db,
-			TextMode:        true, // Default to simple text actions for local model effectiveness
+			TextMode:        textMode,
 		}
 
 		loopResult, loopErr := workerInstance.ExecuteTaskWithLoop(ctx, task, loopConfig)

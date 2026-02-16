@@ -30,10 +30,19 @@ func NewPersonaMatcher() *PersonaMatcher {
 	}
 }
 
-// ExtractPersonaHint tries to extract persona hints from a bead
+// ExtractPersonaHint tries to extract persona hints from a bead.
+// Checks (in priority order): bead context requires_persona field,
+// title patterns, description patterns, and tags.
 func (pm *PersonaMatcher) ExtractPersonaHint(bead *models.Bead) string {
 	if bead == nil {
 		return ""
+	}
+
+	// Highest priority: explicit requires_persona in bead context
+	if bead.Context != nil {
+		if persona, ok := bead.Context["requires_persona"]; ok && persona != "" {
+			return normalizePersonaHint(persona)
+		}
 	}
 
 	// Check title first

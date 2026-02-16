@@ -618,8 +618,13 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 						break // Found workflow-matched agent
 					}
 
-					// No agent with exact role — fall through to persona/any-agent dispatch
-					log.Printf("[Dispatcher] Bead %s needs workflow role %q but no idle agent has it - falling through to any-agent dispatch", b.ID, workflowRoleRequired)
+					// No agent with exact role — skip this bead and wait.
+					// Falling through to any-agent defeats the multi-role workflow
+					// design: the wrong persona would run investigation, approval,
+					// verification, and commit phases identically.
+					skippedReasons["workflow_role_not_available"]++
+					log.Printf("[Dispatcher] Bead %s needs workflow role %q but no idle agent has it - skipping (will retry when role available)", b.ID, workflowRoleRequired)
+					continue
 				}
 			}
 		}
@@ -875,15 +880,26 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 			}
 		}
 
-		// Handle workflow failure
+		// Handle workflow failure — map to correct condition for node type
 		if d.workflowEngine != nil {
 			execution, err := d.workflowEngine.GetDatabase().GetWorkflowExecutionByBeadID(candidate.ID)
 			if err == nil && execution != nil {
-				// Report failure to workflow
-				if err := d.workflowEngine.FailNode(execution.ID, ag.ID, execErr.Error()); err != nil {
+				// For approval/verify nodes, use "rejected" instead of "failure"
+				// since their edges use approved/rejected conditions.
+				failCondition := workflow.EdgeConditionFailure
+				if currentNode, nodeErr := d.workflowEngine.GetCurrentNode(execution.ID); nodeErr == nil && currentNode != nil {
+					if currentNode.NodeType == workflow.NodeTypeApproval || currentNode.NodeType == workflow.NodeTypeVerify {
+						failCondition = workflow.EdgeConditionRejected
+						log.Printf("[Workflow] %s node %s failed — advancing with 'rejected'", currentNode.NodeType, currentNode.NodeKey)
+					}
+				}
+				resultData := map[string]string{
+					"failure_reason": execErr.Error(),
+				}
+				if err := d.workflowEngine.AdvanceWorkflow(execution.ID, failCondition, ag.ID, resultData); err != nil {
 					log.Printf("[Workflow] Failed to report failure to workflow for bead %s: %v", candidate.ID, err)
 				} else {
-					log.Printf("[Workflow] Reported failure to workflow for bead %s", candidate.ID)
+					log.Printf("[Workflow] Reported failure to workflow for bead %s (condition: %s)", candidate.ID, failCondition)
 				}
 			}
 		}
@@ -972,13 +988,31 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 	if d.workflowEngine != nil && !loopDetected {
 		execution, err := d.workflowEngine.GetDatabase().GetWorkflowExecutionByBeadID(candidate.ID)
 		if err == nil && execution != nil {
-			// Advance workflow with success condition
+			// Determine the correct edge condition based on the current node type.
+			// Approval and verify nodes define edges with "approved"/"rejected",
+			// not "success", so we must translate the dispatcher's generic
+			// "task completed" signal into the condition the workflow expects.
+			advanceCondition := workflow.EdgeConditionSuccess
+			if currentNode, nodeErr := d.workflowEngine.GetCurrentNode(execution.ID); nodeErr == nil && currentNode != nil {
+				switch currentNode.NodeType {
+				case workflow.NodeTypeApproval:
+					// Agent completed approval review — treat as approved.
+					// A rejection would come through FailNode / escalation path.
+					advanceCondition = workflow.EdgeConditionApproved
+					log.Printf("[Workflow] Approval node %s completed by agent %s — advancing with 'approved'", currentNode.NodeKey, ag.ID)
+				case workflow.NodeTypeVerify:
+					// Agent completed verification — treat as approved.
+					advanceCondition = workflow.EdgeConditionApproved
+					log.Printf("[Workflow] Verify node %s completed by agent %s — advancing with 'approved'", currentNode.NodeKey, ag.ID)
+				}
+			}
+
 			resultData := map[string]string{
 				"agent_id":    ag.ID,
 				"output":      result.Response,
 				"tokens_used": fmt.Sprintf("%d", result.TokensUsed),
 			}
-			if err := d.workflowEngine.AdvanceWorkflow(execution.ID, workflow.EdgeConditionSuccess, ag.ID, resultData); err != nil {
+			if err := d.workflowEngine.AdvanceWorkflow(execution.ID, advanceCondition, ag.ID, resultData); err != nil {
 				log.Printf("[Workflow] Failed to advance workflow for bead %s: %v", candidate.ID, err)
 			} else {
 				// Get updated execution to check status
@@ -1550,7 +1584,7 @@ func (d *Dispatcher) createRemediationBead(stuckBead *models.Bead, stuckAgent *m
 - Bead ID: %s
 - Title: %s
 - Status: %s
-- Priority: %s
+- Priority: %v
 - Iterations: %d
 - Terminal Reason: %s
 
