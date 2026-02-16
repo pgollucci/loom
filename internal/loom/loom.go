@@ -3209,6 +3209,41 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 	}
 }
 
+// resetInconsistentAgents resets agents that are in "working" state but have no current bead.
+// This handles cases where agents get stuck due to crashes, context cancellation, etc.
+func (a *Loom) resetInconsistentAgents() int {
+	if a.agentManager == nil || a.database == nil {
+		return 0
+	}
+
+	agents, err := a.database.ListAgents()
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	workingCount := 0
+	for _, agent := range agents {
+		if agent == nil {
+			continue
+		}
+		if agent.Status == "working" {
+			workingCount++
+			log.Printf("[DispatchLoop] Found working agent %s (currentBead=%q)", agent.ID, agent.CurrentBead)
+		}
+		// Agent is working but has no bead assigned - clear inconsistent state
+		if agent.Status == "working" && agent.CurrentBead == "" {
+			agent.Status = "idle"
+			if err := a.database.UpsertAgent(agent); err == nil {
+				log.Printf("[DispatchLoop] Reset inconsistent agent %s (working with no bead)", agent.ID)
+				count++
+			}
+		}
+	}
+	os.WriteFile("/tmp/dispatch-working-agents.txt", []byte(fmt.Sprintf("working=%d reset=%d\n", workingCount, count)), 0644)
+	return count
+}
+
 // StartDispatchLoop runs a periodic dispatcher that fills all idle agents with work.
 func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 	os.WriteFile("/tmp/dispatch-loop-entered.txt", []byte(fmt.Sprintf("a=%v dispatcher=%v\n", a != nil, a != nil && a.dispatcher != nil)), 0644)
@@ -3238,6 +3273,22 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			os.WriteFile("/tmp/dispatch-loop-tick.txt", []byte(fmt.Sprintf("TICK at %s\n", time.Now())), 0644)
+
+			// Phase 1: Reset agents stuck in "working" state (similar to Ralph Loop)
+			// Using 1 minute timeout to quickly recover from stuck states
+			if a.agentManager != nil {
+				// First reset agents with inconsistent state (working but no bead)
+				inconsistentReset := a.resetInconsistentAgents()
+				// Then reset agents stuck for too long
+				timeoutReset := a.agentManager.ResetStuckAgents(1 * time.Minute)
+				totalReset := inconsistentReset + timeoutReset
+				os.WriteFile("/tmp/dispatch-agents-reset.txt", []byte(fmt.Sprintf("reset=%d (inconsistent=%d timeout=%d)\n", totalReset, inconsistentReset, timeoutReset)), 0644)
+				if totalReset > 0 {
+					log.Printf("[DispatchLoop] Reset %d stuck agent(s) (inconsistent=%d, timeout=%d)", totalReset, inconsistentReset, timeoutReset)
+				}
+			}
+
+			// Phase 2: Dispatch work to idle agents
 			dispatched := 0
 			for i := 0; i < 50; i++ {
 				dr, err := a.dispatcher.DispatchOnce(ctx, "")

@@ -800,6 +800,10 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 	dispatchResult := &DispatchResult{Dispatched: true, ProjectID: selectedProjectID, BeadID: candidate.ID, AgentID: ag.ID, ProviderID: ag.ProviderID}
 
 	go func() {
+		// Create independent context for task execution - don't inherit cancellation from dispatch loop
+		// The task should run to completion even if the dispatch loop moves on
+		taskCtx := context.Background()
+
 		// Check if this is a commit node that needs serialization (Gap #2)
 		if d.workflowEngine != nil {
 			execution, err := d.workflowEngine.GetDatabase().GetWorkflowExecutionByBeadID(candidate.ID)
@@ -807,7 +811,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 				node, err := d.workflowEngine.GetCurrentNode(execution.ID)
 				if err == nil && node != nil && node.NodeType == workflow.NodeTypeCommit {
 					// Acquire commit lock before executing
-					if err := d.acquireCommitLock(ctx, candidate.ID, ag.ID); err != nil {
+					if err := d.acquireCommitLock(taskCtx, candidate.ID, ag.ID); err != nil {
 						log.Printf("[Commit] Failed to acquire commit lock for bead %s: %v", candidate.ID, err)
 						// Continue without lock (fallback behavior)
 					} else {
@@ -818,7 +822,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 			}
 		}
 
-		result, execErr := d.agents.ExecuteTask(ctx, ag.ID, task)
+		result, execErr := d.agents.ExecuteTask(taskCtx, ag.ID, task)
 	if execErr != nil {
 		d.setStatus(StatusParked, "execution failed")
 		observability.Error("dispatch.execute", map[string]interface{}{

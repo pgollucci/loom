@@ -468,6 +468,23 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 			return nil, fmt.Errorf("failed to get worker for loop: %w", workerErr)
 		}
 
+		// Check if worker is stuck in "working" state - if so, respawn it
+		workerStatus := workerInstance.GetStatus()
+		if workerStatus != worker.WorkerStatusIdle {
+			log.Printf("[WorkerManager] Worker %s is stuck in status %s, respawning", agentID, workerStatus)
+			// Stop and remove the stuck worker
+			if stopErr := m.workerPool.StopWorker(agentID); stopErr != nil {
+				log.Printf("[WorkerManager] Warning: Failed to stop stuck worker: %v", stopErr)
+			}
+			// Respawn a fresh worker
+			var spawnErr error
+			workerInstance, spawnErr = m.workerPool.SpawnWorker(agent, agent.ProviderID)
+			if spawnErr != nil {
+				return nil, fmt.Errorf("failed to respawn stuck worker: %w", spawnErr)
+			}
+			log.Printf("[WorkerManager] Successfully respawned worker for agent %s", agentID)
+		}
+
 		// Set database on worker if available
 		if m.db != nil {
 			workerInstance.SetDatabase(m.db)
