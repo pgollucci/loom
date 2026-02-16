@@ -1,5 +1,4 @@
-# Git files
-.git
+# Git files (.git needed for loom-self project to load beads)
 .gitignore
 
 # Documentation
