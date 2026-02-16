@@ -326,13 +326,13 @@ func isFullModeCapableModel(model, selectedModel string, contextWindow int) bool
 		}
 	}
 
-	// Large open-weight models (30B+) — full mode
+	// Very large open-weight models (70B+) — full mode
+	// Note: 30B-class models (Qwen 32B, etc.) use simple mode for reliability
 	for _, pattern := range []string{
-		"qwen3-coder-480b", "qwen3-coder-30b",
-		"qwen2.5-coder-32b", "qwen2.5-72b",
-		"deepseek-coder-v2-instruct", "deepseek-v3",
+		"qwen3-coder-480b",
+		"qwen2.5-72b",
+		"deepseek-v3",
 		"llama-3.1-70b", "llama-3.3-70b",
-		"nemotron-3-nano-30b",
 		"mixtral-8x22b", "command-r-plus",
 	} {
 		if strings.Contains(name, pattern) {
@@ -341,7 +341,7 @@ func isFullModeCapableModel(model, selectedModel string, contextWindow int) bool
 	}
 
 	// Large context window (>= 32k) is a reasonable proxy for capable models
-	if contextWindow >= 32000 {
+	if contextWindow >= 100000 {
 		return true
 	}
 
