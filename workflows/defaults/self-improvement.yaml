@@ -34,7 +34,7 @@ nodes:
 
   - node_key: "verify"
     node_type: "verify"
-    role_required: "QA"
+    role_required: "QA Engineer"
     persona_hint: "default/qa-engineer"
     max_attempts: 2
     timeout_minutes: 30

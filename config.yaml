@@ -38,8 +38,9 @@ agents:
     - ceo
     - engineering-manager
     - project-manager
+    - product-manager
     - code-reviewer
-    - qa
+    - qa-engineer
     - devops-engineer
     - remediation-specialist
 

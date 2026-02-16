@@ -1,9 +1,11 @@
 # Git files (.git needed for loom-self project to load beads)
 .gitignore
 
-# Documentation
-*.md
-LICENSE
+# Documentation (top-level only — persona SKILL.md and workflow docs must be included)
+/README.md
+/CHANGELOG.md
+/CONTRIBUTING.md
+/LICENSE
 
 # IDE and editor files
 .idea
@@ -30,3 +32,6 @@ vendor/
 # Temporary files
 tmp/
 temp/
+
+# Bootstrap secrets (never ship into container)
+bootstrap.local
