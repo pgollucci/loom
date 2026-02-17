@@ -90,6 +90,7 @@
             <button class="view-tab" data-target="analytics" role="tab" aria-selected="false">📊 Analytics</button>
             <button class="view-tab" data-target="motivations" role="tab" aria-selected="false">⚡ Motivations</button>
             <button class="view-tab" data-target="logs" role="tab" aria-selected="false">📋 Logs</button>
+            <button class="view-tab" data-target="export-import" role="tab" aria-selected="false">💾 Export/Import</button>
 
             <!-- Debug & Dev -->
             <button class="view-tab" data-target="diagrams" role="tab" aria-selected="false">📊 Diagrams</button>
@@ -425,6 +426,141 @@
             
             <!-- Log Viewer -->
             <div id="log-viewer" class="log-viewer"></div>
+        </section>
+
+        <!-- Export/Import Section -->
+        <section id="export-import" class="view-panel" role="tabpanel" aria-label="Database Export/Import" hidden>
+            <h2><span aria-hidden="true">💾</span> Database Export/Import</h2>
+            <p class="small" style="margin-bottom: 1rem;">Backup, restore, and migrate your Loom database. (Admin only)</p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+                <!-- Export Panel -->
+                <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+                    <h3><span aria-hidden="true">📤</span> Export Database</h3>
+                    <p class="small" style="margin-bottom: 1rem; color: var(--text-muted);">Export your database to a JSON file for backup or migration.</p>
+
+                    <form id="export-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="field">
+                            <label for="export-format">Format</label>
+                            <select id="export-format">
+                                <option value="json">Compact JSON</option>
+                                <option value="json-pretty" selected>Pretty JSON</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="export-include">Include Groups (comma-separated, leave empty for all)</label>
+                            <input type="text" id="export-include" placeholder="e.g., core,workflow,activity">
+                            <small class="small" style="color: var(--text-muted);">Available: core, workflow, activity, tracking, logging, analytics, config</small>
+                        </div>
+
+                        <div class="field">
+                            <label for="export-project">Project Filter (optional)</label>
+                            <select id="export-project">
+                                <option value="">All Projects</option>
+                                <!-- Options loaded dynamically -->
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="export-since">Since Date (optional)</label>
+                            <input type="datetime-local" id="export-since">
+                            <small class="small" style="color: var(--text-muted);">Only export data created/updated after this date</small>
+                        </div>
+
+                        <button type="submit" class="primary" style="margin-top: 0.5rem;">
+                            <span aria-hidden="true">📥</span> Download Export
+                        </button>
+                    </form>
+
+                    <div id="export-status" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
+                </div>
+
+                <!-- Import Panel -->
+                <div style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+                    <h3><span aria-hidden="true">📥</span> Import Database</h3>
+                    <p class="small" style="margin-bottom: 1rem; color: var(--text-muted);">Restore database from a previous export file.</p>
+
+                    <form id="import-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="field">
+                            <label for="import-file">Export File *</label>
+                            <input type="file" id="import-file" accept=".json,application/json" required>
+                        </div>
+
+                        <div class="field">
+                            <label for="import-strategy">Import Strategy</label>
+                            <select id="import-strategy">
+                                <option value="merge" selected>Merge - Update existing, insert new</option>
+                                <option value="replace">Replace - Delete all, then import (⚠️ destructive)</option>
+                                <option value="fail-on-conflict">Fail on Conflict - Abort if conflicts exist</option>
+                            </select>
+                            <small class="small" style="color: var(--text-muted);">Choose how to handle existing data</small>
+                        </div>
+
+                        <div class="field" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="import-dry-run">
+                            <label for="import-dry-run" style="margin: 0;">Dry Run (preview without changes)</label>
+                        </div>
+
+                        <div class="field" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="import-validate-only">
+                            <label for="import-validate-only" style="margin: 0;">Validate Only (check file without importing)</label>
+                        </div>
+
+                        <button type="submit" class="primary" style="margin-top: 0.5rem;">
+                            <span aria-hidden="true">📤</span> Import Database
+                        </button>
+                    </form>
+
+                    <div id="import-status" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
+                </div>
+            </div>
+
+            <!-- Import Summary -->
+            <div id="import-summary" style="display: none; margin-top: 2rem; padding: 1.5rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+                <h3><span aria-hidden="true">📊</span> Import Summary</h3>
+                <div id="import-summary-content"></div>
+            </div>
+
+            <!-- Documentation -->
+            <div style="margin-top: 2rem; padding: 1.5rem; border: 1px solid #0ea5e9; border-radius: 8px; background: rgba(14, 165, 233, 0.05);">
+                <h3><span aria-hidden="true">📖</span> Documentation</h3>
+                <p class="small" style="margin-bottom: 0.5rem;">For more details, see <a href="/docs/export-import.md" target="_blank">docs/export-import.md</a></p>
+
+                <details style="margin-top: 1rem;">
+                    <summary style="cursor: pointer; font-weight: 600; margin-bottom: 0.5rem;">Quick Usage Examples</summary>
+                    <div style="margin-top: 0.5rem; padding-left: 1rem;">
+                        <h4 style="font-size: 0.9rem; margin: 0.5rem 0;">Via CLI:</h4>
+                        <pre style="background: #1e293b; color: #e2e8f0; padding: 0.75rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem;"><code># Export everything
+loomctl export --output backup.json
+
+# Export specific groups
+loomctl export --include core,workflow --output partial.json
+
+# Import with merge strategy
+loomctl import backup.json
+
+# Dry run before importing
+loomctl import backup.json --dry-run</code></pre>
+                    </div>
+                </details>
+
+                <details style="margin-top: 1rem;">
+                    <summary style="cursor: pointer; font-weight: 600; margin-bottom: 0.5rem;">What Gets Exported?</summary>
+                    <div style="margin-top: 0.5rem; padding-left: 1rem;">
+                        <ul class="small" style="margin: 0; padding-left: 1.5rem;">
+                            <li><strong>Core</strong> (7 tables): providers, projects, org_charts, org_chart_positions, agents, credentials</li>
+                            <li><strong>Workflow</strong> (5 tables): workflows, workflow_nodes, workflow_edges, workflow_executions, workflow_execution_history</li>
+                            <li><strong>Activity</strong> (7 tables): users, activity_feed, notifications, notification_preferences, bead_comments, comment_mentions, conversation_contexts</li>
+                            <li><strong>Tracking</strong> (4 tables): motivations, motivation_triggers, milestones, lessons</li>
+                            <li><strong>Logging</strong> (3 tables): logs, request_logs, command_logs</li>
+                            <li><strong>Analytics</strong> (2 tables): usage_patterns, optimizations</li>
+                            <li><strong>Config</strong> (2 tables): config_kv, distributed_locks (PostgreSQL), instances (PostgreSQL)</li>
+                        </ul>
+                        <p class="small" style="margin-top: 0.5rem; color: var(--text-muted);"><strong>Total: 30 database tables</strong></p>
+                    </div>
+                </details>
+            </div>
         </section>
 
         <!-- Dev Tools Section -->
@@ -1011,6 +1147,7 @@
     <script src="/static/js/app.js?v=21"></script>
     <script src="/static/js/logs.js?v=6"></script>
     <script src="/static/js/diagrams.js?v=3"></script>
+    <script src="/static/js/export-import.js?v=1"></script>
 
     <!-- Hot-reload client (development only) -->
     <script src="/static/js/hotreload.js?v=3"></script>
