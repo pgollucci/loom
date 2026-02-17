@@ -921,6 +921,7 @@ func newAnalyticsCommand() *cobra.Command {
 	cmd.AddCommand(newAnalyticsCostsCommand())
 	cmd.AddCommand(newAnalyticsLogsCommand())
 	cmd.AddCommand(newAnalyticsExportCommand())
+	cmd.AddCommand(newAnalyticsVelocityCommand())
 	return cmd
 }
 
@@ -986,6 +987,40 @@ func newAnalyticsExportCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newAnalyticsVelocityCommand() *cobra.Command {
+	var projectID string
+	var timeWindow string
+
+	cmd := &cobra.Command{
+		Use:   "velocity",
+		Short: "Show change velocity metrics (commits, pushes, builds, tests)",
+		Long: `Display git change velocity and development funnel metrics for a project.
+Shows files modified, builds/tests run, commits made, and pushes completed.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if timeWindow != "" {
+				params.Set("time_window", timeWindow)
+			}
+
+			data, err := client.get("/api/v1/analytics/change-velocity", params)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&projectID, "project", "p", "loom-self", "Project ID to query")
+	cmd.Flags().StringVarP(&timeWindow, "window", "w", "24h", "Time window (e.g., 24h, 7d, 30d)")
+
+	return cmd
 }
 
 // --- Config commands ---

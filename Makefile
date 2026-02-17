@@ -302,7 +302,10 @@ distclean: clean
 
 # Install binary to $GOPATH/bin
 install: build
-	cp $(BIN_DIR)/$(BINARY_NAME) $(GOPATH)/bin/
+	@echo "Installing loom and loomctl to /usr/local/bin..."
+	@sudo cp $(BIN_DIR)/$(BINARY_NAME) /usr/local/bin/
+	@sudo cp $(BIN_DIR)/loomctl /usr/local/bin/
+	@echo "Installation complete. Run 'loom' or 'loomctl' from anywhere."
 
 # Create config.yaml from example if missing
 config:
