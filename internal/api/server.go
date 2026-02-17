@@ -266,6 +266,9 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/analytics/batching", s.handleGetBatchingRecommendations)
 	mux.HandleFunc("/api/v1/analytics/change-velocity", s.handleGetChangeVelocity)
 
+	// Debug endpoints
+	mux.HandleFunc("/api/v1/debug/capture-ui", s.handleCaptureUI)
+
 	// Cache management
 	mux.HandleFunc("/api/v1/cache/stats", s.handleGetCacheStats)
 	mux.HandleFunc("/api/v1/cache/config", s.handleGetCacheConfig)
