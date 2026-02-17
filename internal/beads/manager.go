@@ -757,6 +757,7 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 	// Closed beads are not needed for dispatch, routing, or stuck detection.
 	var allOutput []byte
 	dir := beadsRootDir(beadsPath)
+	failCount := 0
 	for _, status := range []string{"open", "in_progress", "blocked"} {
 		cmd := exec.Command(m.bdPath, "list", "--json", "--limit", "0", "--allow-stale", "--status="+status)
 		if dir != "" {
@@ -765,6 +766,7 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("[BeadManager] bd list --status=%s failed: %v: %s", status, err, strings.TrimSpace(string(output)))
+			failCount++
 			continue
 		}
 		trimmed := strings.TrimSpace(string(output))
@@ -787,6 +789,12 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 		}
 		allOutput = append(allOutput, []byte(trimmed)...)
 	}
+
+	// If all bd commands failed, report error so YAML fallback can run.
+	if failCount == 3 {
+		return fmt.Errorf("all bd list commands failed")
+	}
+
 	combined := "[" + string(allOutput) + "]"
 
 	var issues []bdIssue

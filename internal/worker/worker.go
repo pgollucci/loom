@@ -716,6 +716,7 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 	consecutiveValidationFailures := 0
 	actionHashes := make(map[string]int)     // for inner loop detection
 	actionTypeCount := make(map[string]int) // for progress stagnation detection
+	treePaths := make(map[string]int)       // track repeated scope/tree calls per path
 
 	for iteration := 0; iteration < maxIter; iteration++ {
 		select {
@@ -878,6 +879,13 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 		// Track action types for progress stagnation detection
 		for _, act := range env.Actions {
 			actionTypeCount[act.Type]++
+			if act.Type == actions.ActionReadTree {
+				p := act.Path
+				if p == "" {
+					p = "."
+				}
+				treePaths[p]++
+			}
 		}
 
 		// Log the iteration
@@ -952,8 +960,23 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 			return loopResult, nil
 		}
 
+		// Warn the agent if it is repeating scope on a path it already explored
+		var treeWarning string
+		for _, act := range env.Actions {
+			if act.Type == actions.ActionReadTree {
+				p := act.Path
+				if p == "" {
+					p = "."
+				}
+				if treePaths[p] > 1 {
+					treeWarning = fmt.Sprintf("\n**WARNING: You already listed directory %q %d times. The contents have not changed. Move on to your next action (search, read, or edit).**\n", p, treePaths[p])
+					break
+				}
+			}
+		}
+
 		// Format results as user message, prepended with progress summary
-		feedback := tracker.Summary(iteration+1) + actions.FormatResultsAsUserMessage(results)
+		feedback := tracker.Summary(iteration+1) + treeWarning + actions.FormatResultsAsUserMessage(results)
 		messages = append(messages, provider.ChatMessage{Role: "user", Content: feedback})
 		if conversationCtx != nil {
 			conversationCtx.AddMessage("user", feedback, len(feedback)/4)

@@ -143,7 +143,14 @@ func (pt *ProgressTracker) Summary(iteration int) string {
 // IsProgressStagnant detects if the agent is looping without making meaningful progress.
 // Returns true if the agent appears stuck, along with a reason.
 func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map[string]int) (bool, string) {
-	// Not enough iterations to judge yet
+	// Idempotent actions can be detected early — directory listings never
+	// change within a single agent run, so repeating scope/tree is always
+	// a sign of a stuck agent regardless of how many iterations have passed.
+	if treeCount := actionTypeCount["read_tree"]; treeCount > 5 {
+		return true, fmt.Sprintf("repeated read_tree action %d times (directory listings don't change)", treeCount)
+	}
+
+	// Not enough iterations to judge the remaining heuristics yet
 	if iteration < 15 {
 		return false, ""
 	}
@@ -178,7 +185,7 @@ func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map
 	// Uses canonical action type names (post-ParseSimpleJSON), not simple-mode verbs.
 	for actionType, count := range actionTypeCount {
 		if count > 15 && (actionType == "search_text" || actionType == "read_file" ||
-			actionType == "read_code" || actionType == "read_tree" || actionType == "run_command") {
+			actionType == "read_code" || actionType == "run_command") {
 			return true, fmt.Sprintf("repeated %s action %d times", actionType, count)
 		}
 	}

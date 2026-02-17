@@ -124,3 +124,48 @@ func TestProgressTracker_IgnoresErroredGit(t *testing.T) {
 		t.Errorf("should not show committed on error, got: %s", s)
 	}
 }
+
+func TestIsProgressStagnant_ReadTreeEarlyDetection(t *testing.T) {
+	pt := NewProgressTracker(25)
+
+	// read_tree should trigger before the iteration-15 gate
+	counts := map[string]int{"read_tree": 6}
+	stagnant, reason := pt.IsProgressStagnant(3, counts)
+	if !stagnant {
+		t.Fatal("expected stagnant for 6 read_tree calls at iteration 3")
+	}
+	if !strings.Contains(reason, "read_tree") {
+		t.Errorf("expected reason to mention read_tree, got: %s", reason)
+	}
+}
+
+func TestIsProgressStagnant_ReadTreeBelowThreshold(t *testing.T) {
+	pt := NewProgressTracker(25)
+
+	// 3 read_tree calls should not trigger (threshold is >5)
+	counts := map[string]int{"read_tree": 3}
+	stagnant, _ := pt.IsProgressStagnant(3, counts)
+	if stagnant {
+		t.Fatal("should not be stagnant for only 3 read_tree calls")
+	}
+}
+
+func TestIsProgressStagnant_OtherActionsNeedIteration15(t *testing.T) {
+	pt := NewProgressTracker(25)
+
+	// 20 search_text calls at iteration 5 should NOT trigger (below iteration gate)
+	counts := map[string]int{"search_text": 20}
+	stagnant, _ := pt.IsProgressStagnant(5, counts)
+	if stagnant {
+		t.Fatal("should not trigger before iteration 15 for non-read_tree actions")
+	}
+
+	// Same counts at iteration 16 SHOULD trigger
+	stagnant, reason := pt.IsProgressStagnant(16, counts)
+	if !stagnant {
+		t.Fatal("expected stagnant for 20 search_text at iteration 16")
+	}
+	if !strings.Contains(reason, "search_text") {
+		t.Errorf("expected reason to mention search_text, got: %s", reason)
+	}
+}

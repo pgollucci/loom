@@ -21,7 +21,7 @@ Pattern:
   → ...continue until commit and done
 
 ## Budget: You have ~25 iterations. Spend them wisely:
-- Iterations 1-3: Locate (scope, search, read files)
+- Iterations 1-3: Locate (scope ONCE, then search/read specific files — never repeat scope on the same path)
 - Iterations 4-15: Change (edit or write files)
 - Iterations 16-18: Build and test to verify
 - Iteration 19: git_commit
