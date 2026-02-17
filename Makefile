@@ -11,10 +11,14 @@ GO_TOOLCHAIN_VERSION ?= $(GO_REQUIRED).0
 
 all: build
 
-# Build the Go binary (for local tooling, install, cross-compile)
+# Build both Go binaries (loom server and loomctl CLI)
 build:
 	@mkdir -p $(BIN_DIR)
+	@echo "Building loom server..."
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/loom
+	@echo "Building loomctl CLI..."
+	CGO_ENABLED=1 go build $(LDFLAGS) -o $(BIN_DIR)/loomctl ./cmd/loomctl
+	@echo "Build complete: bin/loom and bin/loomctl"
 
 # Build for multiple platforms
 build-all: lint-yaml
@@ -231,13 +235,12 @@ deps-linux-pacman:
 		exit 1; \
 	fi
 
-# Clean build artifacts
+# Clean build artifacts (preserves databases)
 clean:
 	rm -rf $(BIN_DIR)
 	rm -rf $(OBJ_DIR)
-	rm -f *.db
 
-# Deep clean: stop containers, remove images, prune docker, clean all
+# Deep clean: stop containers, remove volumes (DELETES DATABASES), remove images, clean all caches
 distclean: clean
 	@docker compose down -v --remove-orphans 2>/dev/null || true
 	@docker rmi loom:latest loom-loom-test:latest 2>/dev/null || true
@@ -284,7 +287,7 @@ help:
 	@echo "  make logs         - Follow loom container logs"
 	@echo ""
 	@echo "Development:"
-	@echo "  make build        - Build the Go binary"
+	@echo "  make build        - Build both binaries (loom server + loomctl CLI)"
 	@echo "  make build-all    - Cross-compile for linux/darwin/windows"
 	@echo "  make test         - Run tests locally"
 	@echo "  make test-docker  - Run tests in Docker (with Temporal)"
@@ -292,8 +295,8 @@ help:
 	@echo "  make coverage     - Run tests with coverage report"
 	@echo "  make lint         - Run all linters (fmt, vet, yaml, docs)"
 	@echo "  make deps         - Install system dependencies + go module dependencies"
-	@echo "  make clean        - Clean build artifacts"
-	@echo "  make distclean    - Deep clean (docker + build cache)"
+	@echo "  make clean        - Clean build artifacts (preserves databases)"
+	@echo "  make distclean    - Deep clean (DELETES DATABASES, removes all Docker volumes)"
 	@echo "  make install      - Install binary to GOPATH/bin"
 	@echo "  make config       - Create config.yaml from example"
 	@echo "  make dev-setup    - Set up development environment"
