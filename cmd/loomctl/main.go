@@ -152,18 +152,155 @@ func (c *Client) streamSSE(path string) error {
 	return scanner.Err()
 }
 
-// outputJSON prints raw JSON data. All commands use this as the primary output path.
+// outputJSON prints data according to the global outputFormat flag.
 func outputJSON(data []byte) {
-	// Pretty-print the JSON
+	// Parse JSON first
 	var v interface{}
 	if err := json.Unmarshal(data, &v); err != nil {
 		// Not valid JSON, print raw
 		fmt.Println(string(data))
 		return
 	}
+
+	// Handle table format
+	if outputFormat == "table" {
+		if err := outputTable(v); err != nil {
+			// Fallback to JSON if table formatting fails
+			fmt.Fprintf(os.Stderr, "Warning: table formatting failed (%v), falling back to JSON\n", err)
+			outputFormatJSON(v)
+		}
+		return
+	}
+
+	// Default to JSON
+	outputFormatJSON(v)
+}
+
+// outputFormatJSON prints formatted JSON
+func outputFormatJSON(v interface{}) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	enc.Encode(v)
+}
+
+// outputTable formats data as a table
+func outputTable(v interface{}) error {
+	// Handle array of objects (most common case for list commands)
+	arr, ok := v.([]interface{})
+	if !ok {
+		// Single object or non-array - show as key-value pairs
+		return outputTableObject(v)
+	}
+
+	if len(arr) == 0 {
+		fmt.Println("(no results)")
+		return nil
+	}
+
+	// Extract all possible columns from all objects
+	columnSet := make(map[string]bool)
+	var columns []string
+
+	for _, item := range arr {
+		obj, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for key := range obj {
+			if !columnSet[key] {
+				columnSet[key] = true
+				columns = append(columns, key)
+			}
+		}
+	}
+
+	if len(columns) == 0 {
+		return fmt.Errorf("no columns found")
+	}
+
+	// Print header
+	fmt.Print(columns[0])
+	for _, col := range columns[1:] {
+		fmt.Printf("\t%s", col)
+	}
+	fmt.Println()
+
+	// Print separator
+	for i := 0; i < len(columns); i++ {
+		if i > 0 {
+			fmt.Print("\t")
+		}
+		fmt.Print("---")
+	}
+	fmt.Println()
+
+	// Print rows
+	for _, item := range arr {
+		obj, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		fmt.Print(formatValue(obj[columns[0]]))
+		for _, col := range columns[1:] {
+			fmt.Printf("\t%s", formatValue(obj[col]))
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+// outputTableObject formats a single object as key-value pairs
+func outputTableObject(v interface{}) error {
+	obj, ok := v.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("expected object, got %T", v)
+	}
+
+	fmt.Println("KEY\tVALUE")
+	fmt.Println("---\t-----")
+
+	for key, val := range obj {
+		fmt.Printf("%s\t%s\n", key, formatValue(val))
+	}
+
+	return nil
+}
+
+// formatValue converts a JSON value to a string for table display
+func formatValue(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+
+	switch val := v.(type) {
+	case string:
+		// Truncate long strings
+		if len(val) > 50 {
+			return val[:47] + "..."
+		}
+		return val
+	case float64:
+		// Remove decimal if it's a whole number
+		if val == float64(int64(val)) {
+			return fmt.Sprintf("%d", int64(val))
+		}
+		return fmt.Sprintf("%.2f", val)
+	case bool:
+		if val {
+			return "true"
+		}
+		return "false"
+	case map[string]interface{}:
+		// Nested object - show as placeholder
+		return "(object)"
+	case []interface{}:
+		// Array - show count
+		return fmt.Sprintf("(array:%d)", len(val))
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 // --- Bead commands ---
