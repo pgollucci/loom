@@ -1,0 +1,122 @@
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor
+    - test/fixtures
+
+linters:
+  enable:
+    # Core linters
+    - errcheck       # Check for unchecked errors
+    - gosimple       # Simplify code
+    - govet          # Go vet examines Go source code
+    - ineffassign    # Detect ineffectual assignments
+    - staticcheck    # Static analysis
+    - typecheck      # Type checking
+    - unused         # Check for unused code
+
+    # Additional quality checks
+    - gocritic       # Comprehensive Go source code linter
+    - gocyclo        # Cyclomatic complexity
+    - gofmt          # Format check
+    - goimports      # Import formatting
+    - misspell       # Spell checker
+    - unconvert      # Remove unnecessary conversions
+    - unparam        # Find unused function parameters
+    - revive         # Fast, configurable, extensible, flexible linter
+
+    # Bug detection
+    - bodyclose      # Check HTTP response body closed
+    - nilnil         # Finds nil returns with non-nil errors
+    - nilerr         # Finds code that returns nil even if check errors
+    - errname        # Check error names follow conventions
+    - errorlint      # Error wrapping issues
+
+    # Code style
+    - stylecheck     # Replacement for golint
+    - whitespace     # Detect leading/trailing whitespace
+    - goprintffuncname # Check printf-like function names
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15  # Flag functions with complexity > 15
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+      - experimental
+    disabled-checks:
+      - ifElseChain  # Too strict for typical code
+      - singleCaseSwitch  # Sometimes clearer than if
+
+  revive:
+    rules:
+      - name: exported
+        disabled: false
+      - name: unexported-return
+        disabled: false
+      - name: blank-imports
+        disabled: false
+      - name: context-as-argument
+        disabled: false
+      - name: dot-imports
+        disabled: false
+      - name: error-return
+        disabled: false
+      - name: error-strings
+        disabled: false
+      - name: error-naming
+        disabled: false
+      - name: increment-decrement
+        disabled: false
+      - name: var-naming
+        disabled: false
+      - name: package-comments
+        disabled: true  # Not all packages need doc comments
+      - name: range
+        disabled: false
+      - name: receiver-naming
+        disabled: false
+      - name: indent-error-flow
+        disabled: false
+      - name: superfluous-else
+        disabled: false
+
+  errcheck:
+    check-blank: false  # Don't require blank assignments for ignored errors
+    check-type-assertions: true
+
+  staticcheck:
+    checks: ["all"]
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # Exclude some checks that are too noisy
+  exclude-rules:
+    # Allow underscores in variable names for test files
+    - path: _test\.go
+      linters:
+        - revive
+      text: "var-naming: don't use underscores in Go names"
+
+    # Allow long functions in main packages (CLI parsing, etc.)
+    - path: cmd/
+      linters:
+        - gocyclo
+        - funlen
+
+    # Allow TODO comments (tracked separately)
+    - linters:
+        - godox
+      text: "TODO"
+
+    # Allow fmt.Sprintf in tests for clarity
+    - path: _test\.go
+      linters:
+        - perfsprint

@@ -1,4 +1,4 @@
-.PHONY: all build build-all start stop restart prune bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-yaml lint-docs deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch
+.PHONY: all build build-all start stop restart prune bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch
 
 # Build variables
 BINARY_NAME=loom
@@ -111,14 +111,67 @@ fmt:
 vet:
 	go vet ./...
 
-# Run all linters
-lint: fmt vet lint-yaml lint-docs
+# Install linting tools
+lint-install:
+	@echo "Installing linting tools..."
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "Installing golangci-lint..."; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
+	else \
+		echo "✓ golangci-lint already installed"; \
+	fi
+	@if ! command -v eslint >/dev/null 2>&1; then \
+		echo "Installing eslint..."; \
+		npm install -g eslint || echo "⚠ npm not found, eslint install skipped"; \
+	else \
+		echo "✓ eslint already installed"; \
+	fi
+	@echo "Linting tools ready"
 
+# Run all linters (comprehensive quality checks)
+lint: lint-go lint-js lint-yaml lint-docs lint-api
+
+# Go linting with golangci-lint (comprehensive)
+lint-go:
+	@echo "=== Go Linting ==="
+	@PATH="$$PATH:$$(go env GOPATH)/bin"; \
+	if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "⚠ golangci-lint not found, running basic checks only"; \
+		echo "  Run 'make lint-install' to install comprehensive linters"; \
+		go fmt ./...; \
+		go vet ./...; \
+	else \
+		golangci-lint run --timeout 5m; \
+	fi
+
+# JavaScript linting with eslint
+lint-js:
+	@echo ""
+	@echo "=== JavaScript Linting ==="
+	@if ! command -v eslint >/dev/null 2>&1; then \
+		echo "⚠ eslint not found, skipping JS linting"; \
+		echo "  Run 'make lint-install' to install eslint"; \
+	else \
+		eslint web/static/js/*.js || true; \
+	fi
+
+# YAML linting
 lint-yaml:
-	go run ./cmd/yaml-lint
+	@echo ""
+	@echo "=== YAML Linting ==="
+	@go run ./cmd/yaml-lint
 
+# Documentation structure check
 lint-docs:
+	@echo ""
+	@echo "=== Documentation Linting ==="
 	@bash scripts/check-docs-structure.sh
+
+# API/Frontend validation (catch API mismatches)
+lint-api:
+	@echo ""
+	@echo "=== API/Frontend Validation ==="
+	@bash scripts/check-api-frontend.sh
 
 # Install dependencies
 deps:
@@ -293,7 +346,11 @@ help:
 	@echo "  make test-docker  - Run tests in Docker (with Temporal)"
 	@echo "  make test-api     - Run post-flight API tests"
 	@echo "  make coverage     - Run tests with coverage report"
-	@echo "  make lint         - Run all linters (fmt, vet, yaml, docs)"
+	@echo "  make lint         - Run all linters (Go, JS, YAML, docs, API validation)"
+	@echo "  make lint-install - Install linting tools (golangci-lint, eslint)"
+	@echo "  make lint-go      - Run Go linters only"
+	@echo "  make lint-js      - Run JavaScript linters only"
+	@echo "  make lint-api     - Run API/frontend validation only"
 	@echo "  make deps         - Install system dependencies + go module dependencies"
 	@echo "  make clean        - Clean build artifacts (preserves databases)"
 	@echo "  make distclean    - Deep clean (DELETES DATABASES, removes all Docker volumes)"
