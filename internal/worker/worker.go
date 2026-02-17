@@ -185,8 +185,8 @@ func (w *Worker) ExecuteTask(ctx context.Context, task *Task) (*TaskResult, erro
 	req := &provider.ChatCompletionRequest{
 		Model:          w.provider.Config.Model,
 		Messages:       messages,
-		Temperature:    0.7,
-		ResponseFormat: &provider.ResponseFormat{Type: "json_object"},
+		Temperature:    0.1,
+		ResponseFormat: w.responseFormat(),
 	}
 
 	// Send request to provider (with automatic context-length retry)
@@ -489,6 +489,23 @@ func (w *Worker) buildSystemPrompt() string {
 	return prompt
 }
 
+// responseFormat returns the ResponseFormat for LLM requests.
+// Local vLLM servers support response_format: json_object for constrained
+// decoding. Cloud/litellm proxies often choke on it, so we skip it when the
+// provider endpoint is not a local address.
+func (w *Worker) responseFormat() *provider.ResponseFormat {
+	ep := w.provider.Config.Endpoint
+	if strings.Contains(ep, "localhost") ||
+		strings.Contains(ep, "127.0.0.1") ||
+		strings.Contains(ep, ".local") ||
+		strings.Contains(ep, ".local:") {
+		return &provider.ResponseFormat{Type: "json_object"}
+	}
+	// Cloud providers (NVIDIA NIM, OpenAI, Anthropic proxies) — don't force
+	// json_object as it can conflict with litellm routing.
+	return nil
+}
+
 // GetStatus returns the current worker status
 func (w *Worker) GetStatus() WorkerStatus {
 	w.mu.RLock()
@@ -735,8 +752,8 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 		req := &provider.ChatCompletionRequest{
 			Model:          w.provider.Config.Model,
 			Messages:       trimmedMessages,
-			Temperature:    0.7,
-			ResponseFormat: &provider.ResponseFormat{Type: "json_object"},
+			Temperature:    0.1,
+			ResponseFormat: w.responseFormat(),
 		}
 
 		log.Printf("[ActionLoop] Iteration %d/%d for task %s (messages: %d, textMode: %v)", iteration+1, maxIter, task.ID, len(trimmedMessages), config.TextMode)
@@ -792,7 +809,7 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 				// Give specific feedback and let the model retry — don't count
 				// this as a hard parse failure.
 				consecutiveValidationFailures++
-				if consecutiveValidationFailures >= 4 {
+				if consecutiveValidationFailures >= 8 {
 					loopResult.TerminalReason = "validation_failures"
 					loopResult.Iterations = iteration + 1
 					loopResult.Actions = allActions
@@ -801,7 +818,17 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 					loopResult.CompletedAt = time.Now()
 					return loopResult, nil
 				}
-				feedback := fmt.Sprintf("## Action Validation Error\n\nYour JSON was valid but the action is incomplete: %v\n\nPlease include all required fields. For write_file you need both \"path\" and \"content\". For read_code you need \"path\". Check the action schema and try again.", validationErr)
+				// Give increasingly specific examples as the model keeps failing
+				feedback := fmt.Sprintf("## Action Validation Error (attempt %d/8)\n\nYour JSON was valid but incomplete: %v\n\nYou MUST respond with exactly ONE of these JSON formats:\n"+
+					"  {\"action\": \"scope\", \"path\": \".\"}\n"+
+					"  {\"action\": \"read\", \"path\": \"file.go\"}\n"+
+					"  {\"action\": \"search\", \"query\": \"pattern\"}\n"+
+					"  {\"action\": \"edit\", \"path\": \"file.go\", \"old\": \"text\", \"new\": \"replacement\"}\n"+
+					"  {\"action\": \"write\", \"path\": \"file.go\", \"content\": \"full content\"}\n"+
+					"  {\"action\": \"build\"}\n"+
+					"  {\"action\": \"test\"}\n"+
+					"  {\"action\": \"done\", \"reason\": \"summary\"}\n\n"+
+					"Start with: {\"action\": \"scope\", \"path\": \".\"}", consecutiveValidationFailures, validationErr)
 				messages = append(messages, provider.ChatMessage{Role: "user", Content: feedback})
 				if conversationCtx != nil {
 					conversationCtx.AddMessage("user", feedback, len(feedback)/4)

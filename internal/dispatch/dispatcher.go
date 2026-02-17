@@ -366,21 +366,25 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		if candidateAgent == nil {
 			continue
 		}
-		// If agent already has a provider, verify it's active.
-		// If agent has no provider, auto-assign one from the active pool.
-		// Note: Final provider selection happens per-bead based on complexity.
-		if candidateAgent.ProviderID != "" {
-			if !d.providers.IsActive(candidateAgent.ProviderID) {
-				continue
-			}
-		} else {
-			// Assign a default provider; actual routing happens per-bead
-			activeProviders := d.providers.ListActive() // sorted by capability score
+		// Ensure every agent has a healthy provider.
+		// If the agent's current provider is inactive (or unset), reassign
+		// from the active pool. Final provider selection happens per-bead
+		// based on complexity — this just ensures the agent isn't filtered out.
+		needsProvider := candidateAgent.ProviderID == "" ||
+			!d.providers.IsActive(candidateAgent.ProviderID)
+		if needsProvider {
+			activeProviders := d.providers.ListActive()
 			if len(activeProviders) > 0 {
 				best := activeProviders[0]
+				prev := candidateAgent.ProviderID
 				candidateAgent.ProviderID = best.Config.ID
-				log.Printf("[Dispatcher] Auto-assigned default provider %s (score=%.0f, latency=%dms) to agent %s",
-					best.Config.ID, best.Config.CapabilityScore, best.Config.LastHeartbeatLatencyMs, candidateAgent.Name)
+				if prev != "" {
+					log.Printf("[Dispatcher] Reassigned agent %s from failed provider %s to %s",
+						candidateAgent.Name, prev, best.Config.ID)
+				} else {
+					log.Printf("[Dispatcher] Auto-assigned provider %s to agent %s",
+						best.Config.ID, candidateAgent.Name)
+				}
 			} else {
 				continue
 			}

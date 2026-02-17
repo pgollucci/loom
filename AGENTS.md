@@ -2,6 +2,72 @@
 
 Welcome to Loom - the Agent Orchestration System. This guide helps you get started with developing agents, creating work items (beads), and using the system.
 
+## CLI First: Use loomctl, Not curl
+
+**MANDATORY: Always use `loomctl` to interact with the Loom API. Never use raw `curl` commands.**
+
+All `loomctl` output is structured JSON by default. Use `jq` to extract human-readable fields.
+
+```bash
+# System overview (providers, agents, beads, health in one call)
+loomctl status
+
+# Providers
+loomctl provider list                    # List all providers
+loomctl provider show sparky-local       # Show one provider
+loomctl provider register my-provider \  # Register a new provider
+  --name="My Provider" --type=openai \
+  --endpoint="http://host:8000/v1" \
+  --model="Qwen/Qwen2.5-Coder-32B-Instruct"
+
+# Beads (work items)
+loomctl bead list                        # List all beads
+loomctl bead list --status=open          # Filter by status
+loomctl bead show loom-001               # Show bead details
+loomctl bead poke loom-001               # Redispatch stuck bead
+loomctl bead create --title="Fix X" --project=loom-self
+
+# Agents and projects
+loomctl agent list
+loomctl project list
+
+# Logs and observability
+loomctl log recent --limit=50            # Recent log entries
+loomctl log stream                       # Live SSE log stream
+loomctl metrics prometheus               # Raw Prometheus metrics
+loomctl metrics cache                    # Cache stats
+loomctl analytics stats                  # Analytics overview
+loomctl analytics costs                  # Cost breakdown
+
+# Events and activity
+loomctl event list                       # Recent events
+loomctl event stream                     # Live event stream
+loomctl event activity                   # Activity feed
+
+# Conversations and workflows
+loomctl conversation list
+loomctl conversation show <session-id>
+loomctl workflow list
+loomctl workflow executions
+
+# Server config
+loomctl config show
+```
+
+**Environment:** Set `LOOM_SERVER=http://localhost:8080` or use `--server` flag.
+
+**Extracting fields with jq:**
+```bash
+# Provider summary: id, status, model
+loomctl provider list | jq '.[] | {id, status, model}'
+
+# Bead counts by status
+loomctl bead list | jq 'group_by(.status) | map({status: .[0].status, count: length})'
+
+# Working agents
+loomctl agent list | jq '[.[] | select(.status=="working")] | length'
+```
+
 ## Documentation
 
 Start with the **[System Manual](MANUAL.md)** for a complete overview.
@@ -390,20 +456,25 @@ curl 'http://localhost:8080/metrics'
 
 ### Monitoring & Debugging
 
+**System overview (one command):**
+```bash
+loomctl status | jq .
+```
+
 **Check agent status:**
 ```bash
-curl -s http://localhost:8080/api/v1/agents | jq '.[] | {name, status, provider_id, current_bead}'
+loomctl agent list | jq '.[] | {name, status, provider_id, current_bead}'
 ```
 
 **Check provider health:**
 ```bash
-curl -s http://localhost:8080/api/v1/providers | jq '.[] | {id, status, model}'
+loomctl provider list | jq '.[] | {id, status, model}'
 ```
 Provider status must be `"healthy"` (set by heartbeat workflow), not `"active"`.
 
-**Check dispatch status:**
+**Check bead status distribution:**
 ```bash
-curl -s http://localhost:8080/api/v1/dispatch/status | jq .
+loomctl status | jq '.beads.by_status'
 ```
 
 **Loop detection:** When Ralph detects a stuck agent loop (dispatch_count exceeds max_hops with no progress), it auto-blocks the bead and records:
@@ -523,16 +594,13 @@ git log --all --pretty=format:"%h %an <%ae> %s" | grep agent
 make start
 
 # Register a provider
-curl -X POST http://localhost:8080/api/v1/providers \
-  -H "Content-Type: application/json" \
-  -d '{"id":"provider","name":"Provider","type":"openai",
-       "endpoint":"http://llm:8000/v1","model":"model-name"}'
+loomctl provider register my-provider \
+  --name="Provider" --type=openai \
+  --endpoint="http://llm:8000/v1" \
+  --model="model-name"
 
 # Trigger workflow on a bead
-curl -X POST http://localhost:8080/api/v1/workflows/start \
-  -H "Content-Type: application/json" \
-  -d '{"bead_id":"bead-id","workflow_id":"wf-self-improvement",
-       "project_id":"loom-self"}'
+loomctl workflow start --bead=bead-id --workflow=wf-self-improvement --project=loom-self
 
 # Watch for autonomous commits
 watch -n 2 'git log --oneline -3'

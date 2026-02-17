@@ -1,23 +1,23 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
-const version = "1.0.0"
+const version = "2.0.0"
 
 var (
-	serverURL string
+	serverURL    string
 	outputFormat string
 )
 
@@ -26,19 +26,27 @@ func main() {
 		Use:   "loomctl",
 		Short: "Loom CLI - interact with your Loom server",
 		Long: `loomctl is a command-line interface for interacting with Loom servers.
-It provides intuitive commands for managing beads, workflows, agents, and projects.`,
+All output is structured JSON by default (pipe through jq for human-readable formatting).`,
 		Version: version,
 	}
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&serverURL, "server", "s", getDefaultServer(), "Loom server URL")
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "Output format: table, json, yaml")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "Output format: json, table")
 
 	// Add subcommands
 	rootCmd.AddCommand(newBeadCommand())
 	rootCmd.AddCommand(newWorkflowCommand())
 	rootCmd.AddCommand(newAgentCommand())
 	rootCmd.AddCommand(newProjectCommand())
+	rootCmd.AddCommand(newProviderCommand())
+	rootCmd.AddCommand(newLogCommand())
+	rootCmd.AddCommand(newStatusCommand())
+	rootCmd.AddCommand(newMetricsCommand())
+	rootCmd.AddCommand(newConversationCommand())
+	rootCmd.AddCommand(newAnalyticsCommand())
+	rootCmd.AddCommand(newConfigCommand())
+	rootCmd.AddCommand(newEventCommand())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -52,7 +60,8 @@ func getDefaultServer() string {
 	return "http://localhost:8080"
 }
 
-// HTTP client helper
+// --- HTTP client ---
+
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
@@ -61,38 +70,15 @@ type Client struct {
 func newClient() *Client {
 	return &Client{
 		BaseURL: serverURL,
-		HTTP: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		HTTP:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (c *Client) get(path string, params url.Values) ([]byte, error) {
+func (c *Client) do(method, path string, params url.Values, data interface{}) ([]byte, error) {
 	u := fmt.Sprintf("%s%s", c.BaseURL, path)
 	if params != nil {
 		u += "?" + params.Encode()
 	}
-
-	resp, err := c.HTTP.Get(u)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("server error (%d): %s", resp.StatusCode, string(body))
-	}
-
-	return body, nil
-}
-
-func (c *Client) post(path string, data interface{}) ([]byte, error) {
-	u := fmt.Sprintf("%s%s", c.BaseURL, path)
 
 	var body io.Reader
 	if data != nil {
@@ -103,11 +89,13 @@ func (c *Client) post(path string, data interface{}) ([]byte, error) {
 		body = strings.NewReader(string(jsonData))
 	}
 
-	req, err := http.NewRequest("POST", u, body)
+	req, err := http.NewRequest(method, u, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if data != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -127,20 +115,69 @@ func (c *Client) post(path string, data interface{}) ([]byte, error) {
 	return respBody, nil
 }
 
-// Bead commands
+func (c *Client) get(path string, params url.Values) ([]byte, error) {
+	return c.do("GET", path, params, nil)
+}
+
+func (c *Client) post(path string, data interface{}) ([]byte, error) {
+	return c.do("POST", path, nil, data)
+}
+
+func (c *Client) put(path string, data interface{}) ([]byte, error) {
+	return c.do("PUT", path, nil, data)
+}
+
+func (c *Client) delete(path string) ([]byte, error) {
+	return c.do("DELETE", path, nil, nil)
+}
+
+// streamSSE reads an SSE stream and prints each event's data field as JSON.
+func (c *Client) streamSSE(path string) error {
+	u := fmt.Sprintf("%s%s", c.BaseURL, path)
+	resp, err := c.HTTP.Get(u)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			fmt.Println(line[6:])
+		}
+	}
+	return scanner.Err()
+}
+
+// outputJSON prints raw JSON data. All commands use this as the primary output path.
+func outputJSON(data []byte) {
+	// Pretty-print the JSON
+	var v interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		// Not valid JSON, print raw
+		fmt.Println(string(data))
+		return
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.Encode(v)
+}
+
+// --- Bead commands ---
+
 func newBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bead",
-		Short: "Manage beads",
-		Long:  "Create, list, and manage beads (work items) in Loom",
+		Short: "Manage beads (work items)",
 	}
-
 	cmd.AddCommand(newBeadListCommand())
 	cmd.AddCommand(newBeadCreateCommand())
 	cmd.AddCommand(newBeadShowCommand())
 	cmd.AddCommand(newBeadClaimCommand())
 	cmd.AddCommand(newBeadPokeCommand())
-
+	cmd.AddCommand(newBeadUpdateCommand())
+	cmd.AddCommand(newBeadDeleteCommand())
 	return cmd
 }
 
@@ -151,15 +188,11 @@ func newBeadListCommand() *cobra.Command {
 		beadType   string
 		assignedTo string
 	)
-
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List beads",
-		Long:  "List beads with optional filters",
 		Example: `  loomctl bead list
-  loomctl bead list --project=loom-self
-  loomctl bead list --status=open
-  loomctl bead list --assigned-to=agent-123`,
+  loomctl bead list --status=open --project=loom-self`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			params := url.Values{}
@@ -175,50 +208,18 @@ func newBeadListCommand() *cobra.Command {
 			if assignedTo != "" {
 				params.Set("assigned_to", assignedTo)
 			}
-
 			data, err := client.get("/api/v1/beads", params)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var beads []map[string]interface{}
-			if err := json.Unmarshal(data, &beads); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			if len(beads) == 0 {
-				fmt.Println("No beads found")
-				return nil
-			}
-
-			// Table output
-			fmt.Printf("%-12s %-50s %-15s %-10s\n", "ID", "TITLE", "STATUS", "PRIORITY")
-			fmt.Println(strings.Repeat("-", 90))
-			for _, bead := range beads {
-				id := getString(bead, "id")
-				title := getString(bead, "title")
-				if len(title) > 47 {
-					title = title[:47] + "..."
-				}
-				status := getString(bead, "status")
-				priority := fmt.Sprintf("P%v", bead["priority"])
-				fmt.Printf("%-12s %-50s %-15s %-10s\n", id, title, status, priority)
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
 	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
-	cmd.Flags().StringVar(&status, "status", "", "Filter by status (open, in_progress, completed)")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status")
 	cmd.Flags().StringVar(&beadType, "type", "", "Filter by bead type")
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "Filter by assigned agent")
-
 	return cmd
 }
 
@@ -230,72 +231,44 @@ func newBeadCreateCommand() *cobra.Command {
 		projectID   string
 		beadType    string
 	)
-
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a new bead",
-		Long:  "Create a new bead (work item) in Loom",
-		Example: `  loomctl bead create --title="Fix bug" --project=loom-self
-  loomctl bead create --title="Add feature" --description="Detailed description" --priority=0 --project=loom-self`,
+		Use:     "create",
+		Short:   "Create a new bead",
+		Example: `  loomctl bead create --title="Fix bug" --project=loom-self`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if title == "" || projectID == "" {
-				return fmt.Errorf("--title and --project are required")
-			}
-
 			client := newClient()
-			data := map[string]interface{}{
+			body := map[string]interface{}{
 				"title":       title,
 				"description": description,
 				"priority":    priority,
 				"project_id":  projectID,
 			}
 			if beadType != "" {
-				data["type"] = beadType
+				body["type"] = beadType
 			}
-
-			respData, err := client.post("/api/v1/beads", data)
+			data, err := client.post("/api/v1/beads", body)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(respData))
-				return nil
-			}
-
-			var bead map[string]interface{}
-			if err := json.Unmarshal(respData, &bead); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			fmt.Printf("✅ Bead created successfully!\n")
-			fmt.Printf("ID: %s\n", getString(bead, "id"))
-			fmt.Printf("Title: %s\n", getString(bead, "title"))
-			fmt.Printf("Status: %s\n", getString(bead, "status"))
-			fmt.Printf("Priority: P%v\n", bead["priority"])
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
 	cmd.Flags().StringVarP(&title, "title", "t", "", "Bead title (required)")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "Bead description")
 	cmd.Flags().IntVar(&priority, "priority", 2, "Priority (0=highest, 4=lowest)")
 	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Project ID (required)")
 	cmd.Flags().StringVar(&beadType, "type", "task", "Bead type")
-
 	cmd.MarkFlagRequired("title")
 	cmd.MarkFlagRequired("project")
-
 	return cmd
 }
 
 func newBeadShowCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "show <bead-id>",
-		Short: "Show bead details",
-		Long:  "Display detailed information about a specific bead",
-		Args:  cobra.ExactArgs(1),
+	return &cobra.Command{
+		Use:     "show <bead-id>",
+		Short:   "Show bead details",
+		Args:    cobra.ExactArgs(1),
 		Example: `  loomctl bead show loom-001`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
@@ -303,220 +276,730 @@ func newBeadShowCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var bead map[string]interface{}
-			if err := json.Unmarshal(data, &bead); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			fmt.Printf("ID:          %s\n", getString(bead, "id"))
-			fmt.Printf("Title:       %s\n", getString(bead, "title"))
-			fmt.Printf("Type:        %s\n", getString(bead, "type"))
-			fmt.Printf("Status:      %s\n", getString(bead, "status"))
-			fmt.Printf("Priority:    P%v\n", bead["priority"])
-			fmt.Printf("Project:     %s\n", getString(bead, "project_id"))
-			fmt.Printf("Assigned To: %s\n", getString(bead, "assigned_to"))
-			fmt.Printf("Created:     %s\n", getString(bead, "created_at"))
-			fmt.Printf("\nDescription:\n%s\n", getString(bead, "description"))
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
 }
 
 func newBeadClaimCommand() *cobra.Command {
 	var agentID string
-
 	cmd := &cobra.Command{
 		Use:   "claim <bead-id>",
-		Short: "Claim a bead",
-		Long:  "Assign a bead to an agent",
+		Short: "Claim a bead for an agent",
 		Args:  cobra.ExactArgs(1),
-		Example: `  loomctl bead claim loom-001 --agent=agent-123`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if agentID == "" {
-				return fmt.Errorf("--agent is required")
-			}
-
 			client := newClient()
-			data := map[string]interface{}{
-				"agent_id": agentID,
-			}
-
-			respData, err := client.post(fmt.Sprintf("/api/v1/beads/%s/claim", args[0]), data)
+			data, err := client.post(fmt.Sprintf("/api/v1/beads/%s/claim", args[0]), map[string]interface{}{"agent_id": agentID})
 			if err != nil {
 				return err
 			}
-
-			fmt.Printf("✅ Bead %s claimed by agent %s\n", args[0], agentID)
-
-			if outputFormat == "json" {
-				fmt.Println(string(respData))
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
 	cmd.Flags().StringVarP(&agentID, "agent", "a", "", "Agent ID (required)")
 	cmd.MarkFlagRequired("agent")
-
 	return cmd
 }
 
 func newBeadPokeCommand() *cobra.Command {
 	var reason string
-
 	cmd := &cobra.Command{
-		Use:   "poke <bead-id>",
-		Short: "Poke a stuck bead back into action",
-		Long:  "Reset a bead to open status and flag it for redispatch, causing the dispatcher to pick it up on the next cycle",
-		Args:  cobra.ExactArgs(1),
-		Example: `  loomctl bead poke loom-001
-  loomctl bead poke loom-001 --reason="autonomy fixes deployed, retrying"`,
+		Use:     "poke <bead-id>",
+		Short:   "Redispatch a stuck bead",
+		Args:    cobra.ExactArgs(1),
+		Example: `  loomctl bead poke loom-001 --reason="fixes deployed"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-
-			data := map[string]interface{}{}
+			body := map[string]interface{}{}
 			if reason != "" {
-				data["reason"] = reason
+				body["reason"] = reason
 			}
-
-			respData, err := client.post(fmt.Sprintf("/api/v1/beads/%s/redispatch", args[0]), data)
+			data, err := client.post(fmt.Sprintf("/api/v1/beads/%s/redispatch", args[0]), body)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(respData))
-				return nil
-			}
-
-			var bead map[string]interface{}
-			if err := json.Unmarshal(respData, &bead); err != nil {
-				fmt.Printf("Poked bead %s\n", args[0])
-				return nil
-			}
-
-			fmt.Printf("Poked bead %s -> status: %s\n", args[0], getString(bead, "status"))
-			if reason != "" {
-				fmt.Printf("Reason: %s\n", reason)
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&reason, "reason", "r", "", "Reason for poking the bead")
-
+	cmd.Flags().StringVarP(&reason, "reason", "r", "", "Reason for redispatch")
 	return cmd
 }
 
-// Workflow commands
+func newBeadUpdateCommand() *cobra.Command {
+	var (
+		status   string
+		priority int
+		title    string
+	)
+	cmd := &cobra.Command{
+		Use:   "update <bead-id>",
+		Short: "Update bead fields",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			body := map[string]interface{}{}
+			if cmd.Flags().Changed("status") {
+				body["status"] = status
+			}
+			if cmd.Flags().Changed("priority") {
+				body["priority"] = priority
+			}
+			if cmd.Flags().Changed("title") {
+				body["title"] = title
+			}
+			data, err := client.put(fmt.Sprintf("/api/v1/beads/%s", args[0]), body)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&status, "status", "", "New status")
+	cmd.Flags().IntVar(&priority, "priority", 0, "New priority")
+	cmd.Flags().StringVar(&title, "title", "", "New title")
+	return cmd
+}
+
+func newBeadDeleteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <bead-id>",
+		Short: "Delete a bead",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.delete(fmt.Sprintf("/api/v1/beads/%s", args[0]))
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Provider commands ---
+
+func newProviderCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "provider",
+		Short: "Manage LLM providers",
+	}
+	cmd.AddCommand(newProviderListCommand())
+	cmd.AddCommand(newProviderShowCommand())
+	cmd.AddCommand(newProviderRegisterCommand())
+	cmd.AddCommand(newProviderDeleteCommand())
+	return cmd
+}
+
+func newProviderListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List all registered providers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/providers", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newProviderShowCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show <provider-id>",
+		Short: "Show provider details",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get(fmt.Sprintf("/api/v1/providers/%s", args[0]), nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newProviderRegisterCommand() *cobra.Command {
+	var (
+		name     string
+		pType    string
+		endpoint string
+		model    string
+		apiKey   string
+	)
+	cmd := &cobra.Command{
+		Use:   "register <provider-id>",
+		Short: "Register or update a provider",
+		Args:  cobra.ExactArgs(1),
+		Example: `  loomctl provider register sparky-local \
+    --name="Sparky Local" --type=openai \
+    --endpoint="http://sparky.local:8000/v1" \
+    --model="Qwen/Qwen2.5-Coder-32B-Instruct"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			body := map[string]interface{}{
+				"name":     name,
+				"type":     pType,
+				"endpoint": endpoint,
+				"model":    model,
+			}
+			if apiKey != "" {
+				body["api_key"] = apiKey
+			}
+			data, err := client.put(fmt.Sprintf("/api/v1/providers/%s", args[0]), body)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "Provider display name (required)")
+	cmd.Flags().StringVar(&pType, "type", "openai", "Provider type (openai, anthropic, local)")
+	cmd.Flags().StringVar(&endpoint, "endpoint", "", "API endpoint URL (required)")
+	cmd.Flags().StringVar(&model, "model", "", "Model ID (required)")
+	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key (optional)")
+	cmd.MarkFlagRequired("name")
+	cmd.MarkFlagRequired("endpoint")
+	cmd.MarkFlagRequired("model")
+	return cmd
+}
+
+func newProviderDeleteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <provider-id>",
+		Short: "Delete a provider",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.delete(fmt.Sprintf("/api/v1/providers/%s", args[0]))
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Log commands ---
+
+func newLogCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "log",
+		Short: "View and stream logs",
+	}
+	cmd.AddCommand(newLogRecentCommand())
+	cmd.AddCommand(newLogStreamCommand())
+	cmd.AddCommand(newLogExportCommand())
+	return cmd
+}
+
+func newLogRecentCommand() *cobra.Command {
+	var limit int
+	cmd := &cobra.Command{
+		Use:     "recent",
+		Short:   "Show recent log entries",
+		Example: `  loomctl log recent --limit=50`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			params := url.Values{}
+			if limit > 0 {
+				params.Set("limit", fmt.Sprintf("%d", limit))
+			}
+			data, err := client.get("/api/v1/logs/recent", params)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Number of log entries")
+	return cmd
+}
+
+func newLogStreamCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stream",
+		Short: "Stream live logs (SSE)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			return client.streamSSE("/api/v1/logs/stream")
+		},
+	}
+}
+
+func newLogExportCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "export",
+		Short: "Export all logs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/logs/export", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Status command ---
+
+func newStatusCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show system status overview",
+		Long:  "Aggregates health, providers, agents, and bead counts into one JSON object",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			result := map[string]interface{}{}
+
+			// Health
+			if data, err := client.get("/api/v1/health", nil); err == nil {
+				var v interface{}
+				if json.Unmarshal(data, &v) == nil {
+					result["health"] = v
+				}
+			}
+
+			// Providers
+			if data, err := client.get("/api/v1/providers", nil); err == nil {
+				var providers []interface{}
+				if json.Unmarshal(data, &providers) == nil {
+					healthy, failed, total := 0, 0, len(providers)
+					for _, p := range providers {
+						pm, _ := p.(map[string]interface{})
+						if pm["status"] == "healthy" {
+							healthy++
+						} else if pm["status"] == "failed" {
+							failed++
+						}
+					}
+					result["providers"] = map[string]interface{}{
+						"total":   total,
+						"healthy": healthy,
+						"failed":  failed,
+						"list":    providers,
+					}
+				}
+			}
+
+			// Agents
+			if data, err := client.get("/api/v1/agents", nil); err == nil {
+				var agents []interface{}
+				if json.Unmarshal(data, &agents) == nil {
+					working, idle := 0, 0
+					for _, a := range agents {
+						am, _ := a.(map[string]interface{})
+						if am["status"] == "working" {
+							working++
+						} else if am["status"] == "idle" {
+							idle++
+						}
+					}
+					result["agents"] = map[string]interface{}{
+						"total":   len(agents),
+						"working": working,
+						"idle":    idle,
+					}
+				}
+			}
+
+			// Beads
+			if data, err := client.get("/api/v1/beads", nil); err == nil {
+				var beads []interface{}
+				if json.Unmarshal(data, &beads) == nil {
+					counts := map[string]int{}
+					for _, b := range beads {
+						bm, _ := b.(map[string]interface{})
+						s, _ := bm["status"].(string)
+						counts[s]++
+					}
+					result["beads"] = map[string]interface{}{
+						"total":    len(beads),
+						"by_status": counts,
+					}
+				}
+			}
+
+			out, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(out))
+			return nil
+		},
+	}
+	return cmd
+}
+
+// --- Metrics / Observability commands ---
+
+func newMetricsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "metrics",
+		Short: "Retrieve observability metrics",
+	}
+	cmd.AddCommand(newMetricsPrometheusCommand())
+	cmd.AddCommand(newMetricsCacheCommand())
+	cmd.AddCommand(newMetricsPatternsCommand())
+	cmd.AddCommand(newMetricsEventsStatsCommand())
+	return cmd
+}
+
+func newMetricsPrometheusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "prometheus",
+		Short: "Fetch raw Prometheus metrics from the /metrics endpoint",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/metrics", nil)
+			if err != nil {
+				return err
+			}
+			// Prometheus metrics are text, wrap in JSON
+			out, _ := json.MarshalIndent(map[string]interface{}{
+				"format": "prometheus",
+				"raw":    string(data),
+			}, "", "  ")
+			fmt.Println(string(out))
+			return nil
+		},
+	}
+}
+
+func newMetricsCacheCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "cache",
+		Short: "Show cache statistics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/cache/stats", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newMetricsPatternsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "patterns",
+		Short: "Show pattern analysis results",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/patterns/analysis", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newMetricsEventsStatsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "events",
+		Short: "Show event statistics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/events/stats", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Conversation commands ---
+
+func newConversationCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "conversation",
+		Aliases: []string{"conv"},
+		Short:   "View agent conversations",
+	}
+	cmd.AddCommand(newConversationListCommand())
+	cmd.AddCommand(newConversationShowCommand())
+	return cmd
+}
+
+func newConversationListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List conversation sessions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/conversations", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newConversationShowCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show <session-id>",
+		Short: "Show conversation messages",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get(fmt.Sprintf("/api/v1/conversations/%s", args[0]), nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Analytics commands ---
+
+func newAnalyticsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "analytics",
+		Short: "View analytics and cost data",
+	}
+	cmd.AddCommand(newAnalyticsStatsCommand())
+	cmd.AddCommand(newAnalyticsCostsCommand())
+	cmd.AddCommand(newAnalyticsLogsCommand())
+	cmd.AddCommand(newAnalyticsExportCommand())
+	return cmd
+}
+
+func newAnalyticsStatsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stats",
+		Short: "Show analytics statistics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/analytics/stats", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newAnalyticsCostsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "costs",
+		Short: "Show cost breakdown by provider",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/analytics/costs", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newAnalyticsLogsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logs",
+		Short: "Show analytics log entries",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/analytics/logs", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newAnalyticsExportCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "export",
+		Short: "Export analytics data",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/analytics/export", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Config commands ---
+
+func newConfigCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "View and manage server configuration",
+	}
+	cmd.AddCommand(newConfigShowCommand())
+	cmd.AddCommand(newConfigExportCommand())
+	return cmd
+}
+
+func newConfigShowCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show",
+		Short: "Show current server configuration",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/config", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newConfigExportCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "export",
+		Short: "Export configuration as YAML",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/config/export.yaml", nil)
+			if err != nil {
+				return err
+			}
+			// YAML content, wrap in JSON
+			out, _ := json.MarshalIndent(map[string]interface{}{
+				"format":  "yaml",
+				"content": string(data),
+			}, "", "  ")
+			fmt.Println(string(out))
+			return nil
+		},
+	}
+}
+
+// --- Event commands ---
+
+func newEventCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "event",
+		Short: "View events and activity feed",
+	}
+	cmd.AddCommand(newEventListCommand())
+	cmd.AddCommand(newEventStreamCommand())
+	cmd.AddCommand(newEventActivityCommand())
+	return cmd
+}
+
+func newEventListCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List recent events",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/events", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newEventStreamCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stream",
+		Short: "Stream events in real-time (SSE)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			return client.streamSSE("/api/v1/events/stream")
+		},
+	}
+}
+
+func newEventActivityCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "activity",
+		Short: "Show activity feed",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/activity-feed", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Workflow commands ---
+
 func newWorkflowCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Manage workflows",
-		Long:  "List and start workflows in Loom",
 	}
-
 	cmd.AddCommand(newWorkflowListCommand())
 	cmd.AddCommand(newWorkflowShowCommand())
 	cmd.AddCommand(newWorkflowStartCommand())
-
+	cmd.AddCommand(newWorkflowExecutionsCommand())
+	cmd.AddCommand(newWorkflowAnalyticsCommand())
 	return cmd
 }
 
 func newWorkflowListCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "list",
 		Short: "List workflows",
-		Long:  "List all available workflows",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			data, err := client.get("/api/v1/workflows", nil)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var response map[string]interface{}
-			if err := json.Unmarshal(data, &response); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			workflows, ok := response["workflows"].([]interface{})
-			if !ok || len(workflows) == 0 {
-				fmt.Println("No workflows found")
-				return nil
-			}
-
-			// Table output
-			fmt.Printf("%-20s %-50s %-15s\n", "ID", "NAME", "TYPE")
-			fmt.Println(strings.Repeat("-", 90))
-			for _, wf := range workflows {
-				workflow := wf.(map[string]interface{})
-				id := getString(workflow, "id")
-				name := getString(workflow, "name")
-				if len(name) > 47 {
-					name = name[:47] + "..."
-				}
-				wfType := getString(workflow, "workflow_type")
-				fmt.Printf("%-20s %-50s %-15s\n", id, name, wfType)
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
 }
 
 func newWorkflowShowCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "show <workflow-id>",
+	return &cobra.Command{
+		Use:  "show <workflow-id>",
 		Short: "Show workflow details",
-		Long:  "Display detailed information about a specific workflow",
-		Args:  cobra.ExactArgs(1),
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			data, err := client.get(fmt.Sprintf("/api/v1/workflows/%s", args[0]), nil)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var workflow map[string]interface{}
-			if err := json.Unmarshal(data, &workflow); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			fmt.Printf("ID:          %s\n", getString(workflow, "id"))
-			fmt.Printf("Name:        %s\n", getString(workflow, "name"))
-			fmt.Printf("Type:        %s\n", getString(workflow, "workflow_type"))
-			fmt.Printf("Default:     %v\n", workflow["is_default"])
-			fmt.Printf("Description: %s\n", getString(workflow, "description"))
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
 }
 
 func newWorkflowStartCommand() *cobra.Command {
@@ -525,116 +1008,97 @@ func newWorkflowStartCommand() *cobra.Command {
 		beadID     string
 		projectID  string
 	)
-
 	cmd := &cobra.Command{
-		Use:   "start",
-		Short: "Start a workflow",
-		Long:  "Start a workflow execution for a bead",
+		Use:     "start",
+		Short:   "Start a workflow execution",
 		Example: `  loomctl workflow start --workflow=wf-ui-default --bead=loom-001 --project=loom-self`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if workflowID == "" || beadID == "" || projectID == "" {
-				return fmt.Errorf("--workflow, --bead, and --project are required")
-			}
-
 			client := newClient()
-			data := map[string]interface{}{
+			data, err := client.post("/api/v1/workflows/start", map[string]interface{}{
 				"workflow_id": workflowID,
 				"bead_id":     beadID,
 				"project_id":  projectID,
-			}
-
-			respData, err := client.post("/api/v1/workflows/start", data)
+			})
 			if err != nil {
 				return err
 			}
-
-			fmt.Printf("✅ Workflow started successfully!\n")
-
-			if outputFormat == "json" {
-				fmt.Println(string(respData))
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
 	cmd.Flags().StringVarP(&workflowID, "workflow", "w", "", "Workflow ID (required)")
 	cmd.Flags().StringVarP(&beadID, "bead", "b", "", "Bead ID (required)")
 	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Project ID (required)")
-
 	cmd.MarkFlagRequired("workflow")
 	cmd.MarkFlagRequired("bead")
 	cmd.MarkFlagRequired("project")
-
 	return cmd
 }
 
-// Agent commands
+func newWorkflowExecutionsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "executions",
+		Short: "List workflow executions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/workflows/executions", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+func newWorkflowAnalyticsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "analytics",
+		Short: "Show workflow analytics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client := newClient()
+			data, err := client.get("/api/v1/workflows/analytics", nil)
+			if err != nil {
+				return err
+			}
+			outputJSON(data)
+			return nil
+		},
+	}
+}
+
+// --- Agent commands ---
+
 func newAgentCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent",
 		Short: "Manage agents",
-		Long:  "List and view agents in Loom",
 	}
-
 	cmd.AddCommand(newAgentListCommand())
 	cmd.AddCommand(newAgentShowCommand())
-
 	return cmd
 }
 
 func newAgentListCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "list",
 		Short: "List agents",
-		Long:  "List all available agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			data, err := client.get("/api/v1/agents", nil)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var agents []map[string]interface{}
-			if err := json.Unmarshal(data, &agents); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			if len(agents) == 0 {
-				fmt.Println("No agents found")
-				return nil
-			}
-
-			// Table output
-			fmt.Printf("%-50s %-30s %-10s\n", "ID", "NAME", "STATUS")
-			fmt.Println(strings.Repeat("-", 95))
-			for _, agent := range agents {
-				id := getString(agent, "id")
-				name := getString(agent, "name")
-				status := getString(agent, "status")
-				if status == "" {
-					status = "unknown"
-				}
-				fmt.Printf("%-50s %-30s %-10s\n", id, name, status)
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
 }
 
 func newAgentShowCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "show <agent-id>",
 		Short: "Show agent details",
-		Long:  "Display detailed information about a specific agent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
@@ -642,96 +1106,44 @@ func newAgentShowCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var agent map[string]interface{}
-			if err := json.Unmarshal(data, &agent); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			fmt.Printf("ID:       %s\n", getString(agent, "id"))
-			fmt.Printf("Name:     %s\n", getString(agent, "name"))
-			fmt.Printf("Role:     %s\n", getString(agent, "role"))
-			fmt.Printf("Persona:  %s\n", getString(agent, "persona_name"))
-			fmt.Printf("Status:   %s\n", getString(agent, "status"))
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
 }
 
-// Project commands
+// --- Project commands ---
+
 func newProjectCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "project",
 		Short: "Manage projects",
-		Long:  "List and view projects in Loom",
 	}
-
 	cmd.AddCommand(newProjectListCommand())
 	cmd.AddCommand(newProjectShowCommand())
-
 	return cmd
 }
 
 func newProjectListCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "list",
 		Short: "List projects",
-		Long:  "List all projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			data, err := client.get("/api/v1/projects", nil)
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var projects []map[string]interface{}
-			if err := json.Unmarshal(data, &projects); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			if len(projects) == 0 {
-				fmt.Println("No projects found")
-				return nil
-			}
-
-			// Table output
-			fmt.Printf("%-20s %-40s %-10s\n", "ID", "NAME", "STATUS")
-			fmt.Println(strings.Repeat("-", 75))
-			for _, project := range projects {
-				id := getString(project, "id")
-				name := getString(project, "name")
-				if len(name) > 37 {
-					name = name[:37] + "..."
-				}
-				status := getString(project, "status")
-				fmt.Printf("%-20s %-40s %-10s\n", id, name, status)
-			}
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
 }
 
 func newProjectShowCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "show <project-id>",
 		Short: "Show project details",
-		Long:  "Display detailed information about a specific project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
@@ -739,53 +1151,8 @@ func newProjectShowCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if outputFormat == "json" {
-				fmt.Println(string(data))
-				return nil
-			}
-
-			var project map[string]interface{}
-			if err := json.Unmarshal(data, &project); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
-			fmt.Printf("ID:         %s\n", getString(project, "id"))
-			fmt.Printf("Name:       %s\n", getString(project, "name"))
-			fmt.Printf("Status:     %s\n", getString(project, "status"))
-			fmt.Printf("Repository: %s\n", getString(project, "git_repo"))
-			fmt.Printf("Branch:     %s\n", getString(project, "branch"))
-			fmt.Printf("Work Dir:   %s\n", getString(project, "work_dir"))
-
+			outputJSON(data)
 			return nil
 		},
 	}
-
-	return cmd
-}
-
-// Helper functions
-func getString(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-func getInt(m map[string]interface{}, key string) int {
-	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case int:
-			return val
-		case float64:
-			return int(val)
-		case string:
-			if i, err := strconv.Atoi(val); err == nil {
-				return i
-			}
-		}
-	}
-	return 0
 }
