@@ -111,6 +111,35 @@ services:
       timeout: 5s
       retries: 5
 
+  # PgBouncer connection pooler for loom-postgresql
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: pgbouncer
+    restart: unless-stopped
+    depends_on:
+      loom-postgresql:
+        condition: service_healthy
+    environment:
+      - DB_USER=loom
+      - DB_PASSWORD=loom
+      - DB_HOST=loom-postgresql
+      - DB_PORT=5432
+      - DB_NAME=loom
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=100
+      - DEFAULT_POOL_SIZE=20
+      - SERVER_RESET_QUERY=DISCARD ALL
+      - IGNORE_STARTUP_PARAMETERS=extra_float_digits
+    ports:
+      - "5433:5432"  # Expose on 5433 to avoid conflict with loom-postgresql:5432
+    networks:
+      - loom-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U loom"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   loom:
     build:
       context: .
@@ -125,7 +154,7 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
-      loom-postgresql:
+      pgbouncer:
         condition: service_healthy
     ports:
       - "8080:8081"
@@ -141,7 +170,7 @@ services:
       - CONFIG_PATH=/app/config.yaml
       - DOLT_PORT=3307
       - DB_TYPE=postgres
-      - POSTGRES_HOST=loom-postgresql
+      - POSTGRES_HOST=pgbouncer
       - POSTGRES_PORT=5432
       - POSTGRES_USER=loom
       - POSTGRES_PASSWORD=loom
