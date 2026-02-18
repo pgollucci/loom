@@ -110,6 +110,20 @@ cd /app
 LOOM_PID=$!
 echo "[entrypoint] Loom started (PID $LOOM_PID)"
 
+# Run bootstrap.local if it exists (provider registration)
+if [ -f /app/bootstrap.local ]; then
+    echo "[entrypoint] Running bootstrap.local to register providers..."
+    # Wait for API to be ready
+    for i in $(seq 1 30); do
+        if curl -s http://localhost:8081/api/v1/providers >/dev/null 2>&1; then
+            echo "[entrypoint] API ready, executing bootstrap.local"
+            /bin/sh /app/bootstrap.local
+            break
+        fi
+        sleep 1
+    done
+fi
+
 # Wait for loom to exit; if it dies, we exit too
 wait "$LOOM_PID"
 LOOM_EXIT=$?

@@ -82,6 +82,10 @@ COPY --from=builder /build/web/static /app/web/static
 
 # Copy scripts (entrypoint + beads schema SQL)
 COPY --from=builder /build/scripts /app/scripts
+
+# Copy bootstrap.local if it exists (provider registration)
+# This file is gitignored - use wildcard to make it optional
+COPY --from=builder /build/bootstrap.local* /app/
 RUN chmod +x /app/scripts/entrypoint.sh
 
 # Create SSH directory for mounted keys and set permissions
