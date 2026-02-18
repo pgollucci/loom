@@ -101,12 +101,15 @@ func main() {
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	log.Printf("[DEBUG] About to call arb.Initialize()")
 	if err := arb.Initialize(runCtx); err != nil {
 		log.Fatalf("failed to initialize loom: %v", err)
 	}
+	log.Printf("[DEBUG] arb.Initialize() completed successfully")
 	os.WriteFile("/tmp/initialize-completed.txt", []byte("INITIALIZE COMPLETED\n"), 0644)
 
 	// Initialize hot-reload for development
+	log.Printf("[DEBUG] Initializing hot-reload...")
 	var hrManager *hotreload.Manager
 	if cfg.HotReload.Enabled {
 		hrManager, err = hotreload.NewManager(
@@ -120,8 +123,10 @@ func main() {
 			defer hrManager.Close()
 		}
 	}
+	log.Printf("[DEBUG] Hot-reload complete, starting maintenance loop...")
 
 	go arb.StartMaintenanceLoop(runCtx)
+	log.Printf("[DEBUG] Maintenance loop started")
 
 	// Ralph dispatch loop: drain all dispatchable work every 10 seconds.
 	os.WriteFile("/tmp/dispatch-starting.txt", []byte("DISPATCH LOOP STARTING\n"), 0644)
@@ -130,10 +135,14 @@ func main() {
 	os.WriteFile("/tmp/dispatch-started.txt", []byte("DISPATCH LOOP STARTED\n"), 0644)
 
 	// Initialize auth manager (JWT + API key support)
+	log.Printf("[DEBUG] Initializing auth manager...")
 	authManager := auth.NewManager(cfg.Security.JWTSecret)
 
+	log.Printf("[DEBUG] Creating API server...")
 	apiServer := api.NewServer(arb, km, authManager, cfg)
+	log.Printf("[DEBUG] Setting up routes...")
 	handler := apiServer.SetupRoutes()
+	log.Printf("[DEBUG] Routes configured")
 
 	// Add hot-reload WebSocket endpoint if enabled
 	if hrManager != nil && hrManager.IsEnabled() {
@@ -164,9 +173,12 @@ func main() {
 		}
 	}()
 
+	log.Printf("[DEBUG] HTTP server goroutine launched, waiting for signals...")
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	log.Printf("[DEBUG] Signal handlers registered, blocking on signal channel...")
 	<-sigCh
+	log.Printf("[DEBUG] Received shutdown signal")
 	cancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

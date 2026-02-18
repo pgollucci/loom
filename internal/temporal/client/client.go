@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/grpc"
 
 	"github.com/jordanhubbard/loom/pkg/config"
 )
@@ -18,32 +20,57 @@ type Client struct {
 	namespace string
 }
 
-// New creates a new Temporal client instance
+// New creates a new Temporal client instance with retry logic
 func New(cfg *config.TemporalConfig) (*Client, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("temporal config cannot be nil")
 	}
 
-	// Create Temporal client options
-	clientOptions := client.Options{
-		HostPort:  cfg.Host,
-		Namespace: cfg.Namespace,
-		Logger:    &temporalLogger{},
+	// Retry connection with exponential backoff
+	maxRetries := 5
+	baseDelay := 2 * time.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := baseDelay * time.Duration(1<<uint(attempt-1)) // Exponential backoff: 2s, 4s, 8s, 16s
+			log.Printf("Retrying Temporal connection in %v (attempt %d/%d)...", delay, attempt+1, maxRetries)
+			time.Sleep(delay)
+		}
+
+		// Create context with timeout for this attempt
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+
+		// Create Temporal client options
+		clientOptions := client.Options{
+			HostPort:  cfg.Host,
+			Namespace: cfg.Namespace,
+			Logger:    &temporalLogger{},
+			ConnectionOptions: client.ConnectionOptions{
+				TLS: nil,
+				DialOptions: []grpc.DialOption{
+					grpc.WithBlock(),
+					grpc.FailOnNonTempDialError(false),
+				},
+			},
+		}
+
+		// Attempt connection
+		c, err := client.DialContext(ctx, clientOptions)
+		cancel()
+
+		if err == nil {
+			log.Printf("Connected to Temporal server at %s (namespace: %s)", cfg.Host, cfg.Namespace)
+			return &Client{
+				temporal:  c,
+				config:    cfg,
+				namespace: cfg.Namespace,
+			}, nil
+		}
+
+		log.Printf("Temporal connection attempt %d failed: %v", attempt+1, err)
 	}
 
-	// Connect to Temporal server
-	c, err := client.Dial(clientOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporal client: %w", err)
-	}
-
-	log.Printf("Connected to Temporal server at %s (namespace: %s)", cfg.Host, cfg.Namespace)
-
-	return &Client{
-		temporal:  c,
-		config:    cfg,
-		namespace: cfg.Namespace,
-	}, nil
+	return nil, fmt.Errorf("failed to create temporal client after %d retries", maxRetries)
 }
 
 // Close closes the Temporal client connection
