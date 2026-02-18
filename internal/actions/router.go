@@ -39,6 +39,10 @@ type BuildRunner interface {
 	Run(ctx context.Context, projectPath, buildTarget, buildCommand, framework string, timeoutSeconds int) (map[string]interface{}, error)
 }
 
+type ProjectGetter interface {
+	GetProject(projectID string) (*models.Project, error)
+}
+
 type FileManager interface {
 	ReadFile(ctx context.Context, projectID, path string) (*files.FileResult, error)
 	WriteFile(ctx context.Context, projectID, path, content string) (*files.WriteResult, error)
@@ -122,9 +126,24 @@ type Router struct {
 	LSP        LSPOperator
 	MessageBus MessageSender
 	BeadReader BeadReader
+	Projects   ProjectGetter
 	BeadType   string
 	BeadTags   []string
 	DefaultP0  bool
+}
+
+// getProjectWorkDir returns the working directory for a project
+func (r *Router) getProjectWorkDir(projectID string) string {
+	if r.Projects == nil || projectID == "" {
+		return "" // Let executor use its default
+	}
+
+	project, err := r.Projects.GetProject(projectID)
+	if err != nil || project == nil {
+		return ""
+	}
+
+	return project.WorkDir
 }
 
 func (r *Router) Execute(ctx context.Context, env *ActionEnvelope, actx ActionContext) ([]Result, error) {
@@ -568,12 +587,17 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		if r.Commands == nil {
 			return r.createBeadFromAction("Run command", action.Command, actx)
 		}
+		// Use action's WorkingDir if specified, otherwise use project's work_dir
+		workDir := action.WorkingDir
+		if workDir == "" {
+			workDir = r.getProjectWorkDir(actx.ProjectID)
+		}
 		req := executor.ExecuteCommandRequest{
 			AgentID:    actx.AgentID,
 			BeadID:     actx.BeadID,
 			ProjectID:  actx.ProjectID,
 			Command:    action.Command,
-			WorkingDir: action.WorkingDir,
+			WorkingDir: workDir,
 			Context: map[string]interface{}{
 				"action_type": action.Type,
 				"reason":      action.Reason,
@@ -1055,10 +1079,11 @@ func (r *Router) handleFetchPR(ctx context.Context, action Action, actx ActionCo
 
 	// Execute command
 	cmdResult, err := r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
-		AgentID:   actx.AgentID,
-		BeadID:    actx.BeadID,
-		ProjectID: actx.ProjectID,
-		Command:   cmd,
+		AgentID:    actx.AgentID,
+		BeadID:     actx.BeadID,
+		ProjectID:  actx.ProjectID,
+		Command:    cmd,
+		WorkingDir: r.getProjectWorkDir(actx.ProjectID),
 	})
 	if err != nil || !cmdResult.Success {
 		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to fetch PR: %v", err)}
@@ -1074,10 +1099,11 @@ func (r *Router) handleFetchPR(ctx context.Context, action Action, actx ActionCo
 	if action.IncludeDiff {
 		diffCmd := fmt.Sprintf("gh pr diff %d", action.PRNumber)
 		diffResult, err := r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
-			AgentID:   actx.AgentID,
-			BeadID:    actx.BeadID,
-			ProjectID: actx.ProjectID,
-			Command:   diffCmd,
+			AgentID:    actx.AgentID,
+			BeadID:     actx.BeadID,
+			ProjectID:  actx.ProjectID,
+			Command:    diffCmd,
+			WorkingDir: r.getProjectWorkDir(actx.ProjectID),
 		})
 		if err == nil && diffResult.Success {
 			prData["diff"] = diffResult.Stdout
@@ -1173,10 +1199,11 @@ func (r *Router) handleAddPRComment(ctx context.Context, action Action, actx Act
 	}
 
 	cmdResult, err := r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
-		AgentID:   actx.AgentID,
-		BeadID:    actx.BeadID,
-		ProjectID: actx.ProjectID,
-		Command:   cmd,
+		AgentID:    actx.AgentID,
+		BeadID:     actx.BeadID,
+		ProjectID:  actx.ProjectID,
+		Command:    cmd,
+		WorkingDir: r.getProjectWorkDir(actx.ProjectID),
 	})
 	if err != nil || !cmdResult.Success {
 		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to add comment: %v", err)}
@@ -1225,10 +1252,11 @@ func (r *Router) handleSubmitReview(ctx context.Context, action Action, actx Act
 	cmd := fmt.Sprintf("gh pr review %d %s --body %q", action.PRNumber, eventFlag, action.CommentBody)
 
 	cmdResult, err := r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
-		AgentID:   actx.AgentID,
-		BeadID:    actx.BeadID,
-		ProjectID: actx.ProjectID,
-		Command:   cmd,
+		AgentID:    actx.AgentID,
+		BeadID:     actx.BeadID,
+		ProjectID:  actx.ProjectID,
+		Command:    cmd,
+		WorkingDir: r.getProjectWorkDir(actx.ProjectID),
 	})
 	if err != nil || !cmdResult.Success {
 		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to submit review: %v", err)}
@@ -1261,10 +1289,11 @@ func (r *Router) handleRequestReview(ctx context.Context, action Action, actx Ac
 	cmd := fmt.Sprintf("gh pr edit %d --add-reviewer %s", action.PRNumber, action.Reviewer)
 
 	cmdResult, err := r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
-		AgentID:   actx.AgentID,
-		BeadID:    actx.BeadID,
-		ProjectID: actx.ProjectID,
-		Command:   cmd,
+		AgentID:    actx.AgentID,
+		BeadID:     actx.BeadID,
+		ProjectID:  actx.ProjectID,
+		Command:    cmd,
+		WorkingDir: r.getProjectWorkDir(actx.ProjectID),
 	})
 	if err != nil || !cmdResult.Success {
 		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to request review: %v", err)}

@@ -330,6 +330,7 @@ func New(cfg *config.Config) (*Loom, error) {
 		Git:        actions.NewProjectGitRouter(gitopsMgr),
 		Logger:     arb,
 		Workflow:   arb,
+		Projects:   arb,
 		BeadType:   "task",
 		BeadReader: arb,
 		DefaultP0:  true,
@@ -1186,6 +1187,11 @@ func (a *Loom) GetDispatcher() *dispatch.Dispatcher {
 // GetProjectManager returns the project manager
 func (a *Loom) GetProjectManager() *project.Manager {
 	return a.projectManager
+}
+
+// GetProject returns a project by ID
+func (a *Loom) GetProject(projectID string) (*models.Project, error) {
+	return a.projectManager.GetProject(projectID)
 }
 
 // GetPersonaManager returns the persona manager
