@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jordanhubbard/loom/internal/messagebus"
 	"github.com/jordanhubbard/loom/pkg/messages"
 )
