@@ -10,6 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jordanhubbard/loom/internal/messagebus"
+	"github.com/jordanhubbard/loom/pkg/messages"
 )
 
 // Config holds the configuration for a project agent
@@ -18,6 +22,7 @@ type Config struct {
 	ControlPlaneURL   string
 	WorkDir           string
 	HeartbeatInterval time.Duration
+	NatsURL           string // NATS server URL (optional, for NATS-based communication)
 }
 
 // Agent is a lightweight agent that runs inside a project container
@@ -26,6 +31,7 @@ type Agent struct {
 	httpClient   *http.Client
 	currentTask  *TaskExecution
 	taskResultCh chan *TaskResult
+	messageBus   *messagebus.NatsMessageBus // NATS client for async communication
 }
 
 // TaskRequest represents a task sent from the control plane
@@ -74,20 +80,47 @@ func New(config Config) (*Agent, error) {
 		config.HeartbeatInterval = 30 * time.Second
 	}
 
-	return &Agent{
+	agent := &Agent{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
 		taskResultCh: make(chan *TaskResult, 10),
-	}, nil
+	}
+
+	// Initialize NATS if URL is provided
+	if config.NatsURL != "" {
+		mb, err := messagebus.NewNatsMessageBus(messagebus.Config{
+			URL:        config.NatsURL,
+			StreamName: "LOOM",
+			Timeout:    10 * time.Second,
+		})
+		if err != nil {
+			log.Printf("Warning: Failed to connect to NATS at %s: %v", config.NatsURL, err)
+			log.Printf("Agent will use HTTP-only communication")
+		} else {
+			agent.messageBus = mb
+			log.Printf("Connected to NATS message bus at %s", config.NatsURL)
+		}
+	}
+
+	return agent, nil
 }
 
-// Start begins the agent's background tasks (heartbeat, result reporter)
+// Start begins the agent's background tasks (heartbeat, result reporter, NATS subscription)
 func (a *Agent) Start(ctx context.Context) error {
 	// Send initial registration
 	if err := a.register(ctx); err != nil {
 		log.Printf("Warning: Failed to register with control plane: %v", err)
+	}
+
+	// Subscribe to NATS tasks if message bus is available
+	if a.messageBus != nil {
+		if err := a.subscribeToTasks(); err != nil {
+			log.Printf("Warning: Failed to subscribe to NATS tasks: %v", err)
+		} else {
+			log.Printf("Subscribed to NATS tasks for project %s", a.config.ProjectID)
+		}
 	}
 
 	// Start heartbeat ticker
@@ -100,6 +133,10 @@ func (a *Agent) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			// Clean up NATS connection
+			if a.messageBus != nil {
+				a.messageBus.Close()
+			}
 			return ctx.Err()
 		case <-heartbeatTicker.C:
 			if err := a.sendHeartbeat(ctx); err != nil {
@@ -439,4 +476,135 @@ func (a *Agent) sendResult(ctx context.Context, result *TaskResult) error {
 
 	log.Printf("Successfully sent result for task %s", result.TaskID)
 	return nil
+}
+
+// subscribeToTasks subscribes to NATS task messages for this project
+func (a *Agent) subscribeToTasks() error {
+	return a.messageBus.SubscribeTasks(a.config.ProjectID, func(taskMsg *messages.TaskMessage) {
+		log.Printf("Received NATS task: type=%s bead=%s correlation=%s",
+			taskMsg.Type, taskMsg.BeadID, taskMsg.CorrelationID)
+
+		// Handle different task message types
+		switch taskMsg.Type {
+		case "task.assigned":
+			a.handleNatsTask(taskMsg)
+		case "task.updated":
+			// TODO: Handle task updates
+			log.Printf("Received task update for bead %s", taskMsg.BeadID)
+		case "task.cancelled":
+			// TODO: Handle task cancellation
+			log.Printf("Received task cancellation for bead %s", taskMsg.BeadID)
+		default:
+			log.Printf("Unknown task message type: %s", taskMsg.Type)
+		}
+	})
+}
+
+// handleNatsTask processes a task received via NATS
+func (a *Agent) handleNatsTask(taskMsg *messages.TaskMessage) {
+	// Convert NATS TaskMessage to internal TaskRequest format
+	req := &TaskRequest{
+		TaskID:    taskMsg.BeadID, // Use BeadID as TaskID
+		BeadID:    taskMsg.BeadID,
+		Action:    "bash", // Default action - could be derived from task data
+		ProjectID: taskMsg.ProjectID,
+		Params: map[string]interface{}{
+			"correlation_id": taskMsg.CorrelationID,
+			"task_data":      taskMsg.TaskData,
+			"work_dir":       taskMsg.TaskData.WorkDir,
+		},
+	}
+
+	// Execute task asynchronously (same as HTTP handler)
+	go a.executeTaskWithNats(req, taskMsg.CorrelationID)
+}
+
+// executeTaskWithNats executes a task and publishes result to NATS
+func (a *Agent) executeTaskWithNats(req *TaskRequest, correlationID string) {
+	startTime := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	a.currentTask = &TaskExecution{
+		Request:   req,
+		StartTime: startTime,
+		Context:   ctx,
+		Cancel:    cancel,
+	}
+	defer func() { a.currentTask = nil }()
+
+	// Execute the task (reuse existing execution logic)
+	var output string
+	var err error
+
+	switch req.Action {
+	case "bash":
+		output, err = a.executeBash(ctx, req.Params)
+	case "git_commit":
+		output, err = a.executeGitCommit(ctx, req.Params)
+	case "git_push":
+		output, err = a.executeGitPush(ctx, req.Params)
+	case "read":
+		output, err = a.executeRead(ctx, req.Params)
+	case "write":
+		output, err = a.executeWrite(ctx, req.Params)
+	case "scope":
+		output, err = a.executeScope(ctx, req.Params)
+	default:
+		err = fmt.Errorf("unsupported action: %s", req.Action)
+	}
+
+	duration := time.Since(startTime)
+
+	// Publish result to NATS
+	var resultMsg *messages.ResultMessage
+	if err != nil {
+		log.Printf("Task %s failed: %v", req.TaskID, err)
+		resultMsg = messages.TaskFailed(
+			req.ProjectID,
+			req.BeadID,
+			a.config.ProjectID, // Use project ID as agent ID
+			messages.ResultData{
+				Status:   "failure",
+				Output:   output,
+				Error:    err.Error(),
+				Duration: duration.Milliseconds(),
+			},
+			correlationID,
+		)
+	} else {
+		log.Printf("Task %s completed successfully in %v", req.TaskID, duration)
+		resultMsg = messages.TaskCompleted(
+			req.ProjectID,
+			req.BeadID,
+			a.config.ProjectID,
+			messages.ResultData{
+				Status:   "success",
+				Output:   output,
+				Duration: duration.Milliseconds(),
+			},
+			correlationID,
+		)
+	}
+
+	// Publish to NATS
+	if a.messageBus != nil {
+		if err := a.messageBus.PublishResult(context.Background(), req.ProjectID, resultMsg); err != nil {
+			log.Printf("Failed to publish result to NATS: %v", err)
+			// Fall back to HTTP result reporting
+			result := &TaskResult{
+				TaskID:   req.TaskID,
+				BeadID:   req.BeadID,
+				Success:  err == nil,
+				Output:   output,
+				Duration: duration,
+			}
+			if err != nil {
+				result.Error = err.Error()
+			}
+			a.taskResultCh <- result
+		} else {
+			log.Printf("Published result to NATS for task %s", req.TaskID)
+		}
+	}
 }

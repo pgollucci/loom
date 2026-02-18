@@ -24,6 +24,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
 	"github.com/jordanhubbard/loom/internal/workflow"
+	"github.com/jordanhubbard/loom/pkg/messages"
 	"github.com/jordanhubbard/loom/pkg/models"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -67,6 +68,7 @@ type Dispatcher struct {
 	providers           *provider.Registry
 	db                  *database.Database
 	eventBus            *eventbus.EventBus
+	messageBus          MessageBus // NATS message bus for async agent communication
 	workflowEngine      *workflow.Engine
 	containerOrch       *containers.Orchestrator // Per-project container orchestration
 	personaMatcher      *PersonaMatcher
@@ -88,6 +90,11 @@ type Dispatcher struct {
 	mu              sync.RWMutex
 	status          SystemStatus
 	providerCounter uint64 // round-robin counter for load distribution across providers
+}
+
+// MessageBus defines the interface for publishing task messages
+type MessageBus interface {
+	PublishTask(ctx context.Context, projectID string, task *messages.TaskMessage) error
 }
 
 // commitRequest represents a request to acquire the commit lock
@@ -149,6 +156,84 @@ func (d *Dispatcher) SetDatabase(db *database.Database) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.db = db
+}
+
+// SetMessageBus sets the message bus for async agent communication
+func (d *Dispatcher) SetMessageBus(mb MessageBus) {
+	d.mu.Lock()
+	d.messageBus = mb
+	d.mu.Unlock()
+
+	log.Printf("[Dispatcher] Message bus configured for async task publishing")
+
+	// Subscribe to task results if the message bus supports it
+	if nmb, ok := mb.(interface {
+		SubscribeResults(func(*messages.ResultMessage)) error
+	}); ok {
+		if err := nmb.SubscribeResults(d.handleTaskResult); err != nil {
+			log.Printf("[Dispatcher] Warning: Failed to subscribe to task results: %v", err)
+		} else {
+			log.Printf("[Dispatcher] Subscribed to NATS task results")
+		}
+	}
+}
+
+// handleTaskResult processes a task result received via NATS
+func (d *Dispatcher) handleTaskResult(result *messages.ResultMessage) {
+	log.Printf("[Dispatcher] Received NATS result: bead=%s agent=%s status=%s correlation=%s",
+		result.BeadID, result.AgentID, result.Result.Status, result.CorrelationID)
+
+	// Update bead status based on result
+	updates := make(map[string]interface{})
+
+	switch result.Result.Status {
+	case "success":
+		updates["status"] = models.BeadStatusClosed
+		if result.Result.Output != "" {
+			// Store output in bead context
+			updates["context"] = map[string]string{
+				"last_output":    result.Result.Output,
+				"completed_at":   time.Now().UTC().Format(time.RFC3339),
+				"correlation_id": result.CorrelationID,
+			}
+		}
+		log.Printf("[Dispatcher] Task completed successfully for bead %s", result.BeadID)
+	case "failure":
+		updates["status"] = models.BeadStatusOpen // Reopen for retry
+		if result.Result.Error != "" {
+			updates["context"] = map[string]string{
+				"last_error":     result.Result.Error,
+				"failed_at":      time.Now().UTC().Format(time.RFC3339),
+				"correlation_id": result.CorrelationID,
+			}
+		}
+		log.Printf("[Dispatcher] Task failed for bead %s: %s", result.BeadID, result.Result.Error)
+	case "in_progress":
+		// Progress update - just log it
+		log.Printf("[Dispatcher] Task in progress for bead %s: %s", result.BeadID, result.Result.Output)
+		return // Don't update bead status for progress updates
+	}
+
+	// Apply updates to bead
+	if len(updates) > 0 {
+		if err := d.beads.UpdateBead(result.BeadID, updates); err != nil {
+			log.Printf("[Dispatcher] Failed to update bead %s after result: %v", result.BeadID, err)
+		}
+	}
+
+	// Publish event
+	if d.eventBus != nil {
+		eventType := eventbus.EventTypeBeadCompleted
+		if result.Result.Status == "failure" {
+			eventType = eventbus.EventTypeBeadStatusChange // Use status change for failures
+		}
+		if err := d.eventBus.PublishBeadEvent(eventType, result.BeadID, result.ProjectID, map[string]interface{}{
+			"agent_id": result.AgentID,
+			"duration": result.Result.Duration,
+		}); err != nil {
+			log.Printf("[Dispatcher] Warning: Failed to publish bead event for %s: %v", result.BeadID, err)
+		}
+	}
 }
 
 // SetWorkflowEngine sets the workflow engine for workflow-aware dispatching
@@ -824,6 +909,35 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 		"project_id":  selectedProjectID,
 		"provider_id": ag.ProviderID,
 	})
+
+	// Publish task to NATS for async agent communication
+	if d.messageBus != nil {
+		correlationID := uuid.New().String()
+		taskMsg := messages.TaskAssigned(
+			selectedProjectID,
+			candidate.ID,
+			ag.ID,
+			messages.TaskData{
+				Title:       candidate.Title,
+				Description: candidate.Description,
+				Priority:    int(candidate.Priority),
+				Type:        string(candidate.Type),
+				Context: map[string]interface{}{
+					"status":       string(candidate.Status),
+					"assigned_at":  time.Now().UTC().Format(time.RFC3339),
+					"dispatch_hop": dispatchCount,
+				},
+			},
+			correlationID,
+		)
+		if err := d.messageBus.PublishTask(ctx, selectedProjectID, taskMsg); err != nil {
+			log.Printf("[Dispatcher] Warning: Failed to publish task to NATS for bead %s: %v", candidate.ID, err)
+			// Don't fail dispatch - agent can still get task via other means
+		} else {
+			log.Printf("[Dispatcher] Published task to NATS: bead=%s agent=%s correlation=%s", candidate.ID, ag.ID, correlationID)
+		}
+	}
+
 	if d.eventBus != nil {
 		if err := d.eventBus.PublishBeadEvent(eventbus.EventTypeBeadAssigned, candidate.ID, selectedProjectID, map[string]interface{}{"assigned_to": ag.ID}); err != nil {
 			log.Printf("[Dispatcher] Warning: Failed to publish bead assigned event for %s: %v", candidate.ID, err)

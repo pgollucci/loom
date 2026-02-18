@@ -392,6 +392,12 @@ func New(cfg *config.Config) (*Loom, error) {
 	if db != nil {
 		arb.dispatcher.SetDatabase(db)
 	}
+	// Enable NATS message bus for async agent communication
+	if messageBus != nil {
+		if mb, ok := messageBus.(*messagebus.NatsMessageBus); ok {
+			arb.dispatcher.SetMessageBus(mb)
+		}
+	}
 
 	// Wire container orchestrator for per-project isolation
 	if containerOrch != nil {
