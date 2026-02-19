@@ -767,6 +767,8 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		beadsWorktree := wtManager.GetWorktreePath(p.ID, "beads")
 		beadsPath := filepath.Join(beadsWorktree, p.BeadsPath)
 		a.beadsManager.SetBeadsPath(beadsPath)
+		// Track per-project beads path to avoid last-writer-wins across projects
+		a.beadsManager.SetProjectBeadsPath(p.ID, beadsPath)
 		// Configure git storage for this project
 		a.beadsManager.SetGitStorage(p.ID, wtManager, beadsBranch, a.config.Beads.UseGitStorage)
 		// Load project prefix from config
@@ -776,6 +778,16 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		if p.BeadPrefix != "" {
 			a.beadsManager.SetProjectPrefix(p.ID, p.BeadPrefix)
 		}
+		// Load historical beads from main worktree first (baseline).
+		// These may not yet be on the beads-sync branch.
+		mainWorktree := wtManager.GetWorktreePath(p.ID, "main")
+		mainBeadsPath := filepath.Join(mainWorktree, p.BeadsPath)
+		if mainBeadsPath != beadsPath {
+			_ = a.beadsManager.LoadBeadsFromFilesystem(p.ID, mainBeadsPath)
+		}
+
+		// Load from beads worktree (beads-sync branch) last - overwrites stale
+		// main-worktree copies with authoritative beads-sync state.
 		_ = a.beadsManager.LoadBeadsFromGit(ctx, p.ID, beadsPath)
 
 		// Spawn isolated container for project if configured
@@ -1460,7 +1472,7 @@ func (a *Loom) ensureOrgChart(ctx context.Context, projectID string) error {
 
 	allowedRoles := a.allowedRoleSet()
 
-	// Map existing agents to their roles
+	// Map existing agents to their roles (check in-memory first)
 	existingByRole := map[string]string{} // role -> agentID
 	for _, agent := range a.agentManager.ListAgentsByProject(project.ID) {
 		role := agent.Role
@@ -1469,6 +1481,26 @@ func (a *Loom) ensureOrgChart(ctx context.Context, projectID string) error {
 		}
 		if role != "" {
 			existingByRole[role] = agent.ID
+		}
+	}
+
+	// Also check DB agents for this project to avoid creating duplicates when
+	// agents couldn't be restored to memory (e.g. persona loading failures on restart).
+	if a.database != nil {
+		dbAgents, err := a.database.ListAgents()
+		if err == nil {
+			for _, dbAgent := range dbAgents {
+				if dbAgent == nil || dbAgent.ProjectID != project.ID {
+					continue
+				}
+				role := dbAgent.Role
+				if role == "" {
+					role = roleFromPersonaName(dbAgent.PersonaName)
+				}
+				if role != "" && existingByRole[role] == "" {
+					existingByRole[role] = dbAgent.ID
+				}
+			}
 		}
 	}
 
@@ -3271,16 +3303,14 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 			// (LoomHeartbeatActivity). CEO escalation is only available via
 			// explicit CLI/REPL commands.
 
-			// Refresh bead cache from Dolt to pick up beads created externally
+			// Refresh bead cache to pick up beads created externally
 			for _, p := range a.projectManager.ListProjects() {
-				if p.BeadsPath != "" {
-					beadsRoot := p.BeadsPath
-					if p.WorkDir != "" {
-						beadsRoot = filepath.Join(p.WorkDir, p.BeadsPath)
-					}
-					if err := a.beadsManager.RefreshBeads(p.ID, beadsRoot); err != nil {
-						log.Printf("[Maintenance] Bead refresh failed for %s: %v", p.ID, err)
-					}
+				beadsRoot := a.beadsManager.GetProjectBeadsPath(p.ID)
+				if beadsRoot == "" {
+					continue
+				}
+				if err := a.beadsManager.RefreshBeads(p.ID, beadsRoot); err != nil {
+					log.Printf("[Maintenance] Bead refresh failed for %s: %v", p.ID, err)
 				}
 			}
 
@@ -3297,8 +3327,8 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 	}
 }
 
-// resetInconsistentAgents resets agents that are in "working" state but have no current bead.
-// This handles cases where agents get stuck due to crashes, context cancellation, etc.
+// resetInconsistentAgents resets agents that are in "working" state but have no current bead,
+// or whose current bead is closed/missing. Handles crashes, context cancellation, etc.
 func (a *Loom) resetInconsistentAgents() int {
 	if a.agentManager == nil || a.database == nil {
 		return 0
@@ -3319,11 +3349,24 @@ func (a *Loom) resetInconsistentAgents() int {
 			workingCount++
 			log.Printf("[DispatchLoop] Found working agent %s (currentBead=%q)", agent.ID, agent.CurrentBead)
 		}
-		// Agent is working but has no bead assigned - clear inconsistent state
-		if agent.Status == "working" && agent.CurrentBead == "" {
+		if agent.Status != "working" {
+			continue
+		}
+		shouldReset := agent.CurrentBead == ""
+		if !shouldReset {
+			// Also reset if bead is closed or no longer exists
+			bead, beadErr := a.beadsManager.GetBead(agent.CurrentBead)
+			if beadErr != nil || bead == nil || bead.Status == models.BeadStatusClosed {
+				shouldReset = true
+				log.Printf("[DispatchLoop] Agent %s stuck on closed/missing bead %q", agent.ID, agent.CurrentBead)
+			}
+		}
+		if shouldReset {
+			prevBead := agent.CurrentBead
 			agent.Status = "idle"
+			agent.CurrentBead = ""
 			if err := a.database.UpsertAgent(agent); err == nil {
-				log.Printf("[DispatchLoop] Reset inconsistent agent %s (working with no bead)", agent.ID)
+				log.Printf("[DispatchLoop] Reset inconsistent agent %s (was working on %q)", agent.ID, prevBead)
 				count++
 			}
 		}

@@ -60,5 +60,5 @@ func (c *GitCoordinator) syncBeads(ctx context.Context, beadsMgr *Manager) error
 
 	// Reload beads into cache from filesystem
 	// This picks up changes from other instances that pushed to git
-	return beadsMgr.LoadBeadsFromFilesystem(c.projectID, beadsMgr.beadsPath)
+	return beadsMgr.LoadBeadsFromFilesystem(c.projectID, beadsMgr.GetProjectBeadsPath(c.projectID))
 }

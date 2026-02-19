@@ -77,7 +77,7 @@ type BeadsConfig struct {
 	AutoSync       bool                  `yaml:"auto_sync"`
 	SyncInterval   time.Duration         `yaml:"sync_interval"`
 	CompactOldDays int                   `yaml:"compact_old_days"` // Days before compacting closed beads
-	Backend        string                `yaml:"backend"`          // "sqlite" or "dolt"
+	Backend        string                `yaml:"backend"`          // "sqlite", "dolt", or "yaml"
 	BeadsBranch    string                `yaml:"beads_branch"`     // Global default for beads branch
 	UseGitStorage  bool                  `yaml:"use_git_storage"`  // Enable git-centric storage (default: true)
 	Federation     BeadsFederationConfig `yaml:"federation"`

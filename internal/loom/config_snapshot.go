@@ -218,6 +218,7 @@ func (a *Loom) ReloadFromDatabase(ctx context.Context) error {
 			continue
 		}
 		a.beadsManager.SetBeadsPath(p.BeadsPath)
+		a.beadsManager.SetProjectBeadsPath(p.ID, p.BeadsPath)
 		// Load project prefix from config
 		_ = a.beadsManager.LoadProjectPrefixFromConfig(p.ID, p.BeadsPath)
 		// Use project's BeadPrefix if set in the model

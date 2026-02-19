@@ -21,16 +21,17 @@ import (
 
 // Manager integrates with the bd (beads) CLI tool and git-centric storage
 type Manager struct {
-	bdPath          string
-	beadsPath       string
-	backend         string            // "sqlite" or "dolt"
-	mu              sync.RWMutex
-	beads           map[string]*models.Bead
-	beadFiles       map[string]string
-	workGraph       *models.WorkGraph
-	nextID          int               // For generating IDs when bd CLI is not available
-	projectPrefixes map[string]string // Project ID -> bead prefix (e.g., "loom-self" -> "ac")
-	projectNextIDs  map[string]int    // Per-project next ID counter
+	bdPath            string
+	beadsPath         string
+	backend           string            // "sqlite", "dolt", or "yaml"
+	mu                sync.RWMutex
+	beads             map[string]*models.Bead
+	beadFiles         map[string]string
+	workGraph         *models.WorkGraph
+	nextID            int               // For generating IDs when bd CLI is not available
+	projectPrefixes   map[string]string // Project ID -> bead prefix (e.g., "loom-self" -> "ac")
+	projectNextIDs    map[string]int    // Per-project next ID counter
+	projectBeadsPaths map[string]string // Project ID -> beads worktree path (avoids last-writer-wins)
 
 	// Git-centric storage fields (per-project)
 	gitConfigs map[string]*GitConfig // Project ID -> git configuration
@@ -56,10 +57,11 @@ func NewManager(bdPath string) *Manager {
 			Edges:     []models.Edge{},
 			UpdatedAt: time.Now(),
 		},
-		nextID:          1,
-		projectPrefixes: make(map[string]string),
-		projectNextIDs:  make(map[string]int),
-		gitConfigs:      make(map[string]*GitConfig),
+		nextID:            1,
+		projectPrefixes:   make(map[string]string),
+		projectNextIDs:    make(map[string]int),
+		projectBeadsPaths: make(map[string]string),
+		gitConfigs:        make(map[string]*GitConfig),
 	}
 }
 
@@ -101,11 +103,31 @@ func (m *Manager) Reset() {
 	m.nextID = 1
 	m.projectPrefixes = make(map[string]string)
 	m.projectNextIDs = make(map[string]int)
+	m.projectBeadsPaths = make(map[string]string)
 }
 
-// SetBeadsPath sets the path to the beads directory
+// SetBeadsPath sets the global fallback path to the beads directory
 func (m *Manager) SetBeadsPath(path string) {
 	m.beadsPath = path
+}
+
+// SetProjectBeadsPath sets the beads path for a specific project (beads worktree).
+// This prevents the last-writer-wins problem when multiple projects are loaded.
+func (m *Manager) SetProjectBeadsPath(projectID, path string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.projectBeadsPaths[projectID] = path
+}
+
+// GetProjectBeadsPath returns the beads path for a specific project,
+// falling back to the global beadsPath if none is set for that project.
+func (m *Manager) GetProjectBeadsPath(projectID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if path, ok := m.projectBeadsPaths[projectID]; ok && path != "" {
+		return path
+	}
+	return m.beadsPath
 }
 
 // SetProjectPrefix sets the bead ID prefix for a project
@@ -260,7 +282,7 @@ func (m *Manager) CreateBead(title, description string, priority models.BeadPrio
 
 	// Save to filesystem only when not using bd CLI
 	if !usedBD {
-		if err := m.SaveBeadToFilesystem(bead, m.beadsPath); err != nil {
+		if err := m.SaveBeadToFilesystem(bead, m.GetProjectBeadsPath(bead.ProjectID)); err != nil {
 			// Log error but don't fail - the bead is in memory
 			fmt.Fprintf(os.Stderr, "Warning: failed to save bead to filesystem: %v\n", err)
 		}
@@ -391,7 +413,7 @@ func (m *Manager) UpdateBead(id string, updates map[string]interface{}) error {
 	m.mu.Unlock()
 
 	// Save to filesystem and git (without holding the main lock)
-	if err := m.SaveBeadToGit(context.Background(), bead, m.beadsPath); err != nil {
+	if err := m.SaveBeadToGit(context.Background(), bead, m.GetProjectBeadsPath(bead.ProjectID)); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save bead to git: %v\n", err)
 	}
 
@@ -440,7 +462,7 @@ func (m *Manager) ClaimBead(beadID, agentID string) error {
 	// Release lock before I/O operations
 	m.mu.Unlock()
 
-	if err := m.SaveBeadToFilesystem(bead, m.beadsPath); err != nil {
+	if err := m.SaveBeadToFilesystem(bead, m.GetProjectBeadsPath(bead.ProjectID)); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save bead to filesystem: %v\n", err)
 	}
 
@@ -728,7 +750,9 @@ func (m *Manager) LoadBeadsFromFilesystem(projectID, beadsPath string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.bdPath != "" {
+	// Skip bd CLI for yaml backend - it would try Dolt which may not be running.
+	// For yaml backend, YAML files on disk are the authoritative source.
+	if m.bdPath != "" && m.backend != "yaml" {
 		if err := m.loadBeadsFromBD(projectID, beadsPath); err == nil {
 			return nil
 		} else {
