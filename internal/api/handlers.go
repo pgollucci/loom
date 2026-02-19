@@ -341,6 +341,7 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 			GitAuthMethod string            `json:"git_auth_method"`
 			IsPerpetual   *bool             `json:"is_perpetual"`
 			IsSticky      *bool             `json:"is_sticky"`
+			UseContainer  *bool             `json:"use_container"`
 		}
 		if err := s.parseJSON(r, &req); err != nil {
 			s.respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -376,6 +377,9 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.GitAuthMethod != "" {
 			updates["git_auth_method"] = req.GitAuthMethod
+		}
+		if req.UseContainer != nil {
+			updates["use_container"] = *req.UseContainer
 		}
 
 		if err := s.app.GetProjectManager().UpdateProject(id, updates); err != nil {

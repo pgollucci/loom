@@ -132,6 +132,9 @@ func (m *Manager) UpdateProject(id string, updates map[string]interface{}) error
 	if gitAuthMethod, ok := updates["git_auth_method"].(string); ok {
 		project.GitAuthMethod = models.GitAuthMethod(gitAuthMethod)
 	}
+	if useContainer, ok := updates["use_container"].(bool); ok {
+		project.UseContainer = useContainer
+	}
 
 	project.UpdatedAt = time.Now()
 
