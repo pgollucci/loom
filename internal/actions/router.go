@@ -146,6 +146,37 @@ func (r *Router) getProjectWorkDir(projectID string) string {
 	return project.WorkDir
 }
 
+// runBuildForProject auto-discovers and runs the build command for a project.
+// Returns (nil, nil) if Commands executor is unavailable (build check skipped).
+// Returns (result, nil) if build ran (check result.Success for pass/fail).
+// Returns (nil, err) on executor error.
+func (r *Router) runBuildForProject(ctx context.Context, actx ActionContext, explicitCommand string) (*executor.ExecuteCommandResult, error) {
+	if r.Commands == nil {
+		return nil, nil // No executor available; skip build gate
+	}
+
+	workDir := r.getProjectWorkDir(actx.ProjectID)
+
+	buildCmd := explicitCommand
+	if buildCmd == "" {
+		// Auto-detect build system from files present in the working directory
+		buildCmd = `if [ -f go.mod ]; then go build ./...; ` +
+			`elif [ -f package.json ]; then npm run build; ` +
+			`elif [ -f Makefile ]; then make; ` +
+			`elif [ -f Cargo.toml ]; then cargo build; ` +
+			`else echo "No recognized build system detected (no go.mod, package.json, Makefile, or Cargo.toml)" && exit 1; fi`
+	}
+
+	return r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
+		AgentID:    actx.AgentID,
+		BeadID:     actx.BeadID,
+		ProjectID:  actx.ProjectID,
+		Command:    buildCmd,
+		WorkingDir: workDir,
+		Timeout:    300,
+	})
+}
+
 func (r *Router) Execute(ctx context.Context, env *ActionEnvelope, actx ActionContext) ([]Result, error) {
 	if env == nil {
 		return nil, fmt.Errorf("action envelope is nil")
@@ -382,6 +413,23 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 	case ActionGitCommit:
 		if r.Git == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
+		}
+
+		// Pre-commit build gate: ensure code compiles before committing
+		buildResult, buildErr := r.runBuildForProject(ctx, actx, "")
+		if buildErr != nil {
+			return Result{
+				ActionType: action.Type,
+				Status:     "error",
+				Message:    fmt.Sprintf("commit blocked: pre-commit build check error: %v", buildErr),
+			}
+		}
+		if buildResult != nil && (!buildResult.Success || buildResult.ExitCode != 0) {
+			return Result{
+				ActionType: action.Type,
+				Status:     "error",
+				Message:    fmt.Sprintf("commit blocked: build must pass before committing (exit %d):\nstdout: %s\nstderr: %s", buildResult.ExitCode, buildResult.Stdout, buildResult.Stderr),
+			}
 		}
 
 		// Auto-generate commit message if not provided
@@ -655,22 +703,30 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   result,
 		}
 	case ActionBuildProject:
-		if r.Builder == nil {
-			return Result{ActionType: action.Type, Status: "error", Message: "builder not configured"}
-		}
-		// Get project path from Files manager or use default
-		projectPath := "."
-		// TODO: Get actual project path from context or Files manager
-
-		result, err := r.Builder.Run(ctx, projectPath, action.BuildTarget, action.BuildCommand, action.Framework, action.TimeoutSeconds)
+		buildResult, err := r.runBuildForProject(ctx, actx, action.BuildCommand)
 		if err != nil {
-			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+			return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("build executor error: %v", err)}
+		}
+		if buildResult == nil {
+			return Result{ActionType: action.Type, Status: "error", Message: "build executor not configured"}
+		}
+		if !buildResult.Success || buildResult.ExitCode != 0 {
+			return Result{
+				ActionType: action.Type,
+				Status:     "error",
+				Message:    fmt.Sprintf("build failed (exit %d):\nstdout: %s\nstderr: %s", buildResult.ExitCode, buildResult.Stdout, buildResult.Stderr),
+			}
 		}
 		return Result{
 			ActionType: action.Type,
 			Status:     "executed",
-			Message:    "build executed",
-			Metadata:   result,
+			Message:    "build passed",
+			Metadata: map[string]interface{}{
+				"stdout":      buildResult.Stdout,
+				"stderr":      buildResult.Stderr,
+				"exit_code":   buildResult.ExitCode,
+				"duration_ms": buildResult.Duration,
+			},
 		}
 	case ActionCreateBead:
 		if action.Bead == nil {
