@@ -69,7 +69,11 @@ func (s *Server) handleWorkflow(w http.ResponseWriter, r *http.Request) {
 	// Get workflow
 	wf, err := engine.GetDatabase().GetWorkflow(workflowID)
 	if err != nil {
-		http.Error(w, "Failed to get workflow: "+err.Error(), http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, "Workflow not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to get workflow: "+err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 	if wf == nil {
