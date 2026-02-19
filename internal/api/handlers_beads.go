@@ -277,7 +277,11 @@ func (s *Server) handleBead(w http.ResponseWriter, r *http.Request) {
 
 		bead, err := s.app.UpdateBead(id, updates)
 		if err != nil {
-			s.respondError(w, http.StatusInternalServerError, err.Error())
+			if strings.Contains(err.Error(), "not found") {
+				s.respondError(w, http.StatusNotFound, err.Error())
+			} else {
+				s.respondError(w, http.StatusInternalServerError, err.Error())
+			}
 			return
 		}
 		s.respondJSON(w, http.StatusOK, bead)
