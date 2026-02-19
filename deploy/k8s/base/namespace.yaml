@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loom
+  annotations:
+    # Enable Linkerd proxy injection for all pods in this namespace.
+    # Sidecars are injected automatically on pod creation.
+    linkerd.io/inject: enabled
+  labels:
+    app.kubernetes.io/part-of: loom

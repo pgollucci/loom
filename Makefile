@@ -1,4 +1,4 @@
-.PHONY: all build build-all start stop restart prune bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch
+.PHONY: all build build-all start stop restart prune bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch k8s-apply k8s-delete linkerd-setup linkerd-check linkerd-dashboard linkerd-tap proto-gen
 
 # Build variables
 BINARY_NAME=loom
@@ -341,6 +341,45 @@ release-minor:
 release-major:
 	@BATCH=$(BATCH) ./scripts/release.sh major
 
+# ── Kubernetes / Linkerd targets ──────────────────────────────────────────
+
+# Apply base + local overlay (requires kubectl context set to loom-dev cluster)
+k8s-apply:
+	kubectl apply -k deploy/k8s/overlays/local
+
+# Tear down all loom resources from the cluster
+k8s-delete:
+	kubectl delete -k deploy/k8s/overlays/local --ignore-not-found
+
+# Full Linkerd setup: create k3d cluster, install Linkerd, deploy loom
+linkerd-setup:
+	@./scripts/setup-linkerd.sh
+
+# Check Linkerd health in the loom namespace
+linkerd-check:
+	linkerd -n loom check --proxy
+
+# Open Linkerd viz dashboard in browser
+linkerd-dashboard:
+	linkerd viz dashboard
+
+# Live traffic tap for loom deployment
+linkerd-tap:
+	linkerd -n loom tap deploy/loom
+
+# Regenerate protobuf Go bindings (requires protoc + plugins in PATH)
+proto-gen:
+	@PROTOC=$$(which protoc || echo /tmp/protoc-arm/bin/protoc); \
+	export PATH=$$(go env GOPATH)/bin:$$PATH; \
+	$$PROTOC \
+	  --proto_path=api/proto/connectors \
+	  --go_out=api/proto/connectors \
+	  --go_opt=paths=source_relative \
+	  --go-grpc_out=api/proto/connectors \
+	  --go-grpc_opt=paths=source_relative \
+	  api/proto/connectors/connectors.proto
+	@echo "Proto generation complete."
+
 help:
 	@echo "Loom - Makefile Commands"
 	@echo ""
@@ -370,6 +409,17 @@ help:
 	@echo "  make install      - Install binary to GOPATH/bin"
 	@echo "  make config       - Create config.yaml from example"
 	@echo "  make dev-setup    - Set up development environment"
+	@echo ""
+	@echo "Kubernetes / Linkerd:"
+	@echo "  make linkerd-setup    - Create k3d cluster, install Linkerd, deploy loom"
+	@echo "  make k8s-apply        - Apply K8s manifests (overlays/local)"
+	@echo "  make k8s-delete       - Delete K8s resources"
+	@echo "  make linkerd-check    - Check Linkerd proxy health in loom namespace"
+	@echo "  make linkerd-dashboard - Open Linkerd viz dashboard"
+	@echo "  make linkerd-tap      - Live traffic tap for loom deployment"
+	@echo ""
+	@echo "Code generation:"
+	@echo "  make proto-gen        - Regenerate protobuf Go bindings"
 	@echo ""
 	@echo "Release:"
 	@echo "  make release       - Patch release (x.y.Z)"

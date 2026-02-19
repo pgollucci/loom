@@ -1,0 +1,81 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: loom
+  labels:
+    app: pgbouncer
+    app.kubernetes.io/part-of: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+      annotations:
+        # Linkerd: opaque port for PostgreSQL wire protocol
+        config.linkerd.io/opaque-ports: "5432"
+    spec:
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: loom-postgresql-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loom-postgresql-secret
+                  key: password
+            - name: DB_HOST
+              value: loom-postgresql
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: loom
+            - name: POOL_MODE
+              value: transaction
+            - name: MAX_CLIENT_CONN
+              value: "100"
+            - name: DEFAULT_POOL_SIZE
+              value: "20"
+            - name: SERVER_RESET_QUERY
+              value: DISCARD ALL
+            - name: IGNORE_STARTUP_PARAMETERS
+              value: extra_float_digits
+          readinessProbe:
+            tcpSocket:
+              port: 5432
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: loom
+  labels:
+    app: pgbouncer
+  annotations:
+    config.linkerd.io/opaque-ports: "5432"
+spec:
+  selector:
+    app: pgbouncer
+  ports:
+    - port: 5432
+      targetPort: 5432

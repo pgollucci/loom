@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Local development overlay: use k3d/kind cluster with local image registry.
+bases:
+  - ../../base
+
+resources:
+  - ../../linkerd/authorization-policies.yaml
+  - ../../linkerd/retry-budgets.yaml
+
+# Override loom image to use locally-built image from k3d registry
+images:
+  - name: loom:latest
+    newName: k3d-registry.localhost:5001/loom
+    newTag: dev
+
+# Patch loom deployment to expose NodePort for local access
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: loom
+        namespace: loom
+      spec:
+        type: NodePort
+        ports:
+          - name: http
+            port: 8081
+            targetPort: 8081
+            nodePort: 30081
+          - name: grpc
+            port: 9090
+            targetPort: 9090
+            nodePort: 30090

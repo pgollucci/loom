@@ -1,0 +1,85 @@
+# Linkerd Retry Budgets for Loom
+#
+# ServiceProfiles allow Linkerd to track per-route metrics and apply
+# retry policies. This is especially valuable for gRPC routes to Temporal
+# (which uses long-polling) and loom's ConnectorsService.
+
+---
+# loom HTTP service profile with retry budget
+apiVersion: linkerd.io/v1alpha2
+kind: ServiceProfile
+metadata:
+  name: loom.loom.svc.cluster.local
+  namespace: loom
+spec:
+  # Global retry budget for the loom service.
+  # retryBudget = at most 20% of requests can be retries,
+  # plus a minimum of 10 retries/second floor.
+  retryBudget:
+    retryRatio: 0.2
+    minRetriesPerSecond: 10
+    ttl: 10s
+  routes:
+    - name: GET /health
+      condition:
+        method: GET
+        pathRegex: /health
+      isRetryable: false  # Health checks should not be retried
+    - name: GET /api/v1/beads
+      condition:
+        method: GET
+        pathRegex: /api/v1/beads(/.*)?
+      isRetryable: true
+      timeout: 30s
+    - name: POST /api/v1/beads
+      condition:
+        method: POST
+        pathRegex: /api/v1/beads
+      isRetryable: false  # Mutations are not retryable
+    - name: GET /api/v1/providers
+      condition:
+        method: GET
+        pathRegex: /api/v1/providers(/.*)?
+      isRetryable: true
+      timeout: 10s
+    - name: POST /api/v1/agents
+      condition:
+        method: POST
+        pathRegex: /api/v1/agents
+      isRetryable: false
+    - name: GET /api/v1/decisions
+      condition:
+        method: GET
+        pathRegex: /api/v1/decisions(/.*)?
+      isRetryable: true
+      timeout: 10s
+---
+# Temporal gRPC service profile
+apiVersion: linkerd.io/v1alpha2
+kind: ServiceProfile
+metadata:
+  name: temporal.loom.svc.cluster.local
+  namespace: loom
+spec:
+  retryBudget:
+    retryRatio: 0.2
+    minRetriesPerSecond: 5
+    ttl: 10s
+  routes:
+    - name: temporal.workflowservice.WorkflowService/StartWorkflowExecution
+      condition:
+        method: POST
+        pathRegex: /temporal.workflowservice.WorkflowService/StartWorkflowExecution
+      isRetryable: false  # Do not retry workflow starts (idempotency concerns)
+    - name: temporal.workflowservice.WorkflowService/PollActivityTaskQueue
+      condition:
+        method: POST
+        pathRegex: /temporal.workflowservice.WorkflowService/PollActivityTaskQueue
+      isRetryable: true
+      timeout: 60s  # Long-poll
+    - name: temporal.workflowservice.WorkflowService/PollWorkflowTaskQueue
+      condition:
+        method: POST
+        pathRegex: /temporal.workflowservice.WorkflowService/PollWorkflowTaskQueue
+      isRetryable: true
+      timeout: 60s  # Long-poll

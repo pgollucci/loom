@@ -1,0 +1,219 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom
+  namespace: loom
+  labels:
+    app: loom
+    app.kubernetes.io/part-of: loom
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loom-config
+  namespace: loom
+data:
+  config.yaml: |
+    server:
+      http_port: 8081
+      grpc_port: 9090
+    database:
+      type: postgres
+    temporal:
+      host: temporal:7233
+      namespace: default
+      task_queue: loom-tasks
+      workflow_execution_timeout: 24h
+      workflow_task_timeout: 10s
+    agents:
+      max_concurrent: 10
+      default_persona_path: ./personas
+      heartbeat_interval: 30s
+      file_lock_timeout: 10m
+    readiness:
+      mode: block
+    dispatch:
+      max_hops: 20
+    git:
+      project_key_dir: /app/data/projects
+    web_ui:
+      enabled: true
+      static_path: ./web/static
+      refresh_interval: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loom
+  namespace: loom
+  labels:
+    app: loom
+    app.kubernetes.io/part-of: loom
+    app.kubernetes.io/version: "latest"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom
+  template:
+    metadata:
+      labels:
+        app: loom
+        app.kubernetes.io/part-of: loom
+      annotations:
+        # Linkerd proxy injection (namespace-level already enables this, but
+        # explicit annotation ensures it even if namespace annotation changes).
+        linkerd.io/inject: enabled
+        # gRPC port (9090) is handled natively by Linkerd.
+        # PostgreSQL via pgbouncer (5432) is opaque TCP — mark as opaque.
+        config.linkerd.io/opaque-ports: "5432,4222"
+        # Increase proxy CPU limit for gRPC-heavy workloads
+        config.linkerd.io/proxy-cpu-limit: "500m"
+        config.linkerd.io/proxy-memory-limit: "128Mi"
+    spec:
+      serviceAccountName: loom
+      initContainers:
+        - name: wait-for-pgbouncer
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z pgbouncer 5432; do
+                echo "Waiting for pgbouncer..."; sleep 2
+              done
+        - name: wait-for-temporal
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z temporal 7233; do
+                echo "Waiting for temporal..."; sleep 2
+              done
+        - name: wait-for-nats
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z nats 4222; do
+                echo "Waiting for nats..."; sleep 2
+              done
+      containers:
+        - name: loom
+          image: loom:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+            - name: grpc
+              containerPort: 9090
+          env:
+            - name: LOOM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loom-secret
+                  key: password
+            - name: TEMPORAL_HOST
+              value: temporal:7233
+            - name: TEMPORAL_NAMESPACE
+              value: default
+            - name: NATS_URL
+              value: nats://nats:4222
+            - name: DB_TYPE
+              value: postgres
+            - name: POSTGRES_HOST
+              value: pgbouncer
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: loom-postgresql-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loom-postgresql-secret
+                  key: password
+            - name: POSTGRES_DB
+              value: loom
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+            - name: CONFIG_PATH
+              value: /app/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+            - name: data
+              mountPath: /app/data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: config
+          configMap:
+            name: loom-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: loom-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loom
+  namespace: loom
+  labels:
+    app: loom
+spec:
+  selector:
+    app: loom
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loom-secret
+  namespace: loom
+type: Opaque
+stringData:
+  password: loom-default-password  # Override via external secret manager
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loom-data-pvc
+  namespace: loom
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

@@ -1,0 +1,92 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: loom
+  labels:
+    app: nats
+    app.kubernetes.io/part-of: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+      annotations:
+        # NATS client port is opaque TCP; monitoring port (8222) is HTTP
+        config.linkerd.io/opaque-ports: "4222,6222"
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10-alpine
+          args:
+            - "-js"
+            - "-sd"
+            - "/data"
+            - "-m"
+            - "8222"
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitoring
+              containerPort: 8222
+            - name: cluster
+              containerPort: 6222
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8222
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nats-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: loom
+  labels:
+    app: nats
+  annotations:
+    config.linkerd.io/opaque-ports: "4222,6222"
+spec:
+  selector:
+    app: nats
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: monitoring
+      port: 8222
+      targetPort: 8222
+    - name: cluster
+      port: 6222
+      targetPort: 6222
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nats-pvc
+  namespace: loom
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

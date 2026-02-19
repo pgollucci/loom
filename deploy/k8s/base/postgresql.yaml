@@ -1,0 +1,106 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loom-postgresql-init
+  namespace: loom
+data:
+  init.sql: |
+    -- Loom database is created automatically by PostgreSQL from POSTGRES_DB env var
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loom-postgresql
+  namespace: loom
+  labels:
+    app: loom-postgresql
+    app.kubernetes.io/part-of: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loom-postgresql
+  template:
+    metadata:
+      labels:
+        app: loom-postgresql
+      annotations:
+        # Linkerd: opaque port for PostgreSQL (TCP, not HTTP/gRPC)
+        config.linkerd.io/opaque-ports: "5432"
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: loom-postgresql-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loom-postgresql-secret
+                  key: password
+            - name: POSTGRES_DB
+              value: loom
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "loom"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: loom-postgresql-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loom-postgresql
+  namespace: loom
+  labels:
+    app: loom-postgresql
+  annotations:
+    # Opaque port: Linkerd proxies TCP without HTTP parsing
+    config.linkerd.io/opaque-ports: "5432"
+spec:
+  selector:
+    app: loom-postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loom-postgresql-secret
+  namespace: loom
+type: Opaque
+stringData:
+  username: loom
+  password: loom  # Override in production via external secret manager
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loom-postgresql-pvc
+  namespace: loom
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

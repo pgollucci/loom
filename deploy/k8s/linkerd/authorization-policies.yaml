@@ -1,0 +1,136 @@
+# Linkerd Authorization Policies for Loom
+#
+# These resources use Linkerd's policy API (linkerd.io/v1alpha2) to restrict
+# which meshed workloads may communicate with each service port.
+#
+# Policy model:
+#   Server            - declares a named port on a workload that Linkerd manages
+#   MeshTLSAuthentication - identifies callers by their mTLS identity (SPIFFE)
+#   AuthorizationPolicy   - binds an authentication rule to one or more Servers
+#
+# All traffic between meshed pods is automatically encrypted with mTLS.
+# AuthorizationPolicies add _authorization_ on top of the encryption.
+
+---
+# ── loom HTTP API (port 8081) ──────────────────────────────────────────────
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: loom-http
+  namespace: loom
+  labels:
+    app: loom
+spec:
+  podSelector:
+    matchLabels:
+      app: loom
+  port: 8081
+  proxyProtocol: HTTP/1
+---
+# Allow any meshed workload in the loom namespace to call the HTTP API.
+# In production, narrow this to specific ServiceAccounts (e.g., ingress controller).
+apiVersion: policy.linkerd.io/v1beta3
+kind: AuthorizationPolicy
+metadata:
+  name: allow-meshed-to-loom-http
+  namespace: loom
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: Server
+    name: loom-http
+  requiredAuthenticationRefs:
+    - name: loom-namespace-authn
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+# ── loom gRPC ConnectorsService (port 9090) ───────────────────────────────
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: loom-grpc
+  namespace: loom
+  labels:
+    app: loom
+spec:
+  podSelector:
+    matchLabels:
+      app: loom
+  port: 9090
+  proxyProtocol: gRPC
+---
+# Only allow meshed workloads inside the loom namespace to reach gRPC.
+# This prevents unauthenticated external callers from invoking the
+# ConnectorsService even if they reach the cluster network.
+apiVersion: policy.linkerd.io/v1beta3
+kind: AuthorizationPolicy
+metadata:
+  name: allow-meshed-to-loom-grpc
+  namespace: loom
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: Server
+    name: loom-grpc
+  requiredAuthenticationRefs:
+    - name: loom-namespace-authn
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+# ── Temporal gRPC (port 7233) ─────────────────────────────────────────────
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: temporal-grpc
+  namespace: loom
+  labels:
+    app: temporal
+spec:
+  podSelector:
+    matchLabels:
+      app: temporal
+  port: 7233
+  proxyProtocol: gRPC
+---
+# Only loom's ServiceAccount may call Temporal.
+apiVersion: policy.linkerd.io/v1beta3
+kind: AuthorizationPolicy
+metadata:
+  name: allow-loom-to-temporal
+  namespace: loom
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: Server
+    name: temporal-grpc
+  requiredAuthenticationRefs:
+    - name: loom-sa-authn
+      kind: MeshTLSAuthentication
+      group: policy.linkerd.io
+---
+# ── MeshTLSAuthentication resources ──────────────────────────────────────
+#
+# "loom-namespace-authn" matches any meshed workload in the loom namespace.
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: loom-namespace-authn
+  namespace: loom
+spec:
+  identityRefs:
+    # Matches all service accounts in the loom namespace.
+    # SPIFFE format: spiffe://<trust-domain>/ns/<namespace>/sa/<serviceaccount>
+    - kind: Namespace
+      name: loom
+---
+# "loom-sa-authn" matches only the loom ServiceAccount.
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: loom-sa-authn
+  namespace: loom
+spec:
+  identityRefs:
+    - kind: ServiceAccount
+      name: loom
+      namespace: loom

@@ -1,0 +1,194 @@
+---
+# Temporal requires its own PostgreSQL for schema management.
+# Re-use the same image/pattern as loom-postgresql.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-postgresql
+  namespace: loom
+  labels:
+    app: temporal-postgresql
+    app.kubernetes.io/part-of: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-postgresql
+  template:
+    metadata:
+      labels:
+        app: temporal-postgresql
+      annotations:
+        config.linkerd.io/opaque-ports: "5432"
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: temporal
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: temporal-postgresql-secret
+                  key: password
+            - name: POSTGRES_DB
+              value: temporal
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "temporal"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: temporal-postgresql-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-postgresql
+  namespace: loom
+  labels:
+    app: temporal-postgresql
+  annotations:
+    config.linkerd.io/opaque-ports: "5432"
+spec:
+  selector:
+    app: temporal-postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: temporal-postgresql-secret
+  namespace: loom
+type: Opaque
+stringData:
+  password: temporal
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: temporal-postgresql-pvc
+  namespace: loom
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-dynamic-config
+  namespace: loom
+data:
+  development-sql.yaml: |
+    # Temporal dynamic configuration for SQL-backed storage
+    limit.maxIDLength:
+      - value: 255
+        constraints: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: loom
+  labels:
+    app: temporal
+    app.kubernetes.io/part-of: loom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+      annotations:
+        # Temporal uses gRPC on 7233 — Linkerd handles gRPC natively
+        config.linkerd.io/opaque-ports: ""
+    spec:
+      initContainers:
+        - name: wait-for-postgresql
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z temporal-postgresql 5432; do
+                echo "Waiting for temporal-postgresql..."; sleep 2
+              done
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.22.4
+          ports:
+            - name: grpc
+              containerPort: 7233
+          env:
+            - name: DB
+              value: postgresql
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: temporal
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: temporal-postgresql-secret
+                  key: password
+            - name: POSTGRES_SEEDS
+              value: temporal-postgresql
+            - name: DYNAMIC_CONFIG_FILE_PATH
+              value: config/dynamicconfig/development-sql.yaml
+            - name: ENABLE_ES
+              value: "false"
+          volumeMounts:
+            - name: dynamic-config
+              mountPath: /etc/temporal/config/dynamicconfig
+          readinessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: dynamic-config
+          configMap:
+            name: temporal-dynamic-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: loom
+  labels:
+    app: temporal
+spec:
+  selector:
+    app: temporal
+  ports:
+    - name: grpc
+      port: 7233
+      targetPort: 7233
