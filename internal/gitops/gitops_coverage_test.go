@@ -320,10 +320,10 @@ func TestSetProjectWorkDir_Extended(t *testing.T) {
 		t.Fatalf("NewManager failed: %v", err)
 	}
 
-	// Before any override, returns base + projectID
+	// Before any override, returns base + projectID + "main" (worktree layout)
 	got := mgr.GetProjectWorkDir("proj-1")
-	if got != filepath.Join(tmpDir, "proj-1") {
-		t.Errorf("before override: GetProjectWorkDir = %q, want %q", got, filepath.Join(tmpDir, "proj-1"))
+	if got != filepath.Join(tmpDir, "proj-1", "main") {
+		t.Errorf("before override: GetProjectWorkDir = %q, want %q", got, filepath.Join(tmpDir, "proj-1", "main"))
 	}
 
 	// Set override
@@ -333,10 +333,10 @@ func TestSetProjectWorkDir_Extended(t *testing.T) {
 		t.Errorf("after override: GetProjectWorkDir = %q, want /custom/path", got)
 	}
 
-	// Other projects still use base
+	// Other projects still use base + "main"
 	got = mgr.GetProjectWorkDir("proj-2")
-	if got != filepath.Join(tmpDir, "proj-2") {
-		t.Errorf("other project: GetProjectWorkDir = %q, want %q", got, filepath.Join(tmpDir, "proj-2"))
+	if got != filepath.Join(tmpDir, "proj-2", "main") {
+		t.Errorf("other project: GetProjectWorkDir = %q, want %q", got, filepath.Join(tmpDir, "proj-2", "main"))
 	}
 
 	// Override again
@@ -467,7 +467,12 @@ func TestConfigureAuth_AuthNone(t *testing.T) {
 }
 
 // TestConfigureAuth_AuthToken covers the "token" auth method.
+// Without GITHUB_TOKEN or GITLAB_TOKEN set, configureAuth should return an error.
 func TestConfigureAuth_AuthToken(t *testing.T) {
+	// Ensure token env vars are not set
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GITLAB_TOKEN", "")
+
 	tmpDir := t.TempDir()
 	mgr, err := NewManager(tmpDir, filepath.Join(tmpDir, "keys"), nil, nil)
 	if err != nil {
@@ -482,8 +487,12 @@ func TestConfigureAuth_AuthToken(t *testing.T) {
 
 	cmd := createDummyCmd()
 	err = mgr.configureAuth(cmd, project)
-	if err != nil {
-		t.Errorf("configureAuth with GitAuthToken should not error: %v", err)
+	// Without GITHUB_TOKEN or GITLAB_TOKEN, configureAuth must fail
+	if err == nil {
+		t.Error("configureAuth with GitAuthToken should error when no token env var is set")
+	}
+	if !strings.Contains(err.Error(), "GITHUB_TOKEN") && !strings.Contains(err.Error(), "GITLAB_TOKEN") {
+		t.Errorf("error should mention token env vars: %v", err)
 	}
 }
 
@@ -603,8 +612,11 @@ func TestCreateBranch_Placeholder(t *testing.T) {
 	}
 }
 
-// TestCommit_Placeholder covers the placeholder Commit method.
-func TestCommit_Placeholder(t *testing.T) {
+// TestCommit_NoLoomSelfDir covers Commit when the loom-self project directory
+// does not exist. Commit is now a real implementation (not a placeholder) that
+// operates on the "loom-self" project. When the working directory is missing it
+// must return an error and a nil result map.
+func TestCommit_NoLoomSelfDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr, err := NewManager(tmpDir, filepath.Join(tmpDir, "keys"), nil, nil)
 	if err != nil {
@@ -613,20 +625,13 @@ func TestCommit_Placeholder(t *testing.T) {
 
 	ctx := context.Background()
 	result, err := mgr.Commit(ctx, "bead-1", "agent-1", "test commit msg", []string{"file.go"}, true)
-	if result == nil {
-		t.Error("Commit should return non-nil result map")
-	}
+	// loom-self directory does not exist → CommitChanges fails → Commit returns error
 	if err == nil {
-		t.Error("Commit should return error (placeholder)")
+		t.Error("Commit should return error when loom-self directory does not exist")
 	}
-	if result["message"] != "test commit msg" {
-		t.Errorf("message = %v, want 'test commit msg'", result["message"])
-	}
-	if result["bead_id"] != "bead-1" {
-		t.Errorf("bead_id = %v, want bead-1", result["bead_id"])
-	}
-	if result["agent_id"] != "agent-1" {
-		t.Errorf("agent_id = %v, want agent-1", result["agent_id"])
+	// On failure the result map is nil
+	if result != nil {
+		t.Errorf("Commit should return nil result on error, got %v", result)
 	}
 }
 
@@ -1130,8 +1135,9 @@ func TestStatus_InRealRepo(t *testing.T) {
 		t.Fatalf("NewManager failed: %v", err)
 	}
 
-	// Init a repo
-	repoDir := filepath.Join(tmpDir, "status-test")
+	// GetProjectWorkDir now returns {base}/{id}/main (worktree layout).
+	// Init a repo at that exact path so Status finds .git there.
+	repoDir := filepath.Join(tmpDir, "status-test", "main")
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1160,8 +1166,8 @@ func TestDiff_InRealRepo(t *testing.T) {
 		t.Fatalf("NewManager failed: %v", err)
 	}
 
-	// Init a repo
-	repoDir := filepath.Join(tmpDir, "diff-test")
+	// GetProjectWorkDir returns {base}/{id}/main — init the repo there.
+	repoDir := filepath.Join(tmpDir, "diff-test", "main")
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1285,8 +1291,8 @@ func TestCommitChanges_InRealRepo(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Init a repo
-	repoDir := filepath.Join(tmpDir, "commit-test")
+	// GetProjectWorkDir returns {base}/{id}/main — init the repo at that path.
+	repoDir := filepath.Join(tmpDir, "commit-test", "main")
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1339,6 +1345,7 @@ func TestCommitChanges_InRealRepo(t *testing.T) {
 }
 
 // TestCheckRemoteAccess_InvalidRepo tests CheckRemoteAccess with invalid repo.
+// Uses a short timeout so the DNS lookup failure is fast.
 func TestCheckRemoteAccess_InvalidRepo(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr, err := NewManager(tmpDir, filepath.Join(tmpDir, "keys"), nil, nil)
@@ -1346,7 +1353,8 @@ func TestCheckRemoteAccess_InvalidRepo(t *testing.T) {
 		t.Fatalf("NewManager failed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	project := &models.Project{
 		ID:            "remote-test",
 		GitRepo:       "https://invalid-host-that-does-not-exist.example.com/repo.git",
@@ -1525,9 +1533,10 @@ func TestCloneProject_NonEmptyDir(t *testing.T) {
 	}
 	mgr.runGitCommand(ctx, workRepo, "push", "-u", "origin", branch)
 
-	// Pre-create project dir with some files (simulating ssh/ from key gen)
-	projectDir := filepath.Join(tmpDir, "nonempty-clone")
-	sshDir := filepath.Join(projectDir, "ssh")
+	// Pre-create the clone dir (GetProjectWorkDir = {base}/nonempty-clone/main)
+	// with some files, simulating ssh/ keys placed there before cloning.
+	cloneDirPre := filepath.Join(tmpDir, "nonempty-clone", "main")
+	sshDir := filepath.Join(cloneDirPre, "ssh")
 	os.MkdirAll(sshDir, 0755)
 	os.WriteFile(filepath.Join(sshDir, "id_ed25519"), []byte("fake-key"), 0600)
 

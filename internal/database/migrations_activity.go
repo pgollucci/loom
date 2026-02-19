@@ -15,9 +15,9 @@ func (d *Database) migrateActivity() error {
 		username TEXT NOT NULL UNIQUE,
 		email TEXT,
 		role TEXT NOT NULL,
-		is_active BOOLEAN NOT NULL DEFAULT 1,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL
+		is_active BOOLEAN NOT NULL DEFAULT true,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -34,7 +34,7 @@ func (d *Database) migrateActivity() error {
 		id TEXT PRIMARY KEY,
 		event_type TEXT NOT NULL,
 		event_id TEXT,
-		timestamp DATETIME NOT NULL,
+		timestamp TIMESTAMP NOT NULL,
 		source TEXT NOT NULL,
 		actor_id TEXT,
 		actor_type TEXT,
@@ -49,7 +49,7 @@ func (d *Database) migrateActivity() error {
 		metadata_json TEXT,
 		aggregation_key TEXT,
 		aggregation_count INTEGER DEFAULT 1,
-		is_aggregated BOOLEAN DEFAULT 0,
+		is_aggregated BOOLEAN DEFAULT false,
 		visibility TEXT NOT NULL DEFAULT 'project',
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
 		FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL,
@@ -81,9 +81,9 @@ func (d *Database) migrateActivity() error {
 		status TEXT NOT NULL DEFAULT 'unread',
 		priority TEXT NOT NULL DEFAULT 'normal',
 		metadata_json TEXT,
-		created_at DATETIME NOT NULL,
-		read_at DATETIME,
-		archived_at DATETIME,
+		created_at TIMESTAMP NOT NULL,
+		read_at TIMESTAMP,
+		archived_at TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
 		FOREIGN KEY (activity_id) REFERENCES activity_feed(id) ON DELETE CASCADE
 	);
@@ -103,16 +103,16 @@ func (d *Database) migrateActivity() error {
 	CREATE TABLE IF NOT EXISTS notification_preferences (
 		id TEXT PRIMARY KEY,
 		user_id TEXT NOT NULL UNIQUE,
-		enable_in_app BOOLEAN NOT NULL DEFAULT 1,
-		enable_email BOOLEAN NOT NULL DEFAULT 0,
-		enable_webhook BOOLEAN NOT NULL DEFAULT 0,
+		enable_in_app BOOLEAN NOT NULL DEFAULT true,
+		enable_email BOOLEAN NOT NULL DEFAULT false,
+		enable_webhook BOOLEAN NOT NULL DEFAULT false,
 		subscribed_events_json TEXT,
 		digest_mode TEXT DEFAULT 'realtime',
 		quiet_hours_start TIME,
 		quiet_hours_end TIME,
 		project_filters_json TEXT,
 		min_priority TEXT DEFAULT 'normal',
-		updated_at DATETIME NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 
@@ -130,7 +130,7 @@ func (d *Database) migrateActivity() error {
 		// Create default admin user
 		_, _ = d.db.Exec(`
 			INSERT INTO users (id, username, email, role, is_active, created_at, updated_at)
-			VALUES ('user-admin', 'admin', 'admin@loom.local', 'admin', 1, datetime('now'), datetime('now'))
+			VALUES ('user-admin', 'admin', 'admin@loom.local', 'admin', 1, NOW(), NOW())
 		`)
 		log.Println("Default admin user created in database")
 	}

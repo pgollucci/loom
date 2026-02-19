@@ -142,7 +142,21 @@ func NewPostgreSQL() (*Database, error) {
 		return nil, fmt.Errorf("failed to migrate lessons: %w", err)
 	}
 
+	if err := d.migrateRequestLogs(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate request logs: %w", err)
+	}
+
 	return d, nil
+}
+
+// migrateRequestLogs adds columns to request_logs that the analytics package expects.
+func (d *Database) migrateRequestLogs() error {
+	_, err := d.db.Exec(`ALTER TABLE request_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`)
+	if err != nil {
+		return fmt.Errorf("migrateRequestLogs: %w", err)
+	}
+	return nil
 }
 
 // Close closes the database connection
@@ -727,7 +741,7 @@ func (d *Database) ListProvidersForUser(userID string) ([]*internalmodels.Provid
 	query := `
 		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, owner_id, is_shared, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, created_at, updated_at
 		FROM providers
-		WHERE owner_id = ? OR is_shared = 1 OR owner_id IS NULL
+		WHERE owner_id = ? OR is_shared = true OR owner_id IS NULL
 		ORDER BY created_at DESC
 	`
 

@@ -176,7 +176,7 @@ func TestDeleteExpiredConversationContexts(t *testing.T) {
 	)
 	expiredCtx.AddMessage("system", "Expired conversation", 5)
 
-	err = db.CreateConversationContext(expiredCtx)
+	err := db.CreateConversationContext(expiredCtx)
 	if err != nil {
 		t.Fatalf("Failed to create expired conversation: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestResetConversationMessages_NoSystemMessage(t *testing.T) {
 	ctx.AddMessage("user", "First message", 5)
 	ctx.AddMessage("assistant", "Response", 5)
 
-	err = db.CreateConversationContext(ctx)
+	err := db.CreateConversationContext(ctx)
 	if err != nil {
 		t.Fatalf("Failed to create conversation: %v", err)
 	}

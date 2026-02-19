@@ -32,7 +32,8 @@ func TestGetProjectWorkDir(t *testing.T) {
 	mgr, _ := NewManager(tmpDir, filepath.Join(tmpDir, "keys"), nil, nil)
 
 	projectID := "test-project"
-	expected := filepath.Join(tmpDir, projectID)
+	// GetProjectWorkDir returns {base}/{projectID}/main (worktree layout)
+	expected := filepath.Join(tmpDir, projectID, "main")
 	actual := mgr.GetProjectWorkDir(projectID)
 
 	if actual != expected {

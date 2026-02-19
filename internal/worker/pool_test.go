@@ -201,15 +201,18 @@ func TestPool_SpawnWorker_Duplicate(t *testing.T) {
 		PersonaName: "test-persona",
 	}
 
-	_, err := pool.SpawnWorker(agent, "mock-1")
+	w1, err := pool.SpawnWorker(agent, "mock-1")
 	if err != nil {
 		t.Fatalf("First SpawnWorker() error = %v", err)
 	}
 
-	// Second spawn should fail
-	_, err = pool.SpawnWorker(agent, "mock-1")
-	if err == nil {
-		t.Error("expected error for duplicate worker")
+	// Second spawn with same provider is idempotent — returns the existing worker
+	w2, err := pool.SpawnWorker(agent, "mock-1")
+	if err != nil {
+		t.Errorf("Second SpawnWorker() should be idempotent, got error: %v", err)
+	}
+	if w1 != w2 {
+		t.Error("Second SpawnWorker() should return the same worker instance")
 	}
 }
 

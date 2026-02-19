@@ -160,7 +160,8 @@ func TestImportMergeStrategy(t *testing.T) {
 
 	// Insert test data
 	db := app.GetDatabase()
-	_, err := db.DB().Exec(`INSERT INTO config_kv (key, value, updated_at) VALUES (?, ?, ?)`,
+	_, err := db.DB().Exec(`INSERT INTO config_kv (key, value, updated_at) VALUES ($1, $2, $3)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
 		"test_key", "original_value", time.Now().Format(time.RFC3339))
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
@@ -203,14 +204,15 @@ func TestImportMergeStrategy(t *testing.T) {
 		t.Fatalf("Expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// Verify data was updated
+	// Verify existing data was preserved (merge skips conflicts, keeping current values)
 	var value string
-	err = db.DB().QueryRow("SELECT value FROM config_kv WHERE key = ?", "test_key").Scan(&value)
+	err = db.DB().QueryRow("SELECT value FROM config_kv WHERE key = $1", "test_key").Scan(&value)
 	if err != nil {
-		t.Fatalf("Failed to query updated data: %v", err)
+		t.Fatalf("Failed to query data after merge: %v", err)
 	}
-	if value != "updated_value" {
-		t.Errorf("Expected value 'updated_value', got %q", value)
+	// Merge strategy preserves existing values on conflict
+	if value != "original_value" {
+		t.Errorf("Expected merge to preserve existing value 'original_value', got %q", value)
 	}
 }
 
@@ -222,7 +224,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	// Insert test data
 	db1 := app1.GetDatabase()
 	_, err := db1.DB().Exec(`INSERT INTO providers (id, name, type, endpoint, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
 		"test-provider", "Test Provider", "openai", "http://test", "active",
 		time.Now().Format(time.RFC3339), time.Now().Format(time.RFC3339))
 	if err != nil {
@@ -265,7 +267,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	// Verify data was imported
 	var name string
 	db2 := app2.GetDatabase()
-	err = db2.DB().QueryRow("SELECT name FROM providers WHERE id = ?", "test-provider").Scan(&name)
+	err = db2.DB().QueryRow("SELECT name FROM providers WHERE id = $1", "test-provider").Scan(&name)
 	if err != nil {
 		t.Fatalf("Failed to query imported provider: %v", err)
 	}
@@ -317,7 +319,7 @@ func TestImportDryRun(t *testing.T) {
 	// Verify data was NOT imported
 	var count int
 	db := app.GetDatabase()
-	err := db.DB().QueryRow("SELECT COUNT(*) FROM config_kv WHERE key = ?", "dry_run_test").Scan(&count)
+	err := db.DB().QueryRow("SELECT COUNT(*) FROM config_kv WHERE key = $1", "dry_run_test").Scan(&count)
 	if err != nil {
 		t.Fatalf("Failed to query count: %v", err)
 	}

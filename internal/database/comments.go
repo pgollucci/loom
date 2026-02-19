@@ -64,7 +64,7 @@ func (d *Database) GetCommentsByBeadID(beadID string) ([]*BeadComment, error) {
 		SELECT id, bead_id, parent_id, author_id, author_username,
 			   content, created_at, updated_at, edited, deleted
 		FROM bead_comments
-		WHERE bead_id = ? AND deleted = 0
+		WHERE bead_id = ? AND deleted = false
 		ORDER BY created_at ASC
 	`
 
@@ -143,8 +143,8 @@ func (d *Database) GetComment(commentID string) (*BeadComment, error) {
 func (d *Database) UpdateComment(commentID, content string) error {
 	query := `
 		UPDATE bead_comments
-		SET content = ?, updated_at = ?, edited = 1
-		WHERE id = ? AND deleted = 0
+		SET content = ?, updated_at = ?, edited = true
+		WHERE id = ? AND deleted = false
 	`
 
 	result, err := d.db.Exec(rebind(query), content, time.Now(), commentID)
@@ -168,7 +168,7 @@ func (d *Database) UpdateComment(commentID, content string) error {
 func (d *Database) DeleteComment(commentID string) error {
 	query := `
 		UPDATE bead_comments
-		SET deleted = 1, updated_at = ?
+		SET deleted = true, updated_at = ?
 		WHERE id = ?
 	`
 

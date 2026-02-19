@@ -15,10 +15,10 @@ func (d *Database) migrateWorkflows() error {
 		name TEXT NOT NULL,
 		description TEXT,
 		workflow_type TEXT NOT NULL,
-		is_default BOOLEAN NOT NULL DEFAULT 0,
+		is_default BOOLEAN NOT NULL DEFAULT false,
 		project_id TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 	);
 
@@ -44,7 +44,7 @@ func (d *Database) migrateWorkflows() error {
 		timeout_minutes INTEGER NOT NULL DEFAULT 0,
 		instructions TEXT,
 		metadata_json TEXT,
-		created_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE,
 		UNIQUE(workflow_id, node_key)
 	);
@@ -67,7 +67,7 @@ func (d *Database) migrateWorkflows() error {
 		to_node_key TEXT,
 		condition TEXT NOT NULL,
 		priority INTEGER NOT NULL DEFAULT 0,
-		created_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
 	);
 
@@ -91,10 +91,10 @@ func (d *Database) migrateWorkflows() error {
 		status TEXT NOT NULL,
 		cycle_count INTEGER NOT NULL DEFAULT 0,
 		node_attempt_count INTEGER NOT NULL DEFAULT 0,
-		started_at DATETIME NOT NULL,
-		completed_at DATETIME,
-		escalated_at DATETIME,
-		last_node_at DATETIME NOT NULL,
+		started_at TIMESTAMP NOT NULL,
+		completed_at TIMESTAMP,
+		escalated_at TIMESTAMP,
+		last_node_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE,
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
 		UNIQUE(bead_id)
@@ -120,7 +120,7 @@ func (d *Database) migrateWorkflows() error {
 		condition TEXT NOT NULL,
 		result_data TEXT,
 		attempt_number INTEGER NOT NULL,
-		created_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (execution_id) REFERENCES workflow_executions(id) ON DELETE CASCADE
 	);
 

@@ -1,8 +1,14 @@
 package dispatch
 
 import (
+	"database/sql"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/memory"
@@ -11,11 +17,56 @@ import (
 
 func newTestDB(t *testing.T) *database.Database {
 	t.Helper()
-	db, err := database.NewFromEnv()
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("POSTGRES_PORT")
+	if port == "" {
+		port = "5432"
+	}
+	user := os.Getenv("POSTGRES_USER")
+	if user == "" {
+		user = "loom"
+	}
+	password := os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		password = "loom"
+	}
+
+	adminDSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5", host, port, user, password)
+	adminDB, err := sql.Open("postgres", adminDSN)
 	if err != nil {
+		t.Skipf("Skipping: cannot connect to postgres: %v", err)
+	}
+	if err := adminDB.Ping(); err != nil {
+		adminDB.Close()
 		t.Skipf("Skipping: postgres not available: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+
+	testDBName := fmt.Sprintf("dispatch_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE DATABASE "` + testDBName + `"`); err != nil {
+		adminDB.Close()
+		t.Skipf("Skipping: cannot create test database: %v", err)
+	}
+	adminDB.Close()
+
+	t.Setenv("POSTGRES_DB", testDBName)
+	db, err := database.NewFromEnv()
+	if err != nil {
+		t.Fatalf("NewFromEnv failed: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+		adminDB2, err := sql.Open("postgres", adminDSN)
+		if err != nil {
+			return
+		}
+		defer adminDB2.Close()
+		adminDB2.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`)
+	})
+
 	return db
 }
 

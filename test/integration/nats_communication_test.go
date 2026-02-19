@@ -30,7 +30,9 @@ func TestNATSTaskPublishSubscribe(t *testing.T) {
 	}
 	defer mb.Close()
 
-	projectID := "test-project"
+	// Use a UUID-based projectID to avoid conflicting with the running loom instance's
+	// durable task consumers (e.g. tasks-test-project).
+	projectID := "test-" + uuid.New().String()[:8]
 	beadID := "test-bead-" + uuid.New().String()
 	correlationID := uuid.New().String()
 
@@ -85,16 +87,39 @@ func TestNATSTaskPublishSubscribe(t *testing.T) {
 		t.Fatal("Timeout waiting for task message")
 	}
 
-	// Now test result publishing (agent → dispatcher)
+	// Now test result publishing (agent → dispatcher).
+	//
+	// We intentionally avoid mb.SubscribeResults() here because the running loom
+	// instance already holds the "results-all" durable JetStream push consumer.
+	// With WorkQueuePolicy a durable consumer can only have one active push
+	// subscriber, so attempting to bind another would fail with
+	// "consumer is already bound to a subscription".
+	//
+	// Instead we use a core NATS subscription on the project-specific subject.
+	// NATS delivers messages to core subscribers in addition to storing them in
+	// the JetStream stream, so this receives the publish without competing with
+	// loom's durable consumer.
 	resultReceived := make(chan *messages.ResultMessage, 1)
 
-	// Subscribe to results (dispatcher side)
-	err = mb.SubscribeResults(func(result *messages.ResultMessage) {
-		resultReceived <- result
+	coreNC, err := nats.Connect(natsURL)
+	if err != nil {
+		t.Fatalf("Failed to open second NATS connection for result subscription: %v", err)
+	}
+	defer coreNC.Close()
+
+	resultSubject := fmt.Sprintf("loom.results.%s", projectID)
+	coreSub, err := coreNC.Subscribe(resultSubject, func(msg *nats.Msg) {
+		var result messages.ResultMessage
+		if err := json.Unmarshal(msg.Data, &result); err != nil {
+			t.Logf("Failed to unmarshal result: %v", err)
+			return
+		}
+		resultReceived <- &result
 	})
 	if err != nil {
 		t.Fatalf("Failed to subscribe to results: %v", err)
 	}
+	defer coreSub.Unsubscribe()
 
 	time.Sleep(100 * time.Millisecond)
 

@@ -120,6 +120,9 @@ func (d *Database) initSchemaPostgres() error {
 		updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		cost_per_mtoken REAL,
 		context_window INTEGER,
+		model_params_b REAL,
+		capability_score REAL,
+		avg_latency_ms INTEGER,
 		supports_function BOOLEAN DEFAULT false,
 		supports_vision BOOLEAN DEFAULT false,
 		supports_streaming BOOLEAN DEFAULT false,
@@ -143,7 +146,8 @@ func (d *Database) initSchemaPostgres() error {
 		cost_usd REAL,
 		error_message TEXT,
 		request_body_hash TEXT,
-		ip_address TEXT
+		ip_address TEXT,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
 	-- Projects with hierarchy support (parent_id for sub-projects)

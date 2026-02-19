@@ -2,10 +2,13 @@ package loom
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/jordanhubbard/loom/pkg/config"
 	"github.com/jordanhubbard/loom/pkg/models"
@@ -36,11 +39,59 @@ func testLoom(t *testing.T, opts ...func(*config.Config)) (*Loom, string) {
 		opt(cfg)
 	}
 
+	// Create an isolated test database when a database type is configured.
+	if cfg.Database.Type != "" && cfg.Database.DSN == "" {
+		host := os.Getenv("POSTGRES_HOST")
+		if host == "" {
+			host = "localhost"
+		}
+		port := os.Getenv("POSTGRES_PORT")
+		if port == "" {
+			port = "5432"
+		}
+		user := os.Getenv("POSTGRES_USER")
+		if user == "" {
+			user = "loom"
+		}
+		password := os.Getenv("POSTGRES_PASSWORD")
+		if password == "" {
+			password = "loom"
+		}
+
+		adminDSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5", host, port, user, password)
+		adminDB, adminErr := sql.Open("postgres", adminDSN)
+		if adminErr == nil {
+			if pingErr := adminDB.Ping(); pingErr == nil {
+				testDBName := fmt.Sprintf("loom_test_%d", time.Now().UnixNano())
+				if _, createErr := adminDB.Exec(`CREATE DATABASE "` + testDBName + `"`); createErr == nil {
+					t.Setenv("POSTGRES_DB", testDBName)
+					t.Cleanup(func() {
+						adminDB2, err := sql.Open("postgres", adminDSN)
+						if err != nil {
+							return
+						}
+						defer adminDB2.Close()
+						adminDB2.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`)
+					})
+				}
+			}
+			adminDB.Close()
+		}
+	}
+
 	l, err := New(cfg)
 	if err != nil {
 		os.RemoveAll(tmpDir)
 		t.Fatalf("Failed to create loom: %v", err)
 	}
+	t.Cleanup(func() {
+		// Close DB to return connections to the pool and prevent exhaustion.
+		// Use GetDatabase().Close() instead of Shutdown() to avoid double-close panics.
+		if db := l.GetDatabase(); db != nil {
+			db.Close()
+		}
+		os.RemoveAll(tmpDir)
+	})
 	return l, tmpDir
 }
 

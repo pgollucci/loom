@@ -3,20 +3,71 @@ package analytics
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/database"
+	_ "github.com/lib/pq"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := database.NewFromEnv()
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("POSTGRES_PORT")
+	if port == "" {
+		port = "5432"
+	}
+	user := os.Getenv("POSTGRES_USER")
+	if user == "" {
+		user = "loom"
+	}
+	password := os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		password = "loom"
+	}
+
+	adminDSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5", host, port, user, password)
+	adminDB, err := sql.Open("postgres", adminDSN)
 	if err != nil {
+		t.Skipf("Skipping: cannot connect to postgres: %v", err)
+	}
+	if err := adminDB.Ping(); err != nil {
+		adminDB.Close()
 		t.Skipf("Skipping: postgres not available: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
-	return db.DB()
+
+	testDBName := fmt.Sprintf("analytics_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE DATABASE "` + testDBName + `"`); err != nil {
+		adminDB.Close()
+		t.Skipf("Skipping: cannot create test database: %v", err)
+	}
+	adminDB.Close()
+
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, testDBName)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("cannot open test database: %v", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		t.Fatalf("cannot ping test database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+		adminDB2, err := sql.Open("postgres", adminDSN)
+		if err != nil {
+			return
+		}
+		defer adminDB2.Close()
+		adminDB2.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`)
+	})
+
+	return db
 }
 
 func TestNewDatabaseStorage(t *testing.T) {

@@ -740,9 +740,11 @@ func TestWorker_ExecuteTaskWithLoop_EmptyActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteTaskWithLoop error = %v", err)
 	}
-	// Empty actions array triggers validation failures (parsers require at least one action)
-	if result.TerminalReason != "validation_failures" {
-		t.Errorf("TerminalReason = %q, want validation_failures", result.TerminalReason)
+	// Empty actions array triggers validation errors each iteration.
+	// With MaxIterations=5 (< 8 required for validation_failures), the loop
+	// exhausts all iterations and terminates with max_iterations.
+	if result.TerminalReason != "max_iterations" {
+		t.Errorf("TerminalReason = %q, want max_iterations", result.TerminalReason)
 	}
 }
 

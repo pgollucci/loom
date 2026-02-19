@@ -17,10 +17,10 @@ func (d *Database) migrateComments() error {
 		author_id TEXT NOT NULL,
 		author_username TEXT NOT NULL,
 		content TEXT NOT NULL,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		edited BOOLEAN NOT NULL DEFAULT 0,
-		deleted BOOLEAN NOT NULL DEFAULT 0,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
+		edited BOOLEAN NOT NULL DEFAULT false,
+		deleted BOOLEAN NOT NULL DEFAULT false,
 		FOREIGN KEY (parent_id) REFERENCES bead_comments(id) ON DELETE CASCADE
 	);
 
@@ -41,8 +41,8 @@ func (d *Database) migrateComments() error {
 		comment_id TEXT NOT NULL,
 		mentioned_user_id TEXT NOT NULL,
 		mentioned_username TEXT NOT NULL,
-		notified_at DATETIME,
-		created_at DATETIME NOT NULL,
+		notified_at TIMESTAMP,
+		created_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (comment_id) REFERENCES bead_comments(id) ON DELETE CASCADE,
 		FOREIGN KEY (mentioned_user_id) REFERENCES users(id) ON DELETE CASCADE
 	);

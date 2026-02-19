@@ -2185,8 +2185,10 @@ func TestLoom_New_WithDoltConfig(t *testing.T) {
 	})
 	defer os.RemoveAll(tmpDir)
 
-	if l.doltCoordinator == nil {
-		t.Error("DoltCoordinator should be initialized when backend is dolt")
+	// DoltCoordinator is intentionally disabled (bd CLI manages Dolt to avoid lock conflicts).
+	// Verify the loom instance is still created successfully.
+	if l == nil {
+		t.Error("Expected non-nil Loom instance with dolt backend config")
 	}
 }
 

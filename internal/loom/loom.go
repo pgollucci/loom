@@ -150,6 +150,7 @@ func New(cfg *config.Config) (*Loom, error) {
 
 	// Initialize PostgreSQL database.
 	// Config DSN takes priority; otherwise fall back to environment variables (POSTGRES_HOST, etc.)
+	// An empty database Type means "no database" (skip initialization).
 	var db *database.Database
 	if cfg.Database.DSN != "" {
 		var err error
@@ -158,7 +159,7 @@ func New(cfg *config.Config) (*Loom, error) {
 			return nil, fmt.Errorf("failed to initialize postgres: %w", err)
 		}
 		log.Printf("Initialized postgres database from config DSN")
-	} else {
+	} else if cfg.Database.Type != "" {
 		var err error
 		db, err = database.NewFromEnv()
 		if err != nil {

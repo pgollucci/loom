@@ -154,9 +154,9 @@ func TestSetProjectWorkDir(t *testing.T) {
 		t.Errorf("GetProjectWorkDir() = %q, want /custom/path", got)
 	}
 
-	// Without override, should use base
+	// Without override, should use base + "main" (worktree layout)
 	got2 := mgr.GetProjectWorkDir("other-project")
-	expected := filepath.Join(tmpDir, "other-project")
+	expected := filepath.Join(tmpDir, "other-project", "main")
 	if got2 != expected {
 		t.Errorf("GetProjectWorkDir() = %q, want %q", got2, expected)
 	}

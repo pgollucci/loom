@@ -22,17 +22,17 @@ func (d *Database) migrateMotivations() error {
 		project_id TEXT,
 		parameters_json TEXT,
 		cooldown_period_ns INTEGER NOT NULL DEFAULT 300000000000,
-		last_triggered_at DATETIME,
-		next_trigger_at DATETIME,
+		last_triggered_at TIMESTAMP,
+		next_trigger_at TIMESTAMP,
 		trigger_count INTEGER NOT NULL DEFAULT 0,
 		priority INTEGER NOT NULL DEFAULT 50,
-		create_bead_on_trigger BOOLEAN NOT NULL DEFAULT 0,
+		create_bead_on_trigger BOOLEAN NOT NULL DEFAULT false,
 		bead_template TEXT,
-		wake_agent BOOLEAN NOT NULL DEFAULT 1,
-		is_built_in BOOLEAN NOT NULL DEFAULT 0,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		disabled_at DATETIME,
+		wake_agent BOOLEAN NOT NULL DEFAULT true,
+		is_built_in BOOLEAN NOT NULL DEFAULT false,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
+		disabled_at TIMESTAMP,
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
 		FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
 	);
@@ -52,7 +52,7 @@ func (d *Database) migrateMotivations() error {
 	CREATE TABLE IF NOT EXISTS motivation_triggers (
 		id TEXT PRIMARY KEY,
 		motivation_id TEXT NOT NULL,
-		triggered_at DATETIME NOT NULL,
+		triggered_at TIMESTAMP NOT NULL,
 		trigger_data_json TEXT,
 		result TEXT NOT NULL,
 		error TEXT,
@@ -79,13 +79,13 @@ func (d *Database) migrateMotivations() error {
 		description TEXT,
 		type TEXT NOT NULL DEFAULT 'custom',
 		status TEXT NOT NULL DEFAULT 'planned',
-		due_date DATETIME NOT NULL,
-		start_date DATETIME,
-		completed_at DATETIME,
+		due_date TIMESTAMP NOT NULL,
+		start_date TIMESTAMP,
+		completed_at TIMESTAMP,
 		parent_id TEXT,
 		tags_json TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
 		FOREIGN KEY (parent_id) REFERENCES milestones(id) ON DELETE SET NULL
 	);
@@ -100,11 +100,11 @@ func (d *Database) migrateMotivations() error {
 	}
 
 	// Add due_date column to projects if it doesn't exist
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN due_date DATETIME")
+	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN due_date TIMESTAMP")
 
 	// Add milestone tracking columns to beads (if a beads table exists)
 	// Note: beads are typically managed by the bd CLI, but we add columns for completeness
-	_, _ = d.db.Exec("ALTER TABLE beads ADD COLUMN due_date DATETIME")
+	_, _ = d.db.Exec("ALTER TABLE beads ADD COLUMN due_date TIMESTAMP")
 	_, _ = d.db.Exec("ALTER TABLE beads ADD COLUMN milestone_id TEXT")
 	_, _ = d.db.Exec("ALTER TABLE beads ADD COLUMN estimated_time INTEGER")
 

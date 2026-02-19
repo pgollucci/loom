@@ -37,12 +37,12 @@ func NewDatabaseStorage(db *sql.DB) (*DatabaseStorage, error) {
 	return storage, nil
 }
 
-// initSchema creates the request_logs table
+// initSchema creates the analytics_request_logs table
 func (s *DatabaseStorage) initSchema() error {
 	schema := `
-	CREATE TABLE IF NOT EXISTS request_logs (
+	CREATE TABLE IF NOT EXISTS analytics_request_logs (
 		id TEXT PRIMARY KEY,
-		timestamp DATETIME NOT NULL,
+		timestamp TIMESTAMP NOT NULL,
 		user_id TEXT NOT NULL,
 		method TEXT NOT NULL,
 		path TEXT NOT NULL,
@@ -58,13 +58,13 @@ func (s *DatabaseStorage) initSchema() error {
 		request_body TEXT,
 		response_body TEXT,
 		metadata_json TEXT,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs(timestamp);
-	CREATE INDEX IF NOT EXISTS idx_request_logs_user_id ON request_logs(user_id);
-	CREATE INDEX IF NOT EXISTS idx_request_logs_provider_id ON request_logs(provider_id);
-	CREATE INDEX IF NOT EXISTS idx_request_logs_created_at ON request_logs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_analytics_request_logs_timestamp ON analytics_request_logs(timestamp);
+	CREATE INDEX IF NOT EXISTS idx_analytics_request_logs_user_id ON analytics_request_logs(user_id);
+	CREATE INDEX IF NOT EXISTS idx_analytics_request_logs_provider_id ON analytics_request_logs(provider_id);
+	CREATE INDEX IF NOT EXISTS idx_analytics_request_logs_created_at ON analytics_request_logs(created_at);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -79,7 +79,7 @@ func (s *DatabaseStorage) SaveLog(ctx context.Context, log *RequestLog) error {
 	}
 
 	query := rebindQuery(`
-		INSERT INTO request_logs (
+		INSERT INTO analytics_request_logs (
 			id, timestamp, user_id, method, path, provider_id, model_name,
 			prompt_tokens, completion_tokens, total_tokens, latency_ms,
 			status_code, cost_usd, error_message, request_body, response_body,
@@ -118,7 +118,7 @@ func (s *DatabaseStorage) GetLogs(ctx context.Context, filter *LogFilter) ([]*Re
 			prompt_tokens, completion_tokens, total_tokens, latency_ms,
 			status_code, cost_usd, error_message, request_body, response_body,
 			metadata_json
-		FROM request_logs
+		FROM analytics_request_logs
 		WHERE 1=1
 	`
 	args := []interface{}{}
@@ -210,7 +210,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 			COALESCE(SUM(cost_usd), 0) as total_cost,
 			COALESCE(AVG(latency_ms), 0) as avg_latency,
 			COALESCE(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END), 0) as error_count
-		FROM request_logs
+		FROM analytics_request_logs
 		WHERE 1=1
 	`
 	args := []interface{}{}
@@ -266,7 +266,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 	userQuery := fmt.Sprintf(`
 		SELECT user_id, COUNT(*) as count, COALESCE(SUM(cost_usd), 0) as cost,
 		       COALESCE(SUM(total_tokens), 0) as tokens
-		FROM request_logs
+		FROM analytics_request_logs
 		WHERE 1=1 %s AND user_id IS NOT NULL AND user_id != ''
 		GROUP BY user_id
 	`, buildWhereClause(filter))
@@ -291,7 +291,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 	providerQuery := fmt.Sprintf(`
 		SELECT provider_id, COUNT(*) as count, COALESCE(SUM(cost_usd), 0) as cost,
 		       COALESCE(SUM(total_tokens), 0) as tokens, COALESCE(AVG(latency_ms), 0) as avg_latency
-		FROM request_logs
+		FROM analytics_request_logs
 		WHERE 1=1 %s AND provider_id IS NOT NULL AND provider_id != ''
 		GROUP BY provider_id
 	`, buildWhereClause(filter))
@@ -319,7 +319,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 
 // DeleteOldLogs removes logs older than the specified time
 func (s *DatabaseStorage) DeleteOldLogs(ctx context.Context, before time.Time) (int64, error) {
-	result, err := s.db.ExecContext(ctx, rebindQuery("DELETE FROM request_logs WHERE timestamp < ?"), before)
+	result, err := s.db.ExecContext(ctx, rebindQuery("DELETE FROM analytics_request_logs WHERE timestamp < ?"), before)
 	if err != nil {
 		return 0, err
 	}

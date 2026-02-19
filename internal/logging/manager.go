@@ -91,11 +91,7 @@ func (m *Manager) initSchema() error {
 			agent_id TEXT,
 			bead_id TEXT,
 			project_id TEXT,
-			provider_id TEXT,
-			FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL,
-			FOREIGN KEY (bead_id) REFERENCES beads(id) ON DELETE SET NULL,
-			FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-			FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
+			provider_id TEXT
 		)
 	`)
 	if err != nil {

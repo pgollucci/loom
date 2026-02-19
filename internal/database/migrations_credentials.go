@@ -15,9 +15,9 @@ func (d *Database) migrateCredentials() error {
 		public_key TEXT NOT NULL,
 		key_id TEXT,
 		description TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		rotated_at DATETIME,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
+		rotated_at TIMESTAMP,
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 	);
 

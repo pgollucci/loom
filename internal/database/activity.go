@@ -78,7 +78,7 @@ func (d *Database) GetRecentAggregatableActivity(aggregationKey string, since ti
 			   resource_id, resource_title, metadata_json, aggregation_key,
 			   aggregation_count, is_aggregated, visibility
 		FROM activity_feed
-		WHERE aggregation_key = ? AND timestamp >= ? AND is_aggregated = 1
+		WHERE aggregation_key = ? AND timestamp >= ? AND is_aggregated = true
 		ORDER BY timestamp DESC
 		LIMIT 1
 	`
@@ -135,7 +135,7 @@ func (d *Database) GetRecentAggregatableActivity(aggregationKey string, since ti
 func (d *Database) UpdateAggregatedActivity(activityID string, newCount int) error {
 	query := `
 		UPDATE activity_feed
-		SET aggregation_count = ?, is_aggregated = 1
+		SET aggregation_count = ?, is_aggregated = true
 		WHERE id = ?
 	`
 
@@ -540,7 +540,7 @@ func (d *Database) UpsertNotificationPreferences(prefs *NotificationPreferences)
 func (d *Database) CreateUser(id, username, email, role string) error {
 	query := `
 		INSERT INTO users (id, username, email, role, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, ?, ?)
+		VALUES (?, ?, ?, ?, true, ?, ?)
 	`
 
 	now := time.Now()
@@ -557,7 +557,7 @@ func (d *Database) ListUsers() ([]struct {
 	Email    string
 	Role     string
 }, error) {
-	query := `SELECT id, username, email, role FROM users WHERE is_active = 1`
+	query := `SELECT id, username, email, role FROM users WHERE is_active = true`
 
 	rows, err := d.db.Query(query)
 	if err != nil {

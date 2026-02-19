@@ -923,6 +923,7 @@ func (s *Server) importTableData(tx *sql.Tx, tableName string, rows []map[string
 	// Build INSERT statement based on strategy
 	var query string
 	if strategy == "merge" {
+		// merge = insert new rows, skip existing (preserve current data)
 		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
 			tableName, strings.Join(columns, ","), placeholders)
 	} else if strategy == "fail-on-conflict" {

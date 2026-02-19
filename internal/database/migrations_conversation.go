@@ -17,9 +17,9 @@ func (d *Database) migrateConversations() error {
 		bead_id TEXT NOT NULL,
 		project_id TEXT NOT NULL,
 		messages TEXT NOT NULL DEFAULT '[]',
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		expires_at DATETIME NOT NULL,
+		created_at TIMESTAMP NOT NULL,
+		updated_at TIMESTAMP NOT NULL,
+		expires_at TIMESTAMP NOT NULL,
 		token_count INTEGER NOT NULL DEFAULT 0,
 		metadata TEXT NOT NULL DEFAULT '{}'
 	);

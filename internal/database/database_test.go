@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -13,15 +14,91 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
-// newTestDB creates a PostgreSQL database for testing.
-// Skips the test if POSTGRES_HOST (or equivalent env vars) is not configured.
+// pgParams returns connection parameters from environment variables.
+func pgParams() (host, port, user, password string) {
+	host = os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port = os.Getenv("POSTGRES_PORT")
+	if port == "" {
+		port = "5432"
+	}
+	user = os.Getenv("POSTGRES_USER")
+	if user == "" {
+		user = "loom"
+	}
+	password = os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		password = "loom"
+	}
+	return
+}
+
+// newTestDB creates a fresh, isolated PostgreSQL database for each test.
+// It connects to the postgres system database to CREATE the test DB, then
+// runs ALL schema migrations via NewFromEnv() (pointing at the new DB),
+// and registers a t.Cleanup that DROPs the DB when done.
+// Skips the test if postgres is not available.
 func newTestDB(t *testing.T) *Database {
 	t.Helper()
-	db, err := NewFromEnv()
+
+	host, port, user, password := pgParams()
+	adminDSN := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5",
+		host, port, user, password,
+	)
+
+	adminDB, err := sql.Open("postgres", adminDSN)
 	if err != nil {
 		t.Skipf("Skipping: postgres not available: %v", err)
+		return nil
 	}
-	t.Cleanup(func() { db.Close() })
+	if err := adminDB.Ping(); err != nil {
+		adminDB.Close()
+		t.Skipf("Skipping: postgres not reachable: %v", err)
+		return nil
+	}
+
+	// Unique test database name — safe for parallel tests
+	testDBName := fmt.Sprintf("loom_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE DATABASE "` + testDBName + `"`); err != nil {
+		adminDB.Close()
+		t.Skipf("Skipping: cannot create test database %q: %v", testDBName, err)
+		return nil
+	}
+	adminDB.Close()
+
+	// Point NewFromEnv() at the freshly created test database.
+	// t.Setenv restores the original value when the test ends.
+	t.Setenv("POSTGRES_HOST", host)
+	t.Setenv("POSTGRES_PORT", port)
+	t.Setenv("POSTGRES_USER", user)
+	t.Setenv("POSTGRES_PASSWORD", password)
+	t.Setenv("POSTGRES_DB", testDBName)
+
+	db, err := NewFromEnv() // runs ALL migrations
+	if err != nil {
+		// Best-effort cleanup
+		if a, e := sql.Open("postgres", adminDSN); e == nil {
+			a.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`)
+			a.Close()
+		}
+		t.Fatalf("Failed to initialise test database %q: %v", testDBName, err)
+		return nil
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+		// Drop the isolated test database
+		if a, e := sql.Open("postgres", adminDSN); e == nil {
+			defer a.Close()
+			if _, err := a.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`); err != nil {
+				t.Logf("Warning: could not drop test database %q: %v", testDBName, err)
+			}
+		}
+	})
+
 	return db
 }
 
@@ -533,7 +610,7 @@ func TestUpsertAgent_Update(t *testing.T) {
 
 func TestUpsertAgent_WithTimestamps(t *testing.T) {
 	db := newTestDB(t)
-	now := time.Now().Add(-1 * time.Hour) // set explicit past time
+	now := time.Now().UTC().Add(-1 * time.Hour) // set explicit past time (UTC to avoid timezone mismatch)
 	a := makeTestAgent("agent-ts", "Timestamp Agent")
 	a.StartedAt = now
 	a.LastActive = now
@@ -752,7 +829,7 @@ func TestCreateProvider(t *testing.T) {
 	// scan, so reading back via those methods encounters NULL-to-string scan
 	// errors. We verify persistence with a simple count query.
 	var count int
-	err := db.DB().QueryRow("SELECT COUNT(*) FROM providers WHERE id = ?", "prov-create").Scan(&count)
+	err := db.DB().QueryRow("SELECT COUNT(*) FROM providers WHERE id = $1", "prov-create").Scan(&count)
 	if err != nil {
 		t.Fatalf("Count query failed: %v", err)
 	}
@@ -2766,9 +2843,10 @@ func TestListWorkflowHistory_Empty(t *testing.T) {
 
 func TestDistributed_NoHA(t *testing.T) {
 	db := newTestDB(t)
+	db.supportsHA = false // simulate non-HA mode
 	ctx := context.Background()
 
-	// AcquireLock should fail because SQLite does not support HA
+	// AcquireLock should fail because HA is not supported
 	_, err := db.AcquireLock(ctx, "test-lock", 10*time.Second)
 	if err == nil {
 		t.Fatal("Expected error for AcquireLock on non-HA database, got nil")
@@ -2827,7 +2905,7 @@ func TestWithTransaction_Success(t *testing.T) {
 
 	// Use a transaction to insert a config value
 	err := db.WithTransaction(ctx, func(tx *sql.Tx) error {
-		_, err := tx.Exec("INSERT INTO config_kv (key, value, updated_at) VALUES (?, ?, ?)",
+		_, err := tx.Exec("INSERT INTO config_kv (key, value, updated_at) VALUES ($1, $2, $3)",
 			"tx-key", "tx-value", time.Now())
 		return err
 	})
