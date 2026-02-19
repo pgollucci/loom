@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/pkg/models"
@@ -55,12 +56,20 @@ func (s *Server) handleProjectAgents(w http.ResponseWriter, r *http.Request, id 
 	switch req.Action {
 	case "assign":
 		if err := s.app.AssignAgentToProject(req.AgentID, id); err != nil {
-			s.respondError(w, http.StatusInternalServerError, err.Error())
+			if strings.Contains(err.Error(), "not found") {
+				s.respondError(w, http.StatusNotFound, err.Error())
+			} else {
+				s.respondError(w, http.StatusInternalServerError, err.Error())
+			}
 			return
 		}
 	case "unassign":
 		if err := s.app.UnassignAgentFromProject(req.AgentID, id); err != nil {
-			s.respondError(w, http.StatusInternalServerError, err.Error())
+			if strings.Contains(err.Error(), "not found") {
+				s.respondError(w, http.StatusNotFound, err.Error())
+			} else {
+				s.respondError(w, http.StatusInternalServerError, err.Error())
+			}
 			return
 		}
 	default:
