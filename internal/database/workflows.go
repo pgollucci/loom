@@ -36,7 +36,7 @@ func (d *Database) UpsertWorkflow(wf *workflow.Workflow) error {
 		projectID = wf.ProjectID
 	}
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		wf.ID,
 		wf.Name,
 		wf.Description,
@@ -59,7 +59,7 @@ func (d *Database) GetWorkflow(id string) (*workflow.Workflow, error) {
 
 	wf := &workflow.Workflow{}
 	var projectID sql.NullString
-	err := d.db.QueryRow(query, id).Scan(
+	err := d.db.QueryRow(rebind(query), id).Scan(
 		&wf.ID,
 		&wf.Name,
 		&wf.Description,
@@ -118,7 +118,7 @@ func (d *Database) ListWorkflows(workflowType, projectID string) ([]*workflow.Wo
 
 	query += " ORDER BY is_default DESC, created_at DESC"
 
-	rows, err := d.db.Query(query, args...)
+	rows, err := d.db.Query(rebind(query), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (d *Database) UpsertWorkflowNode(node *workflow.WorkflowNode) error {
 			metadata_json = excluded.metadata_json
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		node.ID,
 		node.WorkflowID,
 		node.NodeKey,
@@ -219,7 +219,7 @@ func (d *Database) ListWorkflowNodes(workflowID string) ([]workflow.WorkflowNode
 		ORDER BY created_at ASC
 	`
 
-	rows, err := d.db.Query(query, workflowID)
+	rows, err := d.db.Query(rebind(query), workflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (d *Database) UpsertWorkflowEdge(edge *workflow.WorkflowEdge) error {
 		toNodeKey = edge.ToNodeKey
 	}
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		edge.ID,
 		edge.WorkflowID,
 		fromNodeKey,
@@ -307,7 +307,7 @@ func (d *Database) ListWorkflowEdges(workflowID string) ([]workflow.WorkflowEdge
 		ORDER BY priority DESC, created_at ASC
 	`
 
-	rows, err := d.db.Query(query, workflowID)
+	rows, err := d.db.Query(rebind(query), workflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func (d *Database) UpsertWorkflowExecution(exec *workflow.WorkflowExecution) err
 		currentNodeKey = exec.CurrentNodeKey
 	}
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		exec.ID,
 		exec.WorkflowID,
 		exec.BeadID,
@@ -401,7 +401,7 @@ func (d *Database) GetWorkflowExecution(id string) (*workflow.WorkflowExecution,
 	exec := &workflow.WorkflowExecution{}
 	var currentNodeKey sql.NullString
 	var completedAt, escalatedAt sql.NullTime
-	err := d.db.QueryRow(query, id).Scan(
+	err := d.db.QueryRow(rebind(query), id).Scan(
 		&exec.ID,
 		&exec.WorkflowID,
 		&exec.BeadID,
@@ -446,7 +446,7 @@ func (d *Database) GetWorkflowExecutionByBeadID(beadID string) (*workflow.Workfl
 	exec := &workflow.WorkflowExecution{}
 	var currentNodeKey sql.NullString
 	var completedAt, escalatedAt sql.NullTime
-	err := d.db.QueryRow(query, beadID).Scan(
+	err := d.db.QueryRow(rebind(query), beadID).Scan(
 		&exec.ID,
 		&exec.WorkflowID,
 		&exec.BeadID,
@@ -484,8 +484,8 @@ func (d *Database) GetWorkflowExecutionByBeadID(beadID string) (*workflow.Workfl
 // allowing a fresh workflow to be started (e.g., on redispatch).
 func (d *Database) DeleteWorkflowExecutionByBeadID(beadID string) error {
 	// Delete history first (foreign key)
-	_, _ = d.db.Exec("DELETE FROM workflow_execution_history WHERE execution_id IN (SELECT id FROM workflow_executions WHERE bead_id = ?)", beadID)
-	_, err := d.db.Exec("DELETE FROM workflow_executions WHERE bead_id = ?", beadID)
+	_, _ = d.db.Exec(rebind("DELETE FROM workflow_execution_history WHERE execution_id IN (SELECT id FROM workflow_executions WHERE bead_id = ?)"), beadID)
+	_, err := d.db.Exec(rebind("DELETE FROM workflow_executions WHERE bead_id = ?"), beadID)
 	return err
 }
 
@@ -503,7 +503,7 @@ func (d *Database) InsertWorkflowHistory(history *workflow.WorkflowExecutionHist
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		history.ID,
 		history.ExecutionID,
 		history.NodeKey,
@@ -525,7 +525,7 @@ func (d *Database) ListWorkflowHistory(executionID string) ([]*workflow.Workflow
 		ORDER BY created_at ASC
 	`
 
-	rows, err := d.db.Query(query, executionID)
+	rows, err := d.db.Query(rebind(query), executionID)
 	if err != nil {
 		return nil, err
 	}

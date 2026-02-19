@@ -64,11 +64,10 @@ type ServerConfig struct {
 	IdleTimeout  time.Duration `yaml:"idle_timeout"`
 }
 
-// DatabaseConfig configures the local storage
+// DatabaseConfig configures the PostgreSQL database connection
 type DatabaseConfig struct {
-	Type string `yaml:"type"` // "sqlite", "postgres"
-	Path string `yaml:"path"` // For SQLite
-	DSN  string `yaml:"dsn"`  // For Postgres
+	Type string `yaml:"type"` // "postgres" (only supported value)
+	DSN  string `yaml:"dsn"`  // PostgreSQL DSN (optional; env vars used if empty)
 }
 
 // BeadsConfig configures beads integration
@@ -284,8 +283,7 @@ func DefaultConfig() *Config {
 			IdleTimeout:  120 * time.Second,
 		},
 		Database: DatabaseConfig{
-			Type: "sqlite",
-			Path: "./loom.db",
+			Type: "postgres",
 		},
 		Beads: BeadsConfig{
 			BDPath:         "bd",

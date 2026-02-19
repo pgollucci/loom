@@ -1,7 +1,6 @@
 package database
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -9,15 +8,7 @@ import (
 )
 
 func TestConversationContext_CRUD(t *testing.T) {
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	// Create conversation context
 	ctx := models.NewConversationContext(
@@ -174,15 +165,7 @@ func TestConversationContext_CRUD(t *testing.T) {
 }
 
 func TestDeleteExpiredConversationContexts(t *testing.T) {
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	// Create expired conversation
 	expiredCtx := models.NewConversationContext(
@@ -239,15 +222,7 @@ func TestDeleteExpiredConversationContexts(t *testing.T) {
 }
 
 func TestResetConversationMessages_NoSystemMessage(t *testing.T) {
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	// Create conversation without system message
 	ctx := models.NewConversationContext(

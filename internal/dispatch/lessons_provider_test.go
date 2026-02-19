@@ -1,7 +1,6 @@
 package dispatch
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +8,16 @@ import (
 	"github.com/jordanhubbard/loom/internal/memory"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
+
+func newTestDB(t *testing.T) *database.Database {
+	t.Helper()
+	db, err := database.NewFromEnv()
+	if err != nil {
+		t.Skipf("Skipping: postgres not available: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
 
 func TestNewLessonsProvider_NilDB(t *testing.T) {
 	lp := NewLessonsProvider(nil)
@@ -18,14 +27,7 @@ func TestNewLessonsProvider_NilDB(t *testing.T) {
 }
 
 func TestNewLessonsProvider_ValidDB(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 	if lp == nil {
@@ -42,14 +44,7 @@ func TestNewLessonsProvider_ValidDB(t *testing.T) {
 }
 
 func TestLessonsProvider_SetEmbedder(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 	if lp == nil {
@@ -66,14 +61,7 @@ func TestLessonsProvider_SetEmbedder(t *testing.T) {
 }
 
 func TestLessonsProvider_SetEmbedder_NilCases(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 	originalEmbedder := lp.embedder
@@ -127,14 +115,7 @@ func TestLessonsProvider_GetLessonsForPrompt_NilCases(t *testing.T) {
 }
 
 func TestLessonsProvider_GetLessonsForPrompt_NoLessons(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
@@ -145,14 +126,7 @@ func TestLessonsProvider_GetLessonsForPrompt_NoLessons(t *testing.T) {
 }
 
 func TestLessonsProvider_GetLessonsForPrompt_WithLessons(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
@@ -256,14 +230,7 @@ func TestLessonsProvider_GetRelevantLessons_NilCases(t *testing.T) {
 }
 
 func TestLessonsProvider_GetRelevantLessons_EmptyContext(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
@@ -276,14 +243,7 @@ func TestLessonsProvider_GetRelevantLessons_EmptyContext(t *testing.T) {
 }
 
 func TestLessonsProvider_GetRelevantLessons_DefaultTopK(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
@@ -296,19 +256,12 @@ func TestLessonsProvider_GetRelevantLessons_DefaultTopK(t *testing.T) {
 }
 
 func TestLessonsProvider_GetRelevantLessons_WithEmbeddings(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
 	// Store lessons with embeddings via RecordLesson (which embeds automatically)
-	err = lp.RecordLesson("proj-1", "compiler_error", "Missing import", "Always check imports", "bead-1", "agent-1")
+	err := lp.RecordLesson("proj-1", "compiler_error", "Missing import", "Always check imports", "bead-1", "agent-1")
 	if err != nil {
 		t.Fatalf("Failed to record lesson: %v", err)
 	}
@@ -347,18 +300,11 @@ func TestLessonsProvider_RecordLesson_NilCases(t *testing.T) {
 }
 
 func TestLessonsProvider_RecordLesson_Success(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
-	err = lp.RecordLesson("proj-1", "compiler_error", "Missing import", "Always check imports", "bead-1", "agent-1")
+	err := lp.RecordLesson("proj-1", "compiler_error", "Missing import", "Always check imports", "bead-1", "agent-1")
 	if err != nil {
 		t.Fatalf("RecordLesson failed: %v", err)
 	}
@@ -396,21 +342,14 @@ func TestLessonsProvider_RecordLesson_Success(t *testing.T) {
 }
 
 func TestLessonsProvider_RecordLesson_WithoutEmbedder(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := &LessonsProvider{
 		db:       db,
 		embedder: nil, // No embedder
 	}
 
-	err = lp.RecordLesson("proj-1", "test_failure", "Flaky test", "Network dependency", "bead-2", "agent-2")
+	err := lp.RecordLesson("proj-1", "test_failure", "Flaky test", "Network dependency", "bead-2", "agent-2")
 	if err != nil {
 		t.Fatalf("RecordLesson without embedder failed: %v", err)
 	}
@@ -427,21 +366,14 @@ func TestLessonsProvider_RecordLesson_WithoutEmbedder(t *testing.T) {
 }
 
 func TestLessonsProvider_RecordMultipleLessons(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 
 	categories := []string{"compiler_error", "test_failure", "edit_failure", "loop_pattern", "conversation_insight"}
 
 	for i, cat := range categories {
-		err = lp.RecordLesson("proj-1", cat, "Title "+cat, "Detail "+cat, "bead-"+cat, "agent-1")
+		err := lp.RecordLesson("proj-1", cat, "Title "+cat, "Detail "+cat, "bead-"+cat, "agent-1")
 		if err != nil {
 			t.Fatalf("RecordLesson %d failed: %v", i, err)
 		}
@@ -458,14 +390,7 @@ func TestLessonsProvider_RecordMultipleLessons(t *testing.T) {
 }
 
 func TestLessonsProvider_GetLessonsForDifferentProjects(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	lp := NewLessonsProvider(db)
 

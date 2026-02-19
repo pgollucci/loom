@@ -148,29 +148,23 @@ func New(cfg *config.Config) (*Loom, error) {
 		eb = eventbus.NewEventBus(nil, &cfg.Temporal)
 	}
 
-	// Initialize database if configured
-	// Priority: 1) Environment variables (DB_TYPE, POSTGRES_*), 2) Config file
+	// Initialize PostgreSQL database.
+	// Config DSN takes priority; otherwise fall back to environment variables (POSTGRES_HOST, etc.)
 	var db *database.Database
-	dbType := os.Getenv("DB_TYPE")
-	if dbType != "" {
-		// Use environment-based initialization
-		var err error
-		db, err = database.NewFromEnv()
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize database from environment: %w", err)
-		}
-		log.Printf("Initialized %s database from environment variables", dbType)
-	} else if cfg.Database.Type == "sqlite" && cfg.Database.Path != "" {
-		var err error
-		db, err = database.New(cfg.Database.Path)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize database: %w", err)
-		}
-	} else if cfg.Database.Type == "postgres" && cfg.Database.DSN != "" {
+	if cfg.Database.DSN != "" {
 		var err error
 		db, err = database.NewPostgres(cfg.Database.DSN)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize postgres: %w", err)
+		}
+		log.Printf("Initialized postgres database from config DSN")
+	} else {
+		var err error
+		db, err = database.NewFromEnv()
+		if err != nil {
+			log.Printf("Warning: failed to initialize database: %v (running without persistence)", err)
+		} else {
+			log.Printf("Initialized postgres database from environment")
 		}
 	}
 

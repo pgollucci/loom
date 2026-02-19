@@ -340,8 +340,7 @@ func createTestLoom(t *testing.T) (*loom.Loom, func()) {
 			MaxConcurrent:      10,
 		},
 		Database: config.DatabaseConfig{
-			Type: "sqlite",
-			Path: ":memory:",
+			Type: "postgres",
 		},
 		Git: config.GitConfig{
 			ProjectKeyDir: tmpDir,

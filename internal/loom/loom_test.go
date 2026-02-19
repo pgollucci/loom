@@ -26,8 +26,7 @@ func testLoom(t *testing.T, opts ...func(*config.Config)) (*Loom, string) {
 			MaxConcurrent:      10,
 		},
 		Database: config.DatabaseConfig{
-			Type: "sqlite",
-			Path: ":memory:",
+			Type: "postgres",
 		},
 		Git: config.GitConfig{
 			ProjectKeyDir: tmpDir,

@@ -35,7 +35,7 @@ func (d *Database) AcquireLock(ctx context.Context, lockName string, ttl time.Du
 		ON CONFLICT (lock_name) DO NOTHING
 	`
 
-	result, err := d.db.ExecContext(ctx, query, lockName, instanceID, expiresAt)
+	result, err := d.db.ExecContext(ctx, rebind(query), lockName, instanceID, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
@@ -61,7 +61,7 @@ func (d *Database) AcquireLock(ctx context.Context, lockName string, ttl time.Du
 				SET instance_id = $1, expires_at = $2, heartbeat_at = CURRENT_TIMESTAMP, acquired_at = CURRENT_TIMESTAMP
 				WHERE lock_name = $3 AND expires_at < CURRENT_TIMESTAMP
 			`
-			result, err = d.db.ExecContext(ctx, query, instanceID, expiresAt, lockName)
+			result, err = d.db.ExecContext(ctx, rebind(query), instanceID, expiresAt, lockName)
 			if err != nil {
 				return nil, fmt.Errorf("failed to steal expired lock: %w", err)
 			}
@@ -165,7 +165,7 @@ func (d *Database) RegisterInstance(ctx context.Context, hostname string, metada
 		VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'active')
 	`
 
-	_, err := d.db.ExecContext(ctx, query, instanceID, hostname, metadataJSON)
+	_, err := d.db.ExecContext(ctx, rebind(query), instanceID, hostname, metadataJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to register instance: %w", err)
 	}
@@ -185,7 +185,7 @@ func (d *Database) HeartbeatInstance(ctx context.Context, instanceID string) err
 		WHERE instance_id = $1
 	`
 
-	result, err := d.db.ExecContext(ctx, query, instanceID)
+	result, err := d.db.ExecContext(ctx, rebind(query), instanceID)
 	if err != nil {
 		return fmt.Errorf("failed to update heartbeat: %w", err)
 	}
@@ -209,7 +209,7 @@ func (d *Database) UnregisterInstance(ctx context.Context, instanceID string) er
 		WHERE instance_id = $1
 	`
 
-	_, err := d.db.ExecContext(ctx, query, instanceID)
+	_, err := d.db.ExecContext(ctx, rebind(query), instanceID)
 	return err
 }
 
@@ -277,7 +277,7 @@ func (d *Database) CleanupStaleInstances(ctx context.Context, timeout time.Durat
 	`
 
 	cutoff := time.Now().Add(-timeout)
-	result, err := d.db.ExecContext(ctx, query, cutoff)
+	result, err := d.db.ExecContext(ctx, rebind(query), cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("failed to cleanup instances: %w", err)
 	}

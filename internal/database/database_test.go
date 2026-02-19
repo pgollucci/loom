@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,14 +13,13 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
-// newTestDB creates a fresh in-memory SQLite database for testing.
+// newTestDB creates a PostgreSQL database for testing.
+// Skips the test if POSTGRES_HOST (or equivalent env vars) is not configured.
 func newTestDB(t *testing.T) *Database {
 	t.Helper()
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-	db, err := New(dbPath)
+	db, err := NewFromEnv()
 	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
+		t.Skipf("Skipping: postgres not available: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
@@ -38,12 +36,10 @@ func TestNew_Success(t *testing.T) {
 	}
 }
 
-func TestNew_InvalidPath(t *testing.T) {
-	// A path that cannot be opened should produce an error during schema init
-	// (SQLite creates files, but a deeply nested non-existent dir should fail)
-	_, err := New("/nonexistent/deeply/nested/path/db.sqlite")
+func TestNew_InvalidDSN(t *testing.T) {
+	_, err := NewPostgres("postgres://invalid-host/db?connect_timeout=1")
 	if err == nil {
-		t.Fatal("Expected error for invalid database path, got nil")
+		t.Fatal("Expected error for invalid DSN, got nil")
 	}
 }
 
@@ -59,26 +55,24 @@ func TestDB_ReturnsUnderlyingDB(t *testing.T) {
 	}
 }
 
-func TestType_ReturnsSqlite(t *testing.T) {
+func TestType_ReturnsPostgres(t *testing.T) {
 	db := newTestDB(t)
-	if got := db.Type(); got != "sqlite" {
-		t.Errorf("Type() = %q, want %q", got, "sqlite")
+	if got := db.Type(); got != "postgres" {
+		t.Errorf("Type() = %q, want %q", got, "postgres")
 	}
 }
 
-func TestSupportsHA_ReturnsFalse(t *testing.T) {
+func TestSupportsHA_ReturnsTrue(t *testing.T) {
 	db := newTestDB(t)
-	if db.SupportsHA() {
-		t.Error("SupportsHA() should return false for SQLite")
+	if !db.SupportsHA() {
+		t.Error("SupportsHA() should return true for PostgreSQL")
 	}
 }
 
 func TestClose(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "close_test.db")
-	db, err := New(dbPath)
+	db, err := NewFromEnv()
 	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
+		t.Skipf("Skipping: postgres not available: %v", err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("Close() returned error: %v", err)

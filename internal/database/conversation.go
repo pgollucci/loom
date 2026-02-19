@@ -27,7 +27,7 @@ func (d *Database) CreateConversationContext(ctx *models.ConversationContext) er
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err = d.db.Exec(query,
+	_, err = d.db.Exec(rebind(query),
 		ctx.SessionID,
 		ctx.BeadID,
 		ctx.ProjectID,
@@ -57,7 +57,7 @@ func (d *Database) GetConversationContext(sessionID string) (*models.Conversatio
 	ctx := &models.ConversationContext{}
 	var messagesJSON, metadataJSON []byte
 
-	err := d.db.QueryRow(query, sessionID).Scan(
+	err := d.db.QueryRow(rebind(query), sessionID).Scan(
 		&ctx.SessionID,
 		&ctx.BeadID,
 		&ctx.ProjectID,
@@ -101,7 +101,7 @@ func (d *Database) GetConversationContextByBeadID(beadID string) (*models.Conver
 	ctx := &models.ConversationContext{}
 	var messagesJSON, metadataJSON []byte
 
-	err := d.db.QueryRow(query, beadID).Scan(
+	err := d.db.QueryRow(rebind(query), beadID).Scan(
 		&ctx.SessionID,
 		&ctx.BeadID,
 		&ctx.ProjectID,
@@ -149,7 +149,7 @@ func (d *Database) UpdateConversationContext(ctx *models.ConversationContext) er
 		WHERE session_id = ?
 	`
 
-	result, err := d.db.Exec(query,
+	result, err := d.db.Exec(rebind(query),
 		messagesJSON,
 		ctx.UpdatedAt,
 		ctx.TokenCount,
@@ -180,7 +180,7 @@ func (d *Database) DeleteConversationContext(sessionID string) error {
 		WHERE session_id = ?
 	`
 
-	result, err := d.db.Exec(query, sessionID)
+	result, err := d.db.Exec(rebind(query), sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete conversation context: %w", err)
 	}
@@ -205,7 +205,7 @@ func (d *Database) DeleteExpiredConversationContexts() (int64, error) {
 		WHERE expires_at < ?
 	`
 
-	result, err := d.db.Exec(query, time.Now())
+	result, err := d.db.Exec(rebind(query), time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired conversations: %w", err)
 	}
@@ -229,7 +229,7 @@ func (d *Database) ListConversationContextsByProject(projectID string, limit int
 		LIMIT ?
 	`
 
-	rows, err := d.db.Query(query, projectID, limit)
+	rows, err := d.db.Query(rebind(query), projectID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list conversation contexts: %w", err)
 	}

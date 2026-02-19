@@ -37,7 +37,7 @@ func newTestLoom(t *testing.T) (*Loom, string) {
 		Temporal: config.TemporalConfig{
 			Host: "",
 		},
-		Database: config.DatabaseConfig{Type: "", Path: ""},
+		Database: config.DatabaseConfig{Type: "postgres"},
 		Git: config.GitConfig{
 			ProjectKeyDir: keysDir,
 		},

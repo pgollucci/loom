@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/jordanhubbard/loom/internal/database"
 )
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := database.NewFromEnv()
 	if err != nil {
-		t.Fatalf("failed to open in-memory db: %v", err)
+		t.Skipf("Skipping: postgres not available: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return db
+	return db.DB()
 }
 
 func TestNewDatabaseStorage(t *testing.T) {

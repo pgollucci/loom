@@ -7,9 +7,6 @@ import (
 // migrateWorkflows adds the workflow system tables
 func (d *Database) migrateWorkflows() error {
 	// Skip migrations for PostgreSQL (schema is complete in initSchemaPostgres)
-	if d.dbType == "postgres" {
-		return nil
-	}
 
 	// Workflows table
 	workflowsSchema := `

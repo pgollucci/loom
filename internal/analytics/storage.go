@@ -8,7 +8,22 @@ import (
 	"time"
 )
 
-// DatabaseStorage implements Storage using SQLite
+// rebindQuery converts ? placeholders to $1, $2, ... for PostgreSQL.
+func rebindQuery(query string) string {
+	n := 0
+	out := make([]byte, 0, len(query)+16)
+	for i := 0; i < len(query); i++ {
+		if query[i] == '?' {
+			n++
+			out = append(out, []byte(fmt.Sprintf("$%d", n))...)
+		} else {
+			out = append(out, query[i])
+		}
+	}
+	return string(out)
+}
+
+// DatabaseStorage implements Storage using PostgreSQL
 type DatabaseStorage struct {
 	db *sql.DB
 }
@@ -63,14 +78,14 @@ func (s *DatabaseStorage) SaveLog(ctx context.Context, log *RequestLog) error {
 		metadataJSON = []byte("{}")
 	}
 
-	query := `
+	query := rebindQuery(`
 		INSERT INTO request_logs (
 			id, timestamp, user_id, method, path, provider_id, model_name,
 			prompt_tokens, completion_tokens, total_tokens, latency_ms,
 			status_code, cost_usd, error_message, request_body, response_body,
 			metadata_json
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	`)
 
 	_, err = s.db.ExecContext(ctx, query,
 		log.ID,
@@ -139,7 +154,7 @@ func (s *DatabaseStorage) GetLogs(ctx context.Context, filter *LogFilter) ([]*Re
 		}
 	}
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.db.QueryContext(ctx, rebindQuery(query), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +246,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 	}
 
 	var errorCount int64
-	row := s.db.QueryRowContext(ctx, baseQuery, args...)
+	row := s.db.QueryRowContext(ctx, rebindQuery(baseQuery), args...)
 	err := row.Scan(
 		&stats.TotalRequests,
 		&stats.TotalTokens,
@@ -256,7 +271,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 		GROUP BY user_id
 	`, buildWhereClause(filter))
 
-	rows, err := s.db.QueryContext(ctx, userQuery, buildWhereArgs(filter)...)
+	rows, err := s.db.QueryContext(ctx, rebindQuery(userQuery), buildWhereArgs(filter)...)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -281,7 +296,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 		GROUP BY provider_id
 	`, buildWhereClause(filter))
 
-	rows, err = s.db.QueryContext(ctx, providerQuery, buildWhereArgs(filter)...)
+	rows, err = s.db.QueryContext(ctx, rebindQuery(providerQuery), buildWhereArgs(filter)...)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -304,7 +319,7 @@ func (s *DatabaseStorage) GetLogStats(ctx context.Context, filter *LogFilter) (*
 
 // DeleteOldLogs removes logs older than the specified time
 func (s *DatabaseStorage) DeleteOldLogs(ctx context.Context, before time.Time) (int64, error) {
-	result, err := s.db.ExecContext(ctx, "DELETE FROM request_logs WHERE timestamp < ?", before)
+	result, err := s.db.ExecContext(ctx, rebindQuery("DELETE FROM request_logs WHERE timestamp < ?"), before)
 	if err != nil {
 		return 0, err
 	}

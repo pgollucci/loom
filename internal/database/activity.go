@@ -41,7 +41,7 @@ func (d *Database) CreateActivity(activity *Activity) error {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		activity.ID,
 		activity.EventType,
 		sqlNullString(activity.EventID),
@@ -86,7 +86,7 @@ func (d *Database) GetRecentAggregatableActivity(aggregationKey string, since ti
 	activity := &Activity{}
 	var eventID, actorID, actorType, projectID, agentID, beadID, providerID, resourceTitle, metadataJSON, aggKey sql.NullString
 
-	err := d.db.QueryRow(query, aggregationKey, since).Scan(
+	err := d.db.QueryRow(rebind(query), aggregationKey, since).Scan(
 		&activity.ID,
 		&activity.EventType,
 		&eventID,
@@ -139,7 +139,7 @@ func (d *Database) UpdateAggregatedActivity(activityID string, newCount int) err
 		WHERE id = ?
 	`
 
-	_, err := d.db.Exec(query, newCount, activityID)
+	_, err := d.db.Exec(rebind(query), newCount, activityID)
 	if err != nil {
 		return fmt.Errorf("failed to update aggregated activity: %w", err)
 	}
@@ -212,7 +212,7 @@ func (d *Database) ListActivities(filters ActivityFilters) ([]*Activity, error) 
 		args = append(args, filters.Offset)
 	}
 
-	rows, err := d.db.Query(query, args...)
+	rows, err := d.db.Query(rebind(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list activities: %w", err)
 	}
@@ -307,7 +307,7 @@ func (d *Database) CreateNotification(notification *Notification) error {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		notification.ID,
 		notification.UserID,
 		sqlNullString(notification.ActivityID),
@@ -356,7 +356,7 @@ func (d *Database) ListNotifications(userID string, status string, limit, offset
 		args = append(args, offset)
 	}
 
-	rows, err := d.db.Query(query, args...)
+	rows, err := d.db.Query(rebind(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list notifications: %w", err)
 	}
@@ -413,7 +413,7 @@ func (d *Database) MarkNotificationRead(notificationID string) error {
 		WHERE id = ? AND status = 'unread'
 	`
 
-	_, err := d.db.Exec(query, time.Now(), notificationID)
+	_, err := d.db.Exec(rebind(query), time.Now(), notificationID)
 	if err != nil {
 		return fmt.Errorf("failed to mark notification as read: %w", err)
 	}
@@ -428,7 +428,7 @@ func (d *Database) MarkAllNotificationsRead(userID string) error {
 		WHERE user_id = ? AND status = 'unread'
 	`
 
-	_, err := d.db.Exec(query, time.Now(), userID)
+	_, err := d.db.Exec(rebind(query), time.Now(), userID)
 	if err != nil {
 		return fmt.Errorf("failed to mark all notifications as read: %w", err)
 	}
@@ -464,7 +464,7 @@ func (d *Database) GetNotificationPreferences(userID string) (*NotificationPrefe
 	prefs := &NotificationPreferences{}
 	var subscribedEvents, quietStart, quietEnd, projectFilters sql.NullString
 
-	err := d.db.QueryRow(query, userID).Scan(
+	err := d.db.QueryRow(rebind(query), userID).Scan(
 		&prefs.ID,
 		&prefs.UserID,
 		&prefs.EnableInApp,
@@ -515,7 +515,7 @@ func (d *Database) UpsertNotificationPreferences(prefs *NotificationPreferences)
 			updated_at = excluded.updated_at
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		prefs.ID,
 		prefs.UserID,
 		prefs.EnableInApp,
@@ -544,7 +544,7 @@ func (d *Database) CreateUser(id, username, email, role string) error {
 	`
 
 	now := time.Now()
-	_, err := d.db.Exec(query, id, username, email, role, now, now)
+	_, err := d.db.Exec(rebind(query), id, username, email, role, now, now)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}

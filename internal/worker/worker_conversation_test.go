@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,6 +9,16 @@ import (
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
+
+func newTestDB(t *testing.T) *database.Database {
+	t.Helper()
+	db, err := database.NewFromEnv()
+	if err != nil {
+		t.Skipf("Skipping: postgres not available: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
 
 // MockProvider implements a simple mock provider for testing
 type MockConversationProvider struct {
@@ -55,15 +64,7 @@ func (m *MockConversationProvider) GetModels(ctx context.Context) ([]provider.Mo
 }
 
 func TestWorker_ExecuteTask_WithConversationContext(t *testing.T) {
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	// Create mock provider
 	mockProvider := &MockConversationProvider{
@@ -353,14 +354,7 @@ func TestWorker_buildConversationMessages(t *testing.T) {
 
 func TestWorker_ExpiredConversation(t *testing.T) {
 	// Test that expired conversations create new sessions
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	// Create expired conversation
 	expiredConv := models.NewConversationContext(
@@ -411,7 +405,7 @@ func TestWorker_ExpiredConversation(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err = worker.ExecuteTask(ctx, task)
+	_, err := worker.ExecuteTask(ctx, task)
 	if err != nil {
 		t.Fatalf("Failed to execute task: %v", err)
 	}

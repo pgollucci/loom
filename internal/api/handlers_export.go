@@ -913,17 +913,19 @@ func (s *Server) importTableData(tx *sql.Tx, tableName string, rows []map[string
 		columns = append(columns, col)
 	}
 
+	// Build PostgreSQL $N placeholders
+	phParts := make([]string, len(columns))
+	for i := range columns {
+		phParts[i] = fmt.Sprintf("$%d", i+1)
+	}
+	placeholders := strings.Join(phParts, ",")
+
 	// Build INSERT statement based on strategy
 	var query string
-	placeholders := strings.Repeat("?,", len(columns))
-	placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
-
 	if strategy == "merge" {
-		// Use INSERT OR REPLACE for merge strategy
-		query = fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES (%s)",
+		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING",
 			tableName, strings.Join(columns, ","), placeholders)
 	} else if strategy == "fail-on-conflict" {
-		// Use INSERT for fail-on-conflict
 		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 			tableName, strings.Join(columns, ","), placeholders)
 	} else if strategy == "replace" {

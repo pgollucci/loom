@@ -7,9 +7,6 @@ import (
 // migrateActivity creates the activity feed and notifications tables
 func (d *Database) migrateActivity() error {
 	// Skip migrations for PostgreSQL (schema is complete in initSchemaPostgres)
-	if d.dbType == "postgres" {
-		return nil
-	}
 
 	// Users table (persist users to database)
 	usersSchema := `

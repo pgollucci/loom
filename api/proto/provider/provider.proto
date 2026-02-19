@@ -1,0 +1,159 @@
+syntax = "proto3";
+
+package provider;
+
+option go_package = "github.com/jordanhubbard/loom/api/proto/provider";
+
+// ProviderService manages LLM provider operations
+service ProviderService {
+  // ChatCompletion performs a chat completion request
+  rpc ChatCompletion(ChatCompletionRequest) returns (ChatCompletionResponse);
+
+  // StreamChatCompletion performs a streaming chat completion request
+  rpc StreamChatCompletion(ChatCompletionRequest) returns (stream ChatCompletionChunk);
+
+  // ListProviders returns all registered providers
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+
+  // GetProvider retrieves a specific provider by ID
+  rpc GetProvider(GetProviderRequest) returns (GetProviderResponse);
+
+  // SelectProvider automatically selects the best provider for a task
+  rpc SelectProvider(SelectProviderRequest) returns (SelectProviderResponse);
+
+  // Health checks provider service health
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ChatMessage represents a message in a conversation
+message ChatMessage {
+  string role = 1;    // system, user, assistant
+  string content = 2; // message content
+}
+
+// ResponseFormat specifies output format
+message ResponseFormat {
+  string type = 1; // "text" or "json_object"
+}
+
+// ChatCompletionRequest is a request for chat completion
+message ChatCompletionRequest {
+  string provider_id = 1;              // Target provider ID
+  repeated ChatMessage messages = 2;   // Conversation messages
+  string model = 3;                    // Model name (optional, uses provider default)
+  float temperature = 4;               // Sampling temperature (0.0-2.0)
+  int32 max_tokens = 5;                // Maximum tokens to generate
+  ResponseFormat response_format = 6;  // Output format specification
+}
+
+// ChatCompletionResponse is the response from chat completion
+message ChatCompletionResponse {
+  string id = 1;
+  string object = 2;
+  int64 created = 3;
+  string model = 4;
+  repeated Choice choices = 5;
+  Usage usage = 6;
+}
+
+// Choice represents a completion choice
+message Choice {
+  int32 index = 1;
+  ChatMessage message = 2;
+  string finish_reason = 3;
+}
+
+// Usage tracks token usage
+message Usage {
+  int32 prompt_tokens = 1;
+  int32 completion_tokens = 2;
+  int32 total_tokens = 3;
+}
+
+// ChatCompletionChunk is a streaming response chunk
+message ChatCompletionChunk {
+  string id = 1;
+  string object = 2;
+  int64 created = 3;
+  string model = 4;
+  repeated ChunkChoice choices = 5;
+}
+
+// ChunkChoice represents a streaming choice
+message ChunkChoice {
+  int32 index = 1;
+  ChunkDelta delta = 2;
+  string finish_reason = 3;
+}
+
+// ChunkDelta represents the delta content in a stream
+message ChunkDelta {
+  string role = 1;
+  string content = 2;
+}
+
+// ProviderInfo contains provider metadata
+message ProviderInfo {
+  string id = 1;
+  string name = 2;
+  string type = 3;                   // openai, anthropic, local, ollama
+  string endpoint = 4;
+  string model = 5;
+  string status = 6;                 // pending, active, failed
+  int64 last_heartbeat_at = 7;       // Unix timestamp
+  int64 last_heartbeat_latency_ms = 8;
+  double capability_score = 9;
+  int32 context_window = 10;
+  double model_params_b = 11;        // Model parameters in billions
+  double cost_per_mtoken = 12;       // Cost per million tokens
+  double avg_latency_ms = 13;
+  int64 total_requests = 14;
+  int64 success_requests = 15;
+}
+
+// ListProvidersRequest requests all providers
+message ListProvidersRequest {
+  bool active_only = 1; // Filter for active providers only
+}
+
+// ListProvidersResponse returns provider list
+message ListProvidersResponse {
+  repeated ProviderInfo providers = 1;
+}
+
+// GetProviderRequest requests a specific provider
+message GetProviderRequest {
+  string provider_id = 1;
+}
+
+// GetProviderResponse returns provider details
+message GetProviderResponse {
+  ProviderInfo provider = 1;
+}
+
+// SelectProviderRequest asks for automatic provider selection
+message SelectProviderRequest {
+  string project_id = 1;             // Project context
+  string task_complexity = 2;        // simple, medium, complex, extended
+  int32 estimated_tokens = 3;        // Estimated input size
+  bool prefer_speed = 4;             // Prefer faster providers
+  bool prefer_quality = 5;           // Prefer higher quality models
+}
+
+// SelectProviderResponse returns the selected provider
+message SelectProviderResponse {
+  string provider_id = 1;
+  string model = 2;
+  string reason = 3;                 // Selection reasoning
+  double score = 4;                  // Provider score
+}
+
+// HealthRequest checks service health
+message HealthRequest {}
+
+// HealthResponse indicates health status
+message HealthResponse {
+  bool healthy = 1;
+  string message = 2;
+  int32 active_providers = 3;
+}

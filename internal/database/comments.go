@@ -39,7 +39,7 @@ func (d *Database) CreateComment(comment *BeadComment) error {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		comment.ID,
 		comment.BeadID,
 		sqlNullString(comment.ParentID),
@@ -68,7 +68,7 @@ func (d *Database) GetCommentsByBeadID(beadID string) ([]*BeadComment, error) {
 		ORDER BY created_at ASC
 	`
 
-	rows, err := d.db.Query(query, beadID)
+	rows, err := d.db.Query(rebind(query), beadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get comments: %w", err)
 	}
@@ -115,7 +115,7 @@ func (d *Database) GetComment(commentID string) (*BeadComment, error) {
 	comment := &BeadComment{}
 	var parentID sql.NullString
 
-	err := d.db.QueryRow(query, commentID).Scan(
+	err := d.db.QueryRow(rebind(query), commentID).Scan(
 		&comment.ID,
 		&comment.BeadID,
 		&parentID,
@@ -147,7 +147,7 @@ func (d *Database) UpdateComment(commentID, content string) error {
 		WHERE id = ? AND deleted = 0
 	`
 
-	result, err := d.db.Exec(query, content, time.Now(), commentID)
+	result, err := d.db.Exec(rebind(query), content, time.Now(), commentID)
 	if err != nil {
 		return fmt.Errorf("failed to update comment: %w", err)
 	}
@@ -172,7 +172,7 @@ func (d *Database) DeleteComment(commentID string) error {
 		WHERE id = ?
 	`
 
-	result, err := d.db.Exec(query, time.Now(), commentID)
+	result, err := d.db.Exec(rebind(query), time.Now(), commentID)
 	if err != nil {
 		return fmt.Errorf("failed to delete comment: %w", err)
 	}
@@ -198,7 +198,7 @@ func (d *Database) CreateMention(mention *CommentMention) error {
 		) VALUES (?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		mention.ID,
 		mention.CommentID,
 		mention.MentionedUserID,
@@ -222,7 +222,7 @@ func (d *Database) GetMentionsByComment(commentID string) ([]*CommentMention, er
 		WHERE comment_id = ?
 	`
 
-	rows, err := d.db.Query(query, commentID)
+	rows, err := d.db.Query(rebind(query), commentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mentions: %w", err)
 	}
@@ -264,7 +264,7 @@ func (d *Database) MarkMentionNotified(mentionID string) error {
 		WHERE id = ? AND notified_at IS NULL
 	`
 
-	_, err := d.db.Exec(query, time.Now(), mentionID)
+	_, err := d.db.Exec(rebind(query), time.Now(), mentionID)
 	if err != nil {
 		return fmt.Errorf("failed to mark mention as notified: %w", err)
 	}

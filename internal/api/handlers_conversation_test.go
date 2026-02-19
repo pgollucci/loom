@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,17 +18,20 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
+func newTestDB(t *testing.T) *database.Database {
+	t.Helper()
+	db, err := database.NewFromEnv()
+	if err != nil {
+		t.Skipf("Skipping: postgres not available: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
 func setupConversationTestServer(t *testing.T) (*Server, *database.Database, func()) {
 	t.Helper()
 
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
+	db := newTestDB(t)
 
 	// Try to create /app/src and /app/data directories for gitops
 	// If this fails (not root), skip the test
@@ -42,7 +44,7 @@ func setupConversationTestServer(t *testing.T) (*Server, *database.Database, fun
 
 	// Create minimal config
 	cfg := config.DefaultConfig()
-	cfg.Database.Path = dbPath
+	cfg.Database.Type = "postgres"
 
 	// Create loom instance
 	corp, err := loom.New(cfg)
@@ -52,7 +54,8 @@ func setupConversationTestServer(t *testing.T) (*Server, *database.Database, fun
 	}
 
 	// Create key manager and auth manager
-	kmPath := filepath.Join(tmpDir, "keys.json")
+	tmpDir := t.TempDir()
+	kmPath := tmpDir + "/keys.json"
 	km := keymanager.NewKeyManager(kmPath)
 	am := auth.NewManager(tmpDir)
 

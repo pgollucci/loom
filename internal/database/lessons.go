@@ -34,13 +34,7 @@ func (d *Database) migrateLessons() error {
 	}
 
 	// Add embedding column if it doesn't exist (migration)
-	// Use BLOB for SQLite, BYTEA for PostgreSQL
-	embeddingType := "BLOB"
-	if d.dbType == "postgres" {
-		embeddingType = "BYTEA"
-	}
-
-	query := fmt.Sprintf(`ALTER TABLE lessons ADD COLUMN embedding %s`, embeddingType)
+	query := `ALTER TABLE lessons ADD COLUMN embedding BYTEA`
 	_, err := d.db.Exec(query)
 	if err != nil {
 		// Column already exists — ignore the error
@@ -75,9 +69,9 @@ func (d *Database) CreateLesson(lesson *models.Lesson) error {
 		lesson.RelevanceScore = 1.0
 	}
 
-	_, err := d.db.Exec(`
+	_, err := d.db.Exec(rebind(`
 		INSERT INTO lessons (id, project_id, category, title, detail, source_bead_id, source_agent_id, relevance_score, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		lesson.ID, lesson.ProjectID, lesson.Category, lesson.Title, lesson.Detail,
 		lesson.SourceBeadID, lesson.SourceAgentID, lesson.RelevanceScore, lesson.CreatedAt,
 	)
@@ -91,12 +85,12 @@ func (d *Database) GetLessonsForProject(projectID string, limit int, maxChars in
 		limit = 20
 	}
 
-	rows, err := d.db.Query(`
+	rows, err := d.db.Query(rebind(`
 		SELECT id, project_id, category, title, detail, source_bead_id, source_agent_id, relevance_score, created_at
 		FROM lessons
 		WHERE project_id = ?
 		ORDER BY created_at DESC
-		LIMIT ?`,
+		LIMIT ?`),
 		projectID, limit,
 	)
 	if err != nil {
@@ -145,9 +139,9 @@ func (d *Database) StoreLessonWithEmbedding(lesson *models.Lesson, embedding []f
 
 	embBytes := memory.EncodeEmbedding(embedding)
 
-	_, err := d.db.Exec(`
+	_, err := d.db.Exec(rebind(`
 		INSERT INTO lessons (id, project_id, category, title, detail, source_bead_id, source_agent_id, relevance_score, created_at, embedding)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		lesson.ID, lesson.ProjectID, lesson.Category, lesson.Title, lesson.Detail,
 		lesson.SourceBeadID, lesson.SourceAgentID, lesson.RelevanceScore, lesson.CreatedAt, embBytes,
 	)
@@ -162,12 +156,12 @@ func (d *Database) SearchLessonsBySimilarity(projectID string, queryEmbedding []
 		topK = 5
 	}
 
-	rows, err := d.db.Query(`
+	rows, err := d.db.Query(rebind(`
 		SELECT id, project_id, category, title, detail, source_bead_id, source_agent_id, relevance_score, created_at, embedding
 		FROM lessons
 		WHERE project_id = ?
 		ORDER BY created_at DESC
-		LIMIT 200`,
+		LIMIT 200`),
 		projectID,
 	)
 	if err != nil {

@@ -16,7 +16,7 @@ func (d *Database) UpsertCredential(cred *models.Credential) error {
 	}
 	cred.UpdatedAt = now
 
-	_, err := d.db.Exec(`
+	_, err := d.db.Exec(rebind(`
 		INSERT INTO credentials (id, project_id, type, private_key_encrypted, public_key, key_id, description, created_at, updated_at, rotated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -26,7 +26,7 @@ func (d *Database) UpsertCredential(cred *models.Credential) error {
 			description = excluded.description,
 			updated_at = excluded.updated_at,
 			rotated_at = excluded.rotated_at
-	`, cred.ID, cred.ProjectID, cred.Type, cred.PrivateKeyEncrypted, cred.PublicKey,
+	`), cred.ID, cred.ProjectID, cred.Type, cred.PrivateKeyEncrypted, cred.PublicKey,
 		cred.KeyID, cred.Description, cred.CreatedAt, cred.UpdatedAt, cred.RotatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to upsert credential: %w", err)
@@ -36,27 +36,27 @@ func (d *Database) UpsertCredential(cred *models.Credential) error {
 
 // GetCredentialByProjectID retrieves a credential by project ID
 func (d *Database) GetCredentialByProjectID(projectID string) (*models.Credential, error) {
-	row := d.db.QueryRow(`
+	row := d.db.QueryRow(rebind(`
 		SELECT id, project_id, type, private_key_encrypted, public_key, key_id, description, created_at, updated_at, rotated_at
 		FROM credentials WHERE project_id = ? LIMIT 1
-	`, projectID)
+	`), projectID)
 
 	return scanCredential(row)
 }
 
 // GetCredential retrieves a credential by its ID
 func (d *Database) GetCredential(id string) (*models.Credential, error) {
-	row := d.db.QueryRow(`
+	row := d.db.QueryRow(rebind(`
 		SELECT id, project_id, type, private_key_encrypted, public_key, key_id, description, created_at, updated_at, rotated_at
 		FROM credentials WHERE id = ?
-	`, id)
+	`), id)
 
 	return scanCredential(row)
 }
 
 // DeleteCredential removes a credential from the database
 func (d *Database) DeleteCredential(id string) error {
-	_, err := d.db.Exec(`DELETE FROM credentials WHERE id = ?`, id)
+	_, err := d.db.Exec(rebind(`DELETE FROM credentials WHERE id = ?`), id)
 	if err != nil {
 		return fmt.Errorf("failed to delete credential: %w", err)
 	}

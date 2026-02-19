@@ -5,127 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	internalmodels "github.com/jordanhubbard/loom/internal/models"
 	"github.com/jordanhubbard/loom/pkg/models"
-	_ "github.com/lib/pq"           // PostgreSQL driver
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-// Database represents the loom database
+// Database represents the loom database (PostgreSQL only)
 type Database struct {
 	db         *sql.DB
-	dbType     string // "sqlite" or "postgres"
-	supportsHA bool   // true if database supports HA features
+	supportsHA bool
 }
 
 // New creates a new database instance and initializes the schema
-func New(dbPath string) (*Database, error) {
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	// SQLite in-memory databases are per-connection. Without limiting the pool
-	// to a single connection, new connections get a separate empty database.
-	if strings.Contains(dbPath, ":memory:") {
-		db.SetMaxOpenConns(1)
-	}
-
-	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
-	}
-
-	d := &Database{
-		db:         db,
-		dbType:     "sqlite",
-		supportsHA: false,
-	}
-
-	// Initialize schema
-	if err := d.initSchema(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
-	}
-
-	// Run migrations
-	if err := d.migrateProviderOwnership(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate provider ownership: %w", err)
-	}
-
-	if err := d.migrateProviderRouting(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate provider routing: %w", err)
-	}
-
-	if err := d.migrateProviderScoring(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate provider scoring: %w", err)
-	}
-
-	if err := d.migrateMotivations(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate motivations: %w", err)
-	}
-
-	if err := d.migrateWorkflows(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate workflows: %w", err)
-	}
-
-	if err := d.migrateActivity(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate activity: %w", err)
-	}
-
-	if err := d.migrateComments(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate comments: %w", err)
-	}
-
-	if err := d.migrateConversations(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate conversations: %w", err)
-	}
-
-	if err := migratePatterns(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate patterns: %w", err)
-	}
-
-	if err := d.migrateCredentials(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate credentials: %w", err)
-	}
-
-	if err := d.migrateLessons(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate lessons: %w", err)
-	}
-
-	return d, nil
-}
-
-// NewFromEnv creates a database instance using environment variables
-// Supports both PostgreSQL (when DB_TYPE=postgres) and SQLite (default)
+// NewFromEnv creates a PostgreSQL database instance from environment variables.
 func NewFromEnv() (*Database, error) {
-	dbType := os.Getenv("DB_TYPE")
-
-	if dbType == "postgres" || dbType == "postgresql" {
-		return NewPostgreSQL()
-	}
-
-	// Default to SQLite
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "/app/data/loom.db"
-	}
-	return New(dbPath)
+	return NewPostgreSQL()
 }
 
 // NewPostgreSQL creates a PostgreSQL database instance from environment variables
@@ -181,8 +77,7 @@ func NewPostgreSQL() (*Database, error) {
 
 	d := &Database{
 		db:         db,
-		dbType:     "postgres",
-		supportsHA: true, // PostgreSQL supports HA features
+		supportsHA: true,
 	}
 
 	// Initialize schema
@@ -262,209 +157,12 @@ func (d *Database) DB() *sql.DB {
 
 // Type returns the database type
 func (d *Database) Type() string {
-	return d.dbType
+	return "postgres"
 }
 
 // SupportsHA returns whether the database supports HA features
 func (d *Database) SupportsHA() bool {
 	return d.supportsHA
-}
-
-// initSchema creates the database tables
-func (d *Database) initSchema() error {
-	schema := `
-	-- Global configuration key-value store
-	CREATE TABLE IF NOT EXISTS config_kv (
-		key TEXT PRIMARY KEY,
-		value TEXT NOT NULL,
-		updated_at DATETIME NOT NULL
-	);
-
-	-- Global providers (shared across all projects)
-	CREATE TABLE IF NOT EXISTS providers (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		type TEXT NOT NULL,
-		endpoint TEXT NOT NULL,
-		model TEXT,
-		configured_model TEXT,
-		selected_model TEXT,
-		selection_reason TEXT,
-		model_score REAL,
-		selected_gpu TEXT,
-		gpu_constraints_json TEXT,
-		description TEXT,
-		requires_key BOOLEAN NOT NULL DEFAULT 0,
-		key_id TEXT,
-		owner_id TEXT,
-		is_shared BOOLEAN NOT NULL DEFAULT 1,
-		status TEXT NOT NULL DEFAULT 'active',
-		last_heartbeat_at DATETIME,
-		last_heartbeat_latency_ms INTEGER,
-		last_heartbeat_error TEXT,
-		metrics_json TEXT,
-		schema_version TEXT NOT NULL DEFAULT '1.0',
-		attributes_json TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL
-	);
-
-	-- Projects with hierarchy support (parent_id for sub-projects)
-	CREATE TABLE IF NOT EXISTS projects (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		git_repo TEXT NOT NULL,
-		branch TEXT NOT NULL,
-		beads_path TEXT NOT NULL,
-		parent_id TEXT,
-		is_perpetual BOOLEAN NOT NULL DEFAULT 0,
-		is_sticky BOOLEAN NOT NULL DEFAULT 0,
-		git_strategy TEXT NOT NULL DEFAULT 'direct',
-		git_auth_method TEXT NOT NULL DEFAULT 'none',
-		status TEXT NOT NULL DEFAULT 'open',
-		context_json TEXT,
-		schema_version TEXT NOT NULL DEFAULT '1.0',
-		attributes_json TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		closed_at DATETIME,
-		FOREIGN KEY (parent_id) REFERENCES projects(id) ON DELETE SET NULL
-	);
-
-	-- Org charts define the team structure for each project
-	CREATE TABLE IF NOT EXISTS org_charts (
-		id TEXT PRIMARY KEY,
-		project_id TEXT NOT NULL,
-		name TEXT NOT NULL,
-		is_template BOOLEAN NOT NULL DEFAULT 0,
-		parent_id TEXT,
-		schema_version TEXT NOT NULL DEFAULT '1.0',
-		attributes_json TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-		FOREIGN KEY (parent_id) REFERENCES org_charts(id) ON DELETE SET NULL
-	);
-
-	-- Positions within an org chart (role slots)
-	CREATE TABLE IF NOT EXISTS org_chart_positions (
-		id TEXT PRIMARY KEY,
-		org_chart_id TEXT NOT NULL,
-		role_name TEXT NOT NULL,
-		persona_path TEXT NOT NULL,
-		required BOOLEAN NOT NULL DEFAULT 0,
-		max_instances INTEGER NOT NULL DEFAULT 0,
-		reports_to TEXT,
-		schema_version TEXT NOT NULL DEFAULT '1.0',
-		attributes_json TEXT,
-		created_at DATETIME NOT NULL,
-		FOREIGN KEY (org_chart_id) REFERENCES org_charts(id) ON DELETE CASCADE,
-		FOREIGN KEY (reports_to) REFERENCES org_chart_positions(id) ON DELETE SET NULL
-	);
-
-	-- Agent instances assigned to positions
-	CREATE TABLE IF NOT EXISTS agents (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		role TEXT,
-		persona_name TEXT,
-		provider_id TEXT,
-		status TEXT NOT NULL DEFAULT 'idle',
-		current_bead TEXT,
-		project_id TEXT,
-		position_id TEXT,
-		schema_version TEXT NOT NULL DEFAULT '1.0',
-		attributes_json TEXT,
-		started_at DATETIME NOT NULL,
-		last_active DATETIME NOT NULL,
-		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
-		FOREIGN KEY (position_id) REFERENCES org_chart_positions(id) ON DELETE SET NULL,
-		FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
-	);
-
-	-- Indexes for performance
-	CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
-	CREATE INDEX IF NOT EXISTS idx_agents_project_id ON agents(project_id);
-	CREATE INDEX IF NOT EXISTS idx_agents_position_id ON agents(position_id);
-	CREATE INDEX IF NOT EXISTS idx_providers_status ON providers(status);
-	CREATE INDEX IF NOT EXISTS idx_projects_parent_id ON projects(parent_id);
-	CREATE INDEX IF NOT EXISTS idx_org_charts_project_id ON org_charts(project_id);
-	CREATE INDEX IF NOT EXISTS idx_positions_org_chart_id ON org_chart_positions(org_chart_id);
-
-	-- Command Logs for agent shell command execution
-	CREATE TABLE IF NOT EXISTS command_logs (
-		id TEXT PRIMARY KEY,
-		agent_id TEXT NOT NULL,
-		bead_id TEXT,
-		project_id TEXT,
-		command TEXT NOT NULL,
-		working_dir TEXT NOT NULL,
-		exit_code INTEGER NOT NULL,
-		stdout TEXT,
-		stderr TEXT,
-		duration_ms INTEGER NOT NULL,
-		started_at DATETIME NOT NULL,
-		completed_at DATETIME NOT NULL,
-		context TEXT,
-		created_at DATETIME NOT NULL
-	);
-	CREATE INDEX IF NOT EXISTS idx_command_logs_agent_id ON command_logs(agent_id);
-	CREATE INDEX IF NOT EXISTS idx_command_logs_bead_id ON command_logs(bead_id);
-	CREATE INDEX IF NOT EXISTS idx_command_logs_project_id ON command_logs(project_id);
-	CREATE INDEX IF NOT EXISTS idx_command_logs_created_at ON command_logs(created_at);
-	`
-
-	if _, err := d.db.Exec(schema); err != nil {
-		return fmt.Errorf("failed to create schema: %w", err)
-	}
-
-	// Best-effort migrations for existing databases.
-	// SQLite doesn't support IF NOT EXISTS on ADD COLUMN.
-
-	// Provider migrations
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN model TEXT")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN configured_model TEXT")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selected_model TEXT")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selection_reason TEXT")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN model_score REAL")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN selected_gpu TEXT")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN last_heartbeat_at DATETIME")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN last_heartbeat_latency_ms INTEGER")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN last_heartbeat_error TEXT")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN schema_version TEXT DEFAULT '1.0'")
-	_, _ = d.db.Exec("ALTER TABLE providers ADD COLUMN attributes_json TEXT")
-	_, _ = d.db.Exec("UPDATE providers SET schema_version = '1.0' WHERE schema_version IS NULL")
-
-	// Project migrations
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN is_sticky BOOLEAN")
-	_, _ = d.db.Exec("UPDATE projects SET is_sticky = 0 WHERE is_sticky IS NULL")
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN parent_id TEXT")
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN closed_at DATETIME")
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN schema_version TEXT DEFAULT '1.0'")
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN attributes_json TEXT")
-	_, _ = d.db.Exec("UPDATE projects SET schema_version = '1.0' WHERE schema_version IS NULL")
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN git_strategy TEXT NOT NULL DEFAULT 'direct'")
-	_, _ = d.db.Exec("ALTER TABLE projects ADD COLUMN git_auth_method TEXT NOT NULL DEFAULT 'none'")
-
-	// Agent migrations
-	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN provider_id TEXT")
-	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN role TEXT")
-	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN position_id TEXT")
-	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN schema_version TEXT DEFAULT '1.0'")
-	_, _ = d.db.Exec("ALTER TABLE agents ADD COLUMN attributes_json TEXT")
-	_, _ = d.db.Exec("UPDATE agents SET schema_version = '1.0' WHERE schema_version IS NULL")
-
-	// Org chart migrations
-	_, _ = d.db.Exec("ALTER TABLE org_charts ADD COLUMN schema_version TEXT DEFAULT '1.0'")
-	_, _ = d.db.Exec("ALTER TABLE org_charts ADD COLUMN attributes_json TEXT")
-	_, _ = d.db.Exec("UPDATE org_charts SET schema_version = '1.0' WHERE schema_version IS NULL")
-
-	// Position migrations
-	_, _ = d.db.Exec("ALTER TABLE org_chart_positions ADD COLUMN schema_version TEXT DEFAULT '1.0'")
-	_, _ = d.db.Exec("ALTER TABLE org_chart_positions ADD COLUMN attributes_json TEXT")
-	_, _ = d.db.Exec("UPDATE org_chart_positions SET schema_version = '1.0' WHERE schema_version IS NULL")
-
-	return nil
 }
 
 // Configuration KV
@@ -475,7 +173,7 @@ func (d *Database) SetConfigValue(key string, value string) error {
 		VALUES (?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
 	`
-	_, err := d.db.Exec(query, key, value, time.Now())
+	_, err := d.db.Exec(rebind(query), key, value, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to set config value: %w", err)
 	}
@@ -485,7 +183,7 @@ func (d *Database) SetConfigValue(key string, value string) error {
 func (d *Database) GetConfigValue(key string) (string, bool, error) {
 	query := `SELECT value FROM config_kv WHERE key = ?`
 	var value string
-	err := d.db.QueryRow(query, key).Scan(&value)
+	err := d.db.QueryRow(rebind(query), key).Scan(&value)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
@@ -543,7 +241,7 @@ func (d *Database) UpsertProject(project *models.Project) error {
 			updated_at = excluded.updated_at
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		project.ID,
 		project.Name,
 		project.GitRepo,
@@ -632,7 +330,7 @@ func (d *Database) ListProjects() ([]*models.Project, error) {
 
 func (d *Database) DeleteProject(id string) error {
 	query := `DELETE FROM projects WHERE id = ?`
-	result, err := d.db.Exec(query, id)
+	result, err := d.db.Exec(rebind(query), id)
 	if err != nil {
 		return fmt.Errorf("failed to delete project: %w", err)
 	}
@@ -685,7 +383,7 @@ func (d *Database) UpsertAgent(agent *models.Agent) error {
 		projectID = agent.ProjectID
 	}
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		agent.ID,
 		agent.Name,
 		agent.Role,
@@ -751,7 +449,7 @@ func (d *Database) ListAgents() ([]*models.Agent, error) {
 
 func (d *Database) DeleteAgent(id string) error {
 	query := `DELETE FROM agents WHERE id = ?`
-	result, err := d.db.Exec(query, id)
+	result, err := d.db.Exec(rebind(query), id)
 	if err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
@@ -775,7 +473,7 @@ func (d *Database) CreateProvider(provider *internalmodels.Provider) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		provider.ID,
 		provider.Name,
 		provider.Type,
@@ -797,26 +495,6 @@ func (d *Database) CreateProvider(provider *internalmodels.Provider) error {
 	}
 
 	return nil
-}
-
-// rebindPlaceholders converts ? placeholders to $1, $2, ... for PostgreSQL
-func (d *Database) rebindPlaceholders(query string) string {
-	if d.dbType != "postgres" {
-		return query
-	}
-
-	// Convert ? to $1, $2, $3, ...
-	placeholder := 1
-	result := strings.Builder{}
-	for _, ch := range query {
-		if ch == '?' {
-			result.WriteString(fmt.Sprintf("$%d", placeholder))
-			placeholder++
-		} else {
-			result.WriteRune(ch)
-		}
-	}
-	return result.String()
 }
 
 // UpsertProvider inserts or updates a provider.
@@ -858,9 +536,7 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 			updated_at = excluded.updated_at
 	`
 
-	query = d.rebindPlaceholders(query)
-
-	_, err := d.db.Exec(query,
+	_, err := d.db.Exec(rebind(query),
 		provider.ID,
 		provider.Name,
 		provider.Type,
@@ -928,7 +604,7 @@ func (d *Database) GetProvider(id string) (*internalmodels.Provider, error) {
 
 	provider := &internalmodels.Provider{}
 	var modelParamsB, capabilityScore, avgLatencyMs sql.NullFloat64
-	err := d.db.QueryRow(query, id).Scan(
+	err := d.db.QueryRow(rebind(query), id).Scan(
 		&provider.ID,
 		&provider.Name,
 		&provider.Type,
@@ -1055,7 +731,7 @@ func (d *Database) ListProvidersForUser(userID string) ([]*internalmodels.Provid
 		ORDER BY created_at DESC
 	`
 
-	rows, err := d.db.Query(query, userID)
+	rows, err := d.db.Query(rebind(query), userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list providers for user: %w", err)
 	}
@@ -1118,7 +794,7 @@ func (d *Database) UpdateProvider(provider *internalmodels.Provider) error {
 		WHERE id = ?
 	`
 
-	result, err := d.db.Exec(query,
+	result, err := d.db.Exec(rebind(query),
 		provider.Name,
 		provider.Type,
 		provider.Endpoint,
@@ -1151,7 +827,7 @@ func (d *Database) UpdateProvider(provider *internalmodels.Provider) error {
 func (d *Database) DeleteProvider(id string) error {
 	query := `DELETE FROM providers WHERE id = ?`
 
-	result, err := d.db.Exec(query, id)
+	result, err := d.db.Exec(rebind(query), id)
 	if err != nil {
 		return fmt.Errorf("failed to delete provider: %w", err)
 	}

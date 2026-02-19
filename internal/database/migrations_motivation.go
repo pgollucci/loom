@@ -7,9 +7,6 @@ import (
 // migrateMotivations adds the motivations and milestones tables
 func (d *Database) migrateMotivations() error {
 	// Skip migrations for PostgreSQL (schema is complete in initSchemaPostgres)
-	if d.dbType == "postgres" {
-		return nil
-	}
 
 	// Motivations table
 	motivationsSchema := `

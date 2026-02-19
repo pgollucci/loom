@@ -3,9 +3,26 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/lib/pq"
 )
+
+// rebind converts ? placeholders to $1, $2, ... for PostgreSQL.
+// This is used throughout the database package for parameterized queries.
+func rebind(query string) string {
+	n := 1
+	out := strings.Builder{}
+	for _, ch := range query {
+		if ch == '?' {
+			out.WriteString(fmt.Sprintf("$%d", n))
+			n++
+		} else {
+			out.WriteRune(ch)
+		}
+	}
+	return out.String()
+}
 
 // NewPostgres creates a PostgreSQL database connection.
 func NewPostgres(dsn string) (*Database, error) {
@@ -22,7 +39,6 @@ func NewPostgres(dsn string) (*Database, error) {
 
 	d := &Database{
 		db:         db,
-		dbType:     "postgres",
 		supportsHA: true,
 	}
 

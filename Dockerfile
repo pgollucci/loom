@@ -3,7 +3,7 @@ FROM golang:1.25-alpine AS builder
 
 ARG GITHUB_TOKEN
 
-# Install build dependencies (including gcc for CGO/sqlite3 and icu-dev for beads)
+# Install build dependencies (icu-dev for beads, gcc for bd CLI with Dolt support)
 RUN apk add --no-cache git ca-certificates tzdata gcc g++ musl-dev openssh-client icu-dev wget
 
 # Set working directory
@@ -37,8 +37,8 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
 # Copy source code
 COPY . .
 
-# Build the main application with CGO enabled for sqlite3
-RUN CGO_ENABLED=1 GOOS=linux go build \
+# Build the main application (CGO not required; postgres driver is pure Go)
+RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
     -o loom \
     ./cmd/loom

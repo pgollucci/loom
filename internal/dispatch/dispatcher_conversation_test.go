@@ -2,24 +2,14 @@ package dispatch
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
 func TestDispatcher_getOrCreateConversationSession(t *testing.T) {
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	// Create dispatcher with database
 	d := &Dispatcher{
@@ -200,15 +190,7 @@ func TestDispatcher_getOrCreateConversationSession(t *testing.T) {
 }
 
 func TestDispatcher_ConversationSessionWithMetadata(t *testing.T) {
-	// Create temporary database
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	d := &Dispatcher{
 		db: db,
@@ -243,14 +225,7 @@ func TestDispatcher_ConversationSessionIntegration(t *testing.T) {
 	// This test simulates a full dispatch cycle but only tests the session management part
 	// We don't actually execute the task, just verify the session is created/passed correctly
 
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := database.New(dbPath)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
-	}
-	defer db.Close()
+	db := newTestDB(t)
 
 	d := &Dispatcher{
 		db: db,
