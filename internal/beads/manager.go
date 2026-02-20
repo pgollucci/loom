@@ -42,6 +42,8 @@ type GitConfig struct {
 	WorktreeManager interface{} // GitWorktreeManager interface
 	BeadsBranch     string      // Branch name for beads (e.g., "beads-sync")
 	UseGitStorage   bool        // Enable git commit/push for beads
+	GitAuthMethod   string      // Auth method: "token", "ssh", "none"
+	GitRepo         string      // Remote repo URL (needed for token auth)
 }
 
 // NewManager creates a new beads manager
@@ -66,7 +68,7 @@ func NewManager(bdPath string) *Manager {
 }
 
 // SetGitStorage configures git-centric bead storage for a project
-func (m *Manager) SetGitStorage(projectID string, worktreeManager interface{}, beadsBranch string, enabled bool) {
+func (m *Manager) SetGitStorage(projectID string, worktreeManager interface{}, beadsBranch string, enabled bool, authMethod, gitRepo string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -74,7 +76,34 @@ func (m *Manager) SetGitStorage(projectID string, worktreeManager interface{}, b
 		WorktreeManager: worktreeManager,
 		BeadsBranch:     beadsBranch,
 		UseGitStorage:   enabled,
+		GitAuthMethod:   authMethod,
+		GitRepo:         gitRepo,
 	}
+}
+
+// buildGitAuthEnv returns environment variables needed for authenticated git operations.
+func (m *Manager) buildGitAuthEnv(cfg *GitConfig) []string {
+	env := os.Environ()
+	env = append(env, "GIT_TERMINAL_PROMPT=0")
+
+	if cfg.GitAuthMethod != "token" {
+		return env
+	}
+
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("GITLAB_TOKEN")
+	}
+	if token == "" {
+		return env
+	}
+
+	env = append(env,
+		"GIT_ASKPASS=/usr/local/bin/git-askpass-helper",
+		fmt.Sprintf("GIT_TOKEN=%s", token),
+		fmt.Sprintf("GIT_REPO=%s", cfg.GitRepo),
+	)
+	return env
 }
 
 // SetBackend sets the beads backend type ("sqlite" or "dolt")
@@ -1018,6 +1047,21 @@ func (m *Manager) SaveBeadToGit(ctx context.Context, bead *models.Bead, beadsPat
 	// Build path relative to beads worktree
 	beadFile := filepath.Join(".beads", "beads", fmt.Sprintf("%s-%s.yaml", bead.ID, sanitizeFilename(bead.Title)))
 
+	// Auto-recover from a stuck rebase before doing anything else.
+	rebaseMerge := filepath.Join(beadsWorktree, ".git", "rebase-merge")
+	rebaseApply := filepath.Join(beadsWorktree, ".git", "rebase-apply")
+	if _, err := os.Stat(rebaseMerge); err == nil {
+		log.Printf("[BeadsGit] Detected stuck rebase-merge in %s, aborting", beadsWorktree)
+		abort := exec.Command("git", "rebase", "--abort")
+		abort.Dir = beadsWorktree
+		_ = abort.Run()
+	} else if _, err := os.Stat(rebaseApply); err == nil {
+		log.Printf("[BeadsGit] Detected stuck rebase-apply in %s, aborting", beadsWorktree)
+		abort := exec.Command("git", "rebase", "--abort")
+		abort.Dir = beadsWorktree
+		_ = abort.Run()
+	}
+
 	// Stage the bead file
 	addCmd := exec.Command("git", "add", beadFile)
 	addCmd.Dir = beadsWorktree
@@ -1039,33 +1083,38 @@ func (m *Manager) SaveBeadToGit(ctx context.Context, bead *models.Bead, beadsPat
 		return nil
 	}
 
+	// Build auth environment once for all git commands
+	authEnv := m.buildGitAuthEnv(gitConfig)
+
 	// Push to remote with retry logic for conflicts
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		pushCmd := exec.Command("git", "push")
 		pushCmd.Dir = beadsWorktree
+		pushCmd.Env = authEnv
 		output, err := pushCmd.CombinedOutput()
 		if err == nil {
-			// Success!
 			return nil
 		}
 
-		// Check if it's a conflict (rejected, non-fast-forward)
 		if strings.Contains(string(output), "rejected") || strings.Contains(string(output), "non-fast-forward") {
-			log.Printf("Git push conflict detected (attempt %d/%d), rebasing...", i+1, maxRetries)
+			log.Printf("[BeadsGit] Push conflict detected (attempt %d/%d), rebasing...", i+1, maxRetries)
 
-			// Pull with rebase to resolve conflict
 			pullCmd := exec.Command("git", "pull", "--rebase")
 			pullCmd.Dir = beadsWorktree
-			if pullOutput, pullErr := pullCmd.CombinedOutput(); pullErr != nil {
-				return fmt.Errorf("git pull --rebase failed after push conflict: %s - %w", pullOutput, pullErr)
+			pullCmd.Env = authEnv
+			pullOutput, pullErr := pullCmd.CombinedOutput()
+			if pullErr != nil {
+				// Rebase conflict — abort and retry cleanly
+				log.Printf("[BeadsGit] Rebase failed: %s, aborting", pullOutput)
+				abortCmd := exec.Command("git", "rebase", "--abort")
+				abortCmd.Dir = beadsWorktree
+				_ = abortCmd.Run()
 			}
 
-			// Retry push
 			continue
 		}
 
-		// Non-conflict error
 		return fmt.Errorf("git push failed: %s - %w", output, err)
 	}
 

@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jordanhubbard/loom/pkg/messages"
 	"github.com/nats-io/nats.go"
 )
+
+func stripPrefix(s, prefix string) string {
+	return strings.TrimPrefix(s, prefix)
+}
 
 // NatsMessageBus implements a message bus using NATS with JetStream
 type NatsMessageBus struct {
@@ -117,9 +122,16 @@ func (mb *NatsMessageBus) ensureStream() error {
 	return nil
 }
 
-// PublishTask publishes a task message to the message bus
+// PublishTask publishes a task message to the message bus.
+// If role is non-empty, publishes to loom.tasks.{projectID}.{role} for role-targeted delivery.
 func (mb *NatsMessageBus) PublishTask(ctx context.Context, projectID string, task *messages.TaskMessage) error {
 	subject := fmt.Sprintf("loom.tasks.%s", projectID)
+	return mb.publish(subject, task)
+}
+
+// PublishTaskForRole publishes a task to a role-specific subject
+func (mb *NatsMessageBus) PublishTaskForRole(ctx context.Context, projectID, role string, task *messages.TaskMessage) error {
+	subject := fmt.Sprintf("loom.tasks.%s.%s", projectID, role)
 	return mb.publish(subject, task)
 }
 
@@ -133,6 +145,35 @@ func (mb *NatsMessageBus) PublishResult(ctx context.Context, projectID string, r
 func (mb *NatsMessageBus) PublishEvent(ctx context.Context, eventType string, event *messages.EventMessage) error {
 	subject := fmt.Sprintf("loom.events.%s", eventType)
 	return mb.publish(subject, event)
+}
+
+// PublishAgentMessage publishes an agent-to-agent communication message
+func (mb *NatsMessageBus) PublishAgentMessage(ctx context.Context, msg *messages.AgentCommunicationMessage) error {
+	subject := "loom.agent.messages"
+	if msg.ToAgentID != "" {
+		subject = fmt.Sprintf("loom.agent.messages.%s", msg.ToAgentID)
+	} else {
+		subject = "loom.agent.messages.broadcast"
+	}
+	return mb.publish(subject, msg)
+}
+
+// PublishPlan publishes a plan message
+func (mb *NatsMessageBus) PublishPlan(ctx context.Context, projectID string, plan *messages.PlanMessage) error {
+	subject := fmt.Sprintf("loom.plans.%s", projectID)
+	return mb.publish(subject, plan)
+}
+
+// PublishReview publishes a review message
+func (mb *NatsMessageBus) PublishReview(ctx context.Context, projectID string, review *messages.ReviewMessage) error {
+	subject := fmt.Sprintf("loom.reviews.%s", projectID)
+	return mb.publish(subject, review)
+}
+
+// PublishSwarm publishes a swarm protocol message
+func (mb *NatsMessageBus) PublishSwarm(ctx context.Context, msg *messages.SwarmMessage) error {
+	subject := fmt.Sprintf("loom.swarm.%s", stripPrefix(msg.Type, "swarm."))
+	return mb.publish(subject, msg)
 }
 
 // publish is the internal method to publish messages
@@ -203,6 +244,119 @@ func (mb *NatsMessageBus) SubscribeEvents(eventType string, handler func(*messag
 		handler(&event)
 		msg.Ack()
 	})
+}
+
+// SubscribeTasksForRole subscribes to role-targeted task messages
+func (mb *NatsMessageBus) SubscribeTasksForRole(projectID, role string, handler func(*messages.TaskMessage)) error {
+	subject := fmt.Sprintf("loom.tasks.%s.%s", projectID, role)
+	consumerName := fmt.Sprintf("tasks-%s-%s", projectID, role)
+
+	return mb.subscribe(subject, consumerName, func(msg *nats.Msg) {
+		var task messages.TaskMessage
+		if err := json.Unmarshal(msg.Data, &task); err != nil {
+			log.Printf("Failed to unmarshal task message: %v", err)
+			msg.Nak()
+			return
+		}
+
+		handler(&task)
+		msg.Ack()
+	})
+}
+
+// SubscribeAgentMessages subscribes to agent-to-agent messages.
+// If agentID is non-empty, subscribes to messages addressed to that agent plus broadcasts.
+func (mb *NatsMessageBus) SubscribeAgentMessages(agentID string, handler func(*messages.AgentCommunicationMessage)) error {
+	// Subscribe to direct messages for this agent
+	if agentID != "" {
+		directSubject := fmt.Sprintf("loom.agent.messages.%s", agentID)
+		directConsumer := fmt.Sprintf("agent-msg-%s", agentID)
+		if err := mb.subscribe(directSubject, directConsumer, func(msg *nats.Msg) {
+			var agentMsg messages.AgentCommunicationMessage
+			if err := json.Unmarshal(msg.Data, &agentMsg); err != nil {
+				log.Printf("Failed to unmarshal agent message: %v", err)
+				msg.Nak()
+				return
+			}
+			handler(&agentMsg)
+			msg.Ack()
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Also subscribe to broadcast messages using a core NATS subscription
+	// (broadcasts should be delivered to all agents, not work-queue style)
+	broadcastSub, err := mb.conn.Subscribe("loom.agent.messages.broadcast", func(msg *nats.Msg) {
+		var agentMsg messages.AgentCommunicationMessage
+		if err := json.Unmarshal(msg.Data, &agentMsg); err != nil {
+			log.Printf("Failed to unmarshal broadcast agent message: %v", err)
+			return
+		}
+		handler(&agentMsg)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to agent broadcast: %w", err)
+	}
+	mb.subscriptions["loom.agent.messages.broadcast."+agentID] = broadcastSub
+	return nil
+}
+
+// SubscribePlans subscribes to plan messages for a project
+func (mb *NatsMessageBus) SubscribePlans(projectID string, handler func(*messages.PlanMessage)) error {
+	subject := fmt.Sprintf("loom.plans.%s", projectID)
+	consumerName := fmt.Sprintf("plans-%s", projectID)
+
+	return mb.subscribe(subject, consumerName, func(msg *nats.Msg) {
+		var plan messages.PlanMessage
+		if err := json.Unmarshal(msg.Data, &plan); err != nil {
+			log.Printf("Failed to unmarshal plan message: %v", err)
+			msg.Nak()
+			return
+		}
+		handler(&plan)
+		msg.Ack()
+	})
+}
+
+// SubscribeReviews subscribes to review messages for a project
+func (mb *NatsMessageBus) SubscribeReviews(projectID string, handler func(*messages.ReviewMessage)) error {
+	subject := fmt.Sprintf("loom.reviews.%s", projectID)
+	consumerName := fmt.Sprintf("reviews-%s", projectID)
+
+	return mb.subscribe(subject, consumerName, func(msg *nats.Msg) {
+		var review messages.ReviewMessage
+		if err := json.Unmarshal(msg.Data, &review); err != nil {
+			log.Printf("Failed to unmarshal review message: %v", err)
+			msg.Nak()
+			return
+		}
+		handler(&review)
+		msg.Ack()
+	})
+}
+
+// SubscribeSwarm subscribes to swarm protocol messages (uses core NATS for fan-out)
+func (mb *NatsMessageBus) SubscribeSwarm(handler func(*messages.SwarmMessage)) error {
+	sub, err := mb.conn.Subscribe("loom.swarm.>", func(msg *nats.Msg) {
+		var swarmMsg messages.SwarmMessage
+		if err := json.Unmarshal(msg.Data, &swarmMsg); err != nil {
+			log.Printf("Failed to unmarshal swarm message: %v", err)
+			return
+		}
+		handler(&swarmMsg)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to swarm: %w", err)
+	}
+	mb.subscriptions["loom.swarm.>"] = sub
+	log.Printf("Subscribed to swarm messages (loom.swarm.>)")
+	return nil
+}
+
+// Conn returns the underlying NATS connection for advanced use
+func (mb *NatsMessageBus) Conn() *nats.Conn {
+	return mb.conn
 }
 
 // subscribe is the internal method to set up durable subscriptions

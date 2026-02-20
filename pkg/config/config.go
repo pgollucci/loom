@@ -44,6 +44,8 @@ type Config struct {
 	Temporal  TemporalConfig  `yaml:"temporal" json:"temporal,omitempty"`
 	HotReload HotReloadConfig `yaml:"hot_reload" json:"hot_reload,omitempty"`
 	OpenClaw  OpenClawConfig  `yaml:"openclaw" json:"openclaw,omitempty"`
+	PDA       PDAConfig       `yaml:"pda" json:"pda,omitempty"`
+	Swarm     SwarmConfig     `yaml:"swarm" json:"swarm,omitempty"`
 
 	// JSON/User-specific configuration fields
 	Providers   []Provider     `yaml:"providers,omitempty" json:"providers"`
@@ -118,7 +120,23 @@ type ReadinessConfig struct {
 
 // DispatchConfig controls dispatcher guardrails
 type DispatchConfig struct {
-	MaxHops int `yaml:"max_hops" json:"max_hops,omitempty"`
+	MaxHops        int  `yaml:"max_hops" json:"max_hops,omitempty"`
+	UseNATSDispatch bool `yaml:"use_nats_dispatch" json:"use_nats_dispatch,omitempty"`
+}
+
+// PDAConfig configures the Plan/Document/Act orchestrator
+type PDAConfig struct {
+	Enabled          bool   `yaml:"enabled" json:"enabled"`
+	PlannerModel     string `yaml:"planner_model" json:"planner_model,omitempty"`
+	PlannerEndpoint  string `yaml:"planner_endpoint" json:"planner_endpoint,omitempty"`
+	PlannerAPIKey    string `yaml:"planner_api_key" json:"planner_api_key,omitempty"`
+}
+
+// SwarmConfig configures dynamic swarm membership
+type SwarmConfig struct {
+	Enabled        bool     `yaml:"enabled" json:"enabled"`
+	PeerNATSURLs   []string `yaml:"peer_nats_urls" json:"peer_nats_urls,omitempty"`
+	GatewayName    string   `yaml:"gateway_name" json:"gateway_name,omitempty"`
 }
 
 // GitConfig controls git-related settings

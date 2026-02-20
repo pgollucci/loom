@@ -1091,12 +1091,12 @@ func TestHandleHealth_GET_ResponseStructure(t *testing.T) {
 	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("expected Content-Type application/json, got %s", ct)
 	}
-	var m map[string]string
+	var m map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
 		t.Fatal(err)
 	}
 	if m["status"] != "ok" {
-		t.Errorf("expected ok, got %s", m["status"])
+		t.Errorf("expected ok, got %v", m["status"])
 	}
 }
 

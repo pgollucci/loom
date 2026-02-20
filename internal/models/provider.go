@@ -25,6 +25,7 @@ type Provider struct {
 	Description            string          `json:"description"`
 	RequiresKey            bool            `json:"requires_key"` // Whether this provider needs API credentials
 	KeyID                  string          `json:"key_id"`       // Reference to encrypted key in key manager
+	APIKey                 string          `json:"api_key,omitempty"` // Plaintext API key (persisted encrypted-at-rest via DB)
 	OwnerID                string          `json:"owner_id"`     // User ID who owns this provider (for multi-tenant)
 	IsShared               bool            `json:"is_shared"`    // If true, provider available to all users
 	Status                 string          `json:"status"`       // active, inactive, etc.

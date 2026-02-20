@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,21 @@ import (
 	"github.com/jordanhubbard/loom/internal/workflow"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	// Tear down the shared test database.
+	if sharedDB != nil {
+		sharedDB.Close()
+	}
+	if sharedDBName != "" && sharedAdmDSN != "" {
+		if a, e := sql.Open("postgres", sharedAdmDSN); e == nil {
+			a.Exec(`DROP DATABASE IF EXISTS "` + sharedDBName + `"`)
+			a.Close()
+		}
+	}
+	os.Exit(code)
+}
 
 // pgParams returns connection parameters from environment variables.
 func pgParams() (host, port, user, password string) {
@@ -35,71 +51,100 @@ func pgParams() (host, port, user, password string) {
 	return
 }
 
-// newTestDB creates a fresh, isolated PostgreSQL database for each test.
-// It connects to the postgres system database to CREATE the test DB, then
-// runs ALL schema migrations via NewFromEnv() (pointing at the new DB),
-// and registers a t.Cleanup that DROPs the DB when done.
+// sharedTestDB holds a single database per test run, reused across tests.
+// Migrations run once; each test gets a clean slate via TRUNCATE.
+var (
+	sharedDB     *Database
+	sharedDBOnce sync.Once
+	sharedDBErr  error
+	sharedDBName string
+	sharedAdmDSN string
+)
+
+// newTestDB returns a shared PostgreSQL database with all tables truncated.
+// Migrations run once on first call; subsequent calls just truncate data.
 // Skips the test if postgres is not available.
 func newTestDB(t *testing.T) *Database {
 	t.Helper()
 
-	host, port, user, password := pgParams()
-	adminDSN := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5",
-		host, port, user, password,
-	)
+	sharedDBOnce.Do(func() {
+		host, port, user, password := pgParams()
+		sharedAdmDSN = fmt.Sprintf(
+			"host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5",
+			host, port, user, password,
+		)
 
-	adminDB, err := sql.Open("postgres", adminDSN)
-	if err != nil {
-		t.Skipf("Skipping: postgres not available: %v", err)
-		return nil
-	}
-	if err := adminDB.Ping(); err != nil {
-		adminDB.Close()
-		t.Skipf("Skipping: postgres not reachable: %v", err)
-		return nil
-	}
-
-	// Unique test database name — safe for parallel tests
-	testDBName := fmt.Sprintf("loom_test_%d", time.Now().UnixNano())
-	if _, err := adminDB.Exec(`CREATE DATABASE "` + testDBName + `"`); err != nil {
-		adminDB.Close()
-		t.Skipf("Skipping: cannot create test database %q: %v", testDBName, err)
-		return nil
-	}
-	adminDB.Close()
-
-	// Point NewFromEnv() at the freshly created test database.
-	// t.Setenv restores the original value when the test ends.
-	t.Setenv("POSTGRES_HOST", host)
-	t.Setenv("POSTGRES_PORT", port)
-	t.Setenv("POSTGRES_USER", user)
-	t.Setenv("POSTGRES_PASSWORD", password)
-	t.Setenv("POSTGRES_DB", testDBName)
-
-	db, err := NewFromEnv() // runs ALL migrations
-	if err != nil {
-		// Best-effort cleanup
-		if a, e := sql.Open("postgres", adminDSN); e == nil {
-			a.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`)
-			a.Close()
+		adminDB, err := sql.Open("postgres", sharedAdmDSN)
+		if err != nil {
+			sharedDBErr = fmt.Errorf("postgres not available: %w", err)
+			return
 		}
-		t.Fatalf("Failed to initialise test database %q: %v", testDBName, err)
-		return nil
-	}
-
-	t.Cleanup(func() {
-		db.Close()
-		// Drop the isolated test database
-		if a, e := sql.Open("postgres", adminDSN); e == nil {
-			defer a.Close()
-			if _, err := a.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`); err != nil {
-				t.Logf("Warning: could not drop test database %q: %v", testDBName, err)
-			}
+		if err := adminDB.Ping(); err != nil {
+			adminDB.Close()
+			sharedDBErr = fmt.Errorf("postgres not reachable: %w", err)
+			return
 		}
+
+		sharedDBName = fmt.Sprintf("loom_test_%d", time.Now().UnixNano())
+		if _, err := adminDB.Exec(`CREATE DATABASE "` + sharedDBName + `"`); err != nil {
+			adminDB.Close()
+			sharedDBErr = fmt.Errorf("cannot create test database %q: %w", sharedDBName, err)
+			return
+		}
+		adminDB.Close()
+
+		os.Setenv("POSTGRES_HOST", host)
+		os.Setenv("POSTGRES_PORT", port)
+		os.Setenv("POSTGRES_USER", user)
+		os.Setenv("POSTGRES_PASSWORD", password)
+		os.Setenv("POSTGRES_DB", sharedDBName)
+
+		sharedDB, sharedDBErr = NewFromEnv()
 	})
 
-	return db
+	if sharedDBErr != nil {
+		t.Skipf("Skipping: %v", sharedDBErr)
+		return nil
+	}
+
+	// Truncate all user tables to give each test a clean slate.
+	rows, err := sharedDB.db.Query(`
+		SELECT tablename FROM pg_tables
+		WHERE schemaname = 'public' AND tablename NOT LIKE 'pg_%'
+	`)
+	if err == nil {
+		var tables []string
+		for rows.Next() {
+			var name string
+			if rows.Scan(&name) == nil {
+				tables = append(tables, `"`+name+`"`)
+			}
+		}
+		rows.Close()
+		if len(tables) > 0 {
+			_, _ = sharedDB.db.Exec("TRUNCATE " + joinStrings(tables) + " CASCADE")
+		}
+	}
+
+	// Re-seed the default admin user that migrations normally create.
+	_, _ = sharedDB.db.Exec(`
+		INSERT INTO users (id, username, email, role, is_active, created_at, updated_at)
+		VALUES ('user-admin', 'admin', 'admin@loom.local', 'admin', 1, NOW(), NOW())
+		ON CONFLICT (id) DO NOTHING
+	`)
+
+	return sharedDB
+}
+
+func joinStrings(ss []string) string {
+	result := ""
+	for i, s := range ss {
+		if i > 0 {
+			result += ", "
+		}
+		result += s
+	}
+	return result
 }
 
 // ---------------------------------------------------------------------------
@@ -147,14 +192,19 @@ func TestSupportsHA_ReturnsTrue(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	db, err := NewFromEnv()
+	// Ensure the shared DB (and its env vars) are initialised first.
+	_ = newTestDB(t)
+	// Create a separate connection so closing it doesn't break the shared DB.
+	host, port, user, password := pgParams()
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable connect_timeout=5",
+		host, port, user, password, os.Getenv("POSTGRES_DB"))
+	db, err := NewPostgres(dsn)
 	if err != nil {
 		t.Skipf("Skipping: postgres not available: %v", err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("Close() returned error: %v", err)
 	}
-	// After close, operations should fail
 	if err := db.DB().Ping(); err == nil {
 		t.Error("Expected error after Close(), got nil")
 	}
@@ -1545,21 +1595,20 @@ func TestDeleteAllEntities_Independence(t *testing.T) {
 }
 
 func TestMultipleNewDatabases_Isolated(t *testing.T) {
+	// Verify that each newTestDB call starts with a clean slate (truncated tables).
 	db1 := newTestDB(t)
-	db2 := newTestDB(t)
-
-	// Insert in db1 only
-	if err := db1.SetConfigValue("isolation", "db1"); err != nil {
-		t.Fatalf("SetConfigValue on db1 failed: %v", err)
+	if err := db1.SetConfigValue("isolation-test", "round1"); err != nil {
+		t.Fatalf("SetConfigValue failed: %v", err)
 	}
 
-	// db2 should not see it
-	_, found, err := db2.GetConfigValue("isolation")
+	// Second call truncates — the key should be gone.
+	db2 := newTestDB(t)
+	_, found, err := db2.GetConfigValue("isolation-test")
 	if err != nil {
-		t.Fatalf("GetConfigValue on db2 failed: %v", err)
+		t.Fatalf("GetConfigValue failed: %v", err)
 	}
 	if found {
-		t.Error("db2 should not find key from db1")
+		t.Error("expected truncation to remove data from previous newTestDB call")
 	}
 }
 

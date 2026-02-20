@@ -227,10 +227,10 @@ func (s *GitService) Push(ctx context.Context, req PushRequest) (*PushResult, er
 		return nil, fmt.Errorf("force push is not allowed")
 	}
 
-	// Configure SSH
-	if err := s.configureSSH(); err != nil {
+	// Configure authentication (SSH keys or token)
+	if err := s.configureAuth(); err != nil {
 		s.auditLogger.LogOperation("push", req.BeadID, branch, false, err)
-		return nil, fmt.Errorf("failed to configure SSH: %w", err)
+		return nil, fmt.Errorf("failed to configure git auth: %w", err)
 	}
 
 	// Build git push command
@@ -424,26 +424,35 @@ func (s *GitService) getCommitStats(ctx context.Context, commitSHA string) (*Com
 	}, nil
 }
 
-// configureSSH configures SSH for git operations
-func (s *GitService) configureSSH() error {
+// configureAuth configures authentication for git push/fetch operations.
+// Tries SSH deploy keys first; falls back to GITHUB_TOKEN/GITLAB_TOKEN via
+// the GIT_ASKPASS helper so the same mechanism works for both auth methods.
+func (s *GitService) configureAuth() error {
 	keyPath := filepath.Join(s.projectKeyDir, s.projectID, "ssh", "id_ed25519")
-
-	// Resolve to absolute path (git runs from projectPath, not cwd)
 	if !filepath.IsAbs(keyPath) {
-		abs, err := filepath.Abs(keyPath)
-		if err == nil {
+		if abs, err := filepath.Abs(keyPath); err == nil {
 			keyPath = abs
 		}
 	}
 
-	// Check if key exists
-	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-		return fmt.Errorf("SSH key not found: %s", keyPath)
+	if _, err := os.Stat(keyPath); err == nil {
+		os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", keyPath))
+		return nil
 	}
 
-	// Set GIT_SSH_COMMAND environment variable
-	os.Setenv("GIT_SSH_COMMAND", fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", keyPath))
+	// No SSH key — try token-based auth via GIT_ASKPASS
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("GITLAB_TOKEN")
+	}
+	if token == "" {
+		return fmt.Errorf("no git credentials: SSH key not found at %s and no GITHUB_TOKEN/GITLAB_TOKEN set", keyPath)
+	}
 
+	// GIT_ASKPASS is read by git automatically; the helper script echoes back the token.
+	os.Setenv("GIT_TERMINAL_PROMPT", "0")
+	os.Setenv("GIT_ASKPASS", "/usr/local/bin/git-askpass-helper")
+	os.Setenv("GIT_TOKEN", token)
 	return nil
 }
 
@@ -471,11 +480,15 @@ func (s *GitService) runPrePushTests(ctx context.Context) error {
 			continue
 		}
 
+		// Skip if the build command isn't installed (e.g. Alpine container without Go)
+		if _, lookErr := exec.LookPath(c.command); lookErr != nil {
+			continue
+		}
+
 		cmd := exec.CommandContext(ctx, c.command, c.args...)
 		cmd.Dir = s.projectPath
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			// Truncate output for error message
 			out := string(output)
 			if len(out) > 500 {
 				out = out[len(out)-500:]
@@ -493,15 +506,9 @@ func (s *GitService) runPrePushTests(ctx context.Context) error {
 	return nil
 }
 
-// buildEnv builds environment variables for git commands
+// buildEnv builds environment variables for git commands, including auth vars.
 func (s *GitService) buildEnv() []string {
 	env := os.Environ()
-
-	// Add git SSH command if configured
-	if sshCmd := os.Getenv("GIT_SSH_COMMAND"); sshCmd != "" {
-		env = append(env, fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
-	}
-
 	return env
 }
 

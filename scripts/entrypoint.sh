@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 
 # Entrypoint script for loom container
 # Starts Dolt SQL server for beads backend, then starts loom
@@ -113,6 +112,7 @@ echo "[entrypoint] Loom started (PID $LOOM_PID)"
 # Wait for loom to exit; if it dies, we exit too
 wait "$LOOM_PID"
 LOOM_EXIT=$?
+echo "[entrypoint] Loom exited with code $LOOM_EXIT"
 
 # Clean up Dolt
 if [ -n "$DOLT_PID" ]; then

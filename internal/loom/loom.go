@@ -31,6 +31,8 @@ import (
 	"github.com/jordanhubbard/loom/internal/logging"
 	"github.com/jordanhubbard/loom/internal/messagebus"
 	"github.com/jordanhubbard/loom/internal/metrics"
+	"github.com/jordanhubbard/loom/internal/orchestrator"
+	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/modelcatalog"
 	internalmodels "github.com/jordanhubbard/loom/internal/models"
 	"github.com/jordanhubbard/loom/internal/motivation"
@@ -96,10 +98,15 @@ type Loom struct {
 	openclawBridge      *openclaw.Bridge
 	containerOrchestrator *containers.Orchestrator
 	connectorManager    *connectors.Manager
-	messageBus          interface{} // messagebus.NatsMessageBus interface (to avoid import cycle)
+	messageBus          interface{}
+	bridge              *messagebus.BridgedMessageBus
+	pdaOrchestrator     *orchestrator.PDAOrchestrator
+	swarmManager        *swarm.Manager
+	swarmFederation     *swarm.Federation
 	readinessMu         sync.Mutex
 	readinessCache      map[string]projectReadinessState
 	readinessFailures   map[string]time.Time
+	shutdownOnce        sync.Once
 }
 
 // New creates a new Loom instance
@@ -111,13 +118,15 @@ func New(cfg *config.Config) (*Loom, error) {
 
 	providerRegistry := provider.NewRegistry()
 
-	// Initialize Temporal manager if configured
+	// Initialize Temporal manager if configured.
+	// Temporal is optional — loom degrades gracefully without it (no durable
+	// workflows, but the dispatch loop, agents, and NATS bus still operate).
 	var temporalMgr *temporal.Manager
 	if cfg.Temporal.Host != "" {
 		var err error
 		temporalMgr, err = temporal.NewManager(&cfg.Temporal)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize temporal: %w", err)
+			log.Printf("Warning: failed to initialize Temporal (%v) — running without durable workflows", err)
 		}
 	}
 
@@ -146,6 +155,15 @@ func New(cfg *config.Config) (*Loom, error) {
 		eb = temporalMgr.GetEventBus()
 	} else {
 		eb = eventbus.NewEventBus(nil, &cfg.Temporal)
+	}
+
+	// Bridge the in-memory EventBus to NATS for cross-container communication.
+	var bridge *messagebus.BridgedMessageBus
+	if messageBus != nil {
+		if mb, ok := messageBus.(*messagebus.NatsMessageBus); ok {
+			hostname, _ := os.Hostname()
+			bridge = messagebus.NewBridgedMessageBus(mb, eb, "loom-control-"+hostname)
+		}
 	}
 
 	// Initialize PostgreSQL database.
@@ -348,21 +366,29 @@ func New(cfg *config.Config) (*Loom, error) {
 		containerOrchestrator: containerOrch,
 		connectorManager:      connectorMgr,
 		messageBus:            messageBus,
+		bridge:                bridge,
+	}
+
+	buildEnv := actions.NewBuildEnvManager(providerRegistry)
+	if containerOrch != nil {
+		buildEnv.SetOnReady(containerOrch.SnapshotAfterSetup)
 	}
 
 	actionRouter := &actions.Router{
-		Beads:      arb,
-		Closer:     arb,
-		Escalator:  arb,
-		Commands:   arb,
-		Files:      files.NewManager(gitopsMgr),
-		Git:        actions.NewProjectGitRouter(gitopsMgr),
-		Logger:     arb,
-		Workflow:   arb,
-		Projects:   arb,
-		BeadType:   "task",
-		BeadReader: arb,
-		DefaultP0:  true,
+		Beads:         arb,
+		Closer:        arb,
+		Escalator:     arb,
+		Commands:      arb,
+		Files:         files.NewManager(gitopsMgr),
+		Git:           actions.NewProjectGitRouter(gitopsMgr),
+		Logger:        arb,
+		Workflow:      arb,
+		Projects:      arb,
+		ContainerOrch: actions.NewContainerOrchAdapter(containerOrch),
+		BuildEnv:      buildEnv,
+		BeadType:      "task",
+		BeadReader:    arb,
+		DefaultP0:     true,
 	}
 	arb.actionRouter = actionRouter
 	agentMgr.SetActionRouter(actionRouter)
@@ -400,11 +426,22 @@ func New(cfg *config.Config) (*Loom, error) {
 		}
 	}
 
+	// Wire git worktree manager for parallel agent isolation
+	worktreeManager := gitops.NewGitWorktreeManager(projectKeyDir)
+	arb.dispatcher.SetWorktreeManager(worktreeManager)
+
 	// Wire container orchestrator for per-project isolation
 	if containerOrch != nil {
 		arb.dispatcher.SetContainerOrchestrator(containerOrch)
 		if shellExec != nil {
 			shellExec.SetContainerOrchestrator(containerOrch, arb.projectManager)
+			shellExec.SetEnvReadyHook(func(ctx context.Context, projectID string, agent *containers.ProjectAgentClient) {
+				if actionRouter.BuildEnv != nil {
+					if err := actionRouter.BuildEnv.EnsureReady(ctx, projectID, agent); err != nil {
+						log.Printf("[ShellExecutor] env init for %s failed (non-fatal): %v", projectID, err)
+					}
+				}
+			})
 		}
 	}
 
@@ -473,9 +510,9 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		if len(storedProjects) > 0 {
 			projects = storedProjects
 			// Apply config overrides for fields not stored in the DB schema (e.g. UseContainer).
-			cfgByID := make(map[string]struct{ UseContainer bool })
+			cfgByID := make(map[string]struct{ UseContainer, UseWorktrees bool })
 			for _, cp := range a.config.Projects {
-				cfgByID[cp.ID] = struct{ UseContainer bool }{UseContainer: cp.UseContainer}
+				cfgByID[cp.ID] = struct{ UseContainer, UseWorktrees bool }{UseContainer: cp.UseContainer, UseWorktrees: cp.UseWorktrees}
 			}
 			for _, sp := range projects {
 				if sp == nil {
@@ -483,6 +520,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				}
 				if cfg, ok := cfgByID[sp.ID]; ok {
 					sp.UseContainer = cfg.UseContainer
+					sp.UseWorktrees = cfg.UseWorktrees
 				}
 			}
 			known := map[string]struct{}{}
@@ -511,6 +549,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 					IsPerpetual:     p.IsPerpetual,
 					IsSticky:        p.IsSticky,
 					UseContainer:    p.UseContainer,
+					UseWorktrees:    p.UseWorktrees,
 					Context:         p.Context,
 					Status:          models.ProjectStatusOpen,
 				}
@@ -531,6 +570,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 					GitCredentialID: p.GitCredentialID,
 					IsPerpetual:     p.IsPerpetual,
 					IsSticky:        p.IsSticky,
+					UseWorktrees:    p.UseWorktrees,
 					UseContainer:    p.UseContainer,
 					Context:         p.Context,
 					Status:          models.ProjectStatusOpen,
@@ -551,6 +591,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 				GitCredentialID: p.GitCredentialID,
 				IsPerpetual:     p.IsPerpetual,
+					UseWorktrees:    p.UseWorktrees,
 				IsSticky:        p.IsSticky,
 				UseContainer:    p.UseContainer,
 				Context:         p.Context,
@@ -581,6 +622,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				GitAuthMethod:   normalizeGitAuthMethod(p.GitRepo, models.GitAuthMethod(p.GitAuthMethod)),
 				GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 				GitCredentialID: p.GitCredentialID,
+					UseWorktrees:    p.UseWorktrees,
 				IsPerpetual:     p.IsPerpetual,
 				IsSticky:        p.IsSticky,
 				UseContainer:    p.UseContainer,
@@ -770,7 +812,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		// Track per-project beads path to avoid last-writer-wins across projects
 		a.beadsManager.SetProjectBeadsPath(p.ID, beadsPath)
 		// Configure git storage for this project
-		a.beadsManager.SetGitStorage(p.ID, wtManager, beadsBranch, a.config.Beads.UseGitStorage)
+		a.beadsManager.SetGitStorage(p.ID, wtManager, beadsBranch, a.config.Beads.UseGitStorage, string(p.GitAuthMethod), p.GitRepo)
 		// Load project prefix from config
 		configPath := filepath.Join(beadsWorktree, p.BeadsPath)
 		_ = a.beadsManager.LoadProjectPrefixFromConfig(p.ID, configPath)
@@ -790,15 +832,24 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		// main-worktree copies with authoritative beads-sync state.
 		_ = a.beadsManager.LoadBeadsFromGit(ctx, p.ID, beadsPath)
 
-		// Spawn isolated container for project if configured
+		// Spawn isolated container for project if configured.
+		// Run asynchronously so a slow Docker build/pull does not block startup.
 		if p.UseContainer {
-			log.Printf("[Loom] Spawning isolated container for project %s", p.ID)
-			if err := a.containerOrchestrator.EnsureProjectContainer(ctx, p); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to start container for project %s: %v\n", p.ID, err)
-				// Continue without container - fallback to local execution
-			} else {
-				log.Printf("[Loom] Project %s container started successfully", p.ID)
-			}
+			projCopy := *p
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Fprintf(os.Stderr, "[Loom] PANIC in EnsureProjectContainer for %s: %v\n", projCopy.ID, r)
+					}
+				}()
+				fmt.Fprintf(os.Stderr, "[Loom] Spawning isolated container for project %s (async)\n", projCopy.ID)
+				bgCtx := context.Background()
+				if err := a.containerOrchestrator.EnsureProjectContainer(bgCtx, &projCopy); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to start container for project %s: %v\n", projCopy.ID, err)
+				} else {
+					fmt.Fprintf(os.Stderr, "[Loom] Project %s container started successfully\n", projCopy.ID)
+				}
+			}()
 		}
 
 		// Start git-based federation (replaces Dolt)
@@ -811,10 +862,10 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			go coordinator.StartSyncLoop(ctx, a.beadsManager)
 			log.Printf("[Loom] Started GitCoordinator for project %s", p.ID)
 		}
+
 	}
 
 	// Load providers from database into the in-memory registry.
-	log.Printf("[Loom] DEBUG: Loading providers from database")
 	if a.database != nil {
 		providers, err := a.database.ListProviders()
 		if err != nil {
@@ -864,7 +915,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				Name:                   p.Name,
 				Type:                   p.Type,
 				Endpoint:               normalizeProviderEndpoint(p.Endpoint),
-				APIKey:                 "",
+				APIKey:                 p.APIKey,
 				Model:                  selected,
 				ConfiguredModel:        p.ConfiguredModel,
 				SelectedModel:          selected,
@@ -889,7 +940,6 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		}
 
 		// Restore agents from database (best-effort).
-		log.Printf("[Loom] DEBUG: Restoring agents from database")
 		storedAgents, err := a.database.ListAgents()
 		if err != nil {
 			return fmt.Errorf("failed to load agents: %w", err)
@@ -1056,6 +1106,69 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		}
 	}
 
+	// ── Multi-service pub/sub wiring ───────────────────────────────────
+	// Start the NATS ↔ EventBus bridge so cross-container events flow.
+	if a.bridge != nil {
+		if err := a.bridge.Start(ctx); err != nil {
+			log.Printf("[Loom] Warning: Failed to start NATS bridge: %v", err)
+		}
+	}
+
+	// Apply UseNATSDispatch feature flag from config.
+	if a.config.Dispatch.UseNATSDispatch && a.messageBus != nil {
+		dispatch.UseNATSDispatch = true
+		log.Printf("[Loom] NATS dispatch enabled – tasks will be routed to agent containers")
+	}
+
+	// Start PDA orchestrator if enabled.
+	if a.config.PDA.Enabled && a.messageBus != nil {
+		if mb, ok := a.messageBus.(*messagebus.NatsMessageBus); ok {
+			var planner orchestrator.Planner
+			if a.config.PDA.PlannerEndpoint != "" {
+				planner = orchestrator.NewLLMPlanner(
+					a.config.PDA.PlannerEndpoint,
+					a.config.PDA.PlannerAPIKey,
+					a.config.PDA.PlannerModel,
+				)
+			} else {
+				planner = &orchestrator.StaticPlanner{}
+			}
+			adapter := orchestrator.NewBeadManagerAdapter(a.beadsManager)
+			a.pdaOrchestrator = orchestrator.NewPDAOrchestrator(mb, planner, adapter, adapter)
+			if err := a.pdaOrchestrator.Start(ctx); err != nil {
+				log.Printf("[Loom] Warning: Failed to start PDA orchestrator: %v", err)
+			}
+		}
+	}
+
+	// Start swarm manager if enabled.
+	if a.config.Swarm.Enabled && a.messageBus != nil {
+		if mb, ok := a.messageBus.(*messagebus.NatsMessageBus); ok {
+			hostname, _ := os.Hostname()
+			a.swarmManager = swarm.NewManager(mb, "loom-control-plane", "control-plane")
+			var projectIDs []string
+			for _, p := range a.config.Projects {
+				projectIDs = append(projectIDs, p.ID)
+			}
+			port := a.config.Server.HTTPPort
+			endpoint := fmt.Sprintf("http://%s:%d", hostname, port)
+			if err := a.swarmManager.Start(ctx, []string{"control-plane"}, projectIDs, endpoint); err != nil {
+				log.Printf("[Loom] Warning: Failed to start swarm manager: %v", err)
+			}
+
+			// Federation with peer NATS instances
+			if len(a.config.Swarm.PeerNATSURLs) > 0 {
+				a.swarmFederation = swarm.NewFederation(mb, swarm.FederationConfig{
+					PeerNATSURLs: a.config.Swarm.PeerNATSURLs,
+					GatewayName:  a.config.Swarm.GatewayName,
+				})
+				if err := a.swarmFederation.Start(ctx); err != nil {
+					log.Printf("[Loom] Warning: Failed to start federation: %v", err)
+				}
+			}
+		}
+	}
+
 	log.Printf("[Loom] DEBUG: Initialize completed successfully")
 	return nil
 }
@@ -1125,25 +1238,48 @@ func (a *Loom) kickstartOpenBeads(ctx context.Context) {
 
 // Shutdown gracefully shuts down loom
 func (a *Loom) Shutdown() {
-	a.agentManager.StopAll()
-	if a.openclawBridge != nil {
-		a.openclawBridge.Close()
-	}
-	if a.doltCoordinator != nil {
-		a.doltCoordinator.Shutdown()
-	}
-	if a.temporalManager != nil {
-		a.temporalManager.Stop()
-	}
-	if a.eventBus != nil {
-		// Avoid double-closing the Temporal-backed event bus.
-		if a.temporalManager == nil || a.temporalManager.GetEventBus() != a.eventBus {
-			a.eventBus.Close()
+	a.shutdownOnce.Do(func() {
+		if a.agentManager != nil {
+			a.agentManager.StopAll()
 		}
-	}
-	if a.database != nil {
-		_ = a.database.Close()
-	}
+		if a.connectorManager != nil {
+			_ = a.connectorManager.Close()
+		}
+		if a.pdaOrchestrator != nil {
+			a.pdaOrchestrator.Close()
+		}
+		if a.swarmFederation != nil {
+			a.swarmFederation.Close()
+		}
+		if a.swarmManager != nil {
+			a.swarmManager.Close()
+		}
+		if a.bridge != nil {
+			a.bridge.Close()
+		}
+		if a.openclawBridge != nil {
+			a.openclawBridge.Close()
+		}
+		if a.doltCoordinator != nil {
+			a.doltCoordinator.Shutdown()
+		}
+		if a.temporalManager != nil {
+			a.temporalManager.Stop()
+		}
+		if a.eventBus != nil {
+			if a.temporalManager == nil || a.temporalManager.GetEventBus() != a.eventBus {
+				a.eventBus.Close()
+			}
+		}
+		if a.messageBus != nil {
+			if mb, ok := a.messageBus.(*messagebus.NatsMessageBus); ok {
+				_ = mb.Close()
+			}
+		}
+		if a.database != nil {
+			_ = a.database.Close()
+		}
+	})
 }
 
 // GetTemporalManager returns the Temporal manager
@@ -1608,25 +1744,123 @@ func (a *Loom) CheckProjectReadiness(ctx context.Context, projectID string) (boo
 	a.readinessMu.Unlock()
 
 	if !ready {
+		// Attempt self-healing before filing a bead.
+		healed := a.attemptSelfHeal(ctx, project, issues)
+		if healed {
+			log.Printf("[Readiness] Self-healed issues for project %s, rechecking", projectID)
+			a.readinessMu.Lock()
+			delete(a.readinessCache, projectID)
+			a.readinessMu.Unlock()
+			return a.CheckProjectReadiness(ctx, projectID)
+		}
 		a.maybeFileReadinessBead(project, issues, publicKey)
 	}
 
 	return ready, issues
 }
 
+// DiagnoseProject returns detailed diagnostic information about a project's
+// build environment, container status, and workspace health.
+func (a *Loom) DiagnoseProject(ctx context.Context, projectID string) map[string]interface{} {
+	diag := map[string]interface{}{
+		"project_id": projectID,
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	ready, issues := a.CheckProjectReadiness(ctx, projectID)
+	diag["ready"] = ready
+	diag["issues"] = issues
+
+	// Check container status if orchestrator is available
+	if a.containerOrchestrator != nil {
+		agent, err := a.containerOrchestrator.GetAgent(projectID)
+		if err != nil {
+			diag["container_status"] = "not_running"
+			diag["container_error"] = err.Error()
+		} else if agent != nil {
+			if healthErr := agent.Health(ctx); healthErr != nil {
+				diag["container_status"] = "unhealthy"
+				diag["container_error"] = healthErr.Error()
+			} else {
+				diag["container_status"] = "healthy"
+				status, _ := agent.Status(ctx)
+				if status != nil {
+					diag["agent_status"] = status
+				}
+			}
+		}
+	}
+
+	// Check build env readiness
+	if a.actionRouter != nil && a.actionRouter.BuildEnv != nil {
+		diag["build_env_ready"] = a.actionRouter.BuildEnv.IsReady(projectID)
+		diag["os_family"] = a.actionRouter.BuildEnv.GetOSFamily(projectID).String()
+	}
+
+	return diag
+}
+
+// attemptSelfHeal tries to fix common readiness issues automatically.
+// Returns true if any healing was performed (caller should recheck).
+func (a *Loom) attemptSelfHeal(ctx context.Context, project *models.Project, issues []string) bool {
+	if project == nil || len(issues) == 0 {
+		return false
+	}
+
+	healed := false
+	for _, issue := range issues {
+		lower := strings.ToLower(issue)
+
+		// Self-heal: beads path missing -> create it
+		if strings.Contains(lower, "beads path missing") {
+			beadsPath := project.BeadsPath
+			if project.GitRepo != "" && project.GitRepo != "." {
+				beadsPath = filepath.Join(a.gitopsManager.GetProjectWorkDir(project.ID), project.BeadsPath)
+			}
+			if err := os.MkdirAll(beadsPath, 0755); err == nil {
+				log.Printf("[SelfHeal] Created missing beads path %s for project %s", beadsPath, project.ID)
+				healed = true
+			}
+		}
+
+		// Self-heal: git remote access failed with token auth -> ensure token is set
+		if strings.Contains(lower, "git remote access failed") && project.GitAuthMethod == "token" {
+			// Try to refresh git credentials from env
+			if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+				log.Printf("[SelfHeal] GITHUB_TOKEN available, retrying git access for %s", project.ID)
+				healed = true
+			} else if token := os.Getenv("GITLAB_TOKEN"); token != "" {
+				log.Printf("[SelfHeal] GITLAB_TOKEN available, retrying git access for %s", project.ID)
+				healed = true
+			}
+		}
+	}
+
+	return healed
+}
+
 func (a *Loom) maybeFileReadinessBead(project *models.Project, issues []string, publicKey string) {
 	if project == nil || len(issues) == 0 {
 		return
 	}
-	issueKey := fmt.Sprintf("%s:%s", project.ID, strings.Join(issues, "|"))
+
+	// Dedup key is just the project ID — we don't want multiple open
+	// readiness beads for the same project regardless of which specific
+	// issues are reported (they tend to fluctuate slightly).
+	issueKey := "readiness:" + project.ID
 	now := time.Now()
 	a.readinessMu.Lock()
-	if last, ok := a.readinessFailures[issueKey]; ok && now.Sub(last) < 30*time.Minute {
+	if last, ok := a.readinessFailures[issueKey]; ok && now.Sub(last) < 4*time.Hour {
 		a.readinessMu.Unlock()
 		return
 	}
 	a.readinessFailures[issueKey] = now
 	a.readinessMu.Unlock()
+
+	// Check if there's already an open/in_progress readiness bead for this project.
+	if a.hasOpenReadinessBead(project.ID) {
+		return
+	}
 
 	description := fmt.Sprintf("Project readiness failed for %s.\n\nIssues:\n- %s", project.ID, strings.Join(issues, "\n- "))
 	if publicKey != "" {
@@ -1636,7 +1870,7 @@ func (a *Loom) maybeFileReadinessBead(project *models.Project, issues []string, 
 	bead, err := a.CreateBead(
 		fmt.Sprintf("[auto-filed] P3 - Project readiness failed for %s", project.ID),
 		description,
-		models.BeadPriorityP3, // Readiness failures need human config (SSH keys), not agent work
+		models.BeadPriorityP3,
 		"bug",
 		project.ID,
 	)
@@ -1648,6 +1882,27 @@ func (a *Loom) maybeFileReadinessBead(project *models.Project, issues []string, 
 	_ = a.beadsManager.UpdateBead(bead.ID, map[string]interface{}{
 		"tags": []string{"auto-filed", "readiness", "requires-human-config", "p3"},
 	})
+}
+
+// hasOpenReadinessBead checks whether any open/in_progress bead already exists
+// for this project with the "readiness" tag, preventing duplicate filing.
+func (a *Loom) hasOpenReadinessBead(projectID string) bool {
+	if a.beadsManager == nil {
+		return false
+	}
+	allBeads, _ := a.beadsManager.GetReadyBeads(projectID)
+	for _, b := range allBeads {
+		if b == nil || b.ProjectID != projectID {
+			continue
+		}
+		if b.Status != "open" && b.Status != "in_progress" && b.Status != "blocked" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(b.Title), "readiness failed") {
+			return true
+		}
+	}
+	return false
 }
 
 func isSSHRepo(repo string) bool {
@@ -2095,10 +2350,16 @@ func (a *Loom) RegisterProvider(ctx context.Context, p *internalmodels.Provider,
 		return nil, err
 	}
 
-	// Pass API key to the registry so the Protocol gets authentication
+	// Pass API key to the registry so the Protocol gets authentication.
+	// Also persist it on the model so it survives restarts.
 	regAPIKey := ""
 	if len(apiKeys) > 0 {
 		regAPIKey = apiKeys[0]
+	}
+	if regAPIKey != "" && p.APIKey == "" {
+		p.APIKey = regAPIKey
+		// Re-persist with the key now populated
+		_ = a.database.UpsertProvider(p)
 	}
 	_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
 		ID:                     p.ID,
@@ -2180,6 +2441,7 @@ func (a *Loom) UpdateProvider(ctx context.Context, p *internalmodels.Provider) (
 		Name:                   p.Name,
 		Type:                   p.Type,
 		Endpoint:               p.Endpoint,
+		APIKey:                 p.APIKey,
 		Model:                  p.SelectedModel,
 		ConfiguredModel:        p.ConfiguredModel,
 		SelectedModel:          p.SelectedModel,
@@ -2818,6 +3080,14 @@ func (a *Loom) CloseBead(beadID, reason string) error {
 			"status": string(models.BeadStatusClosed),
 			"reason": reason,
 		})
+	}
+
+	// Clean up agent worktree if one was allocated for this bead.
+	if bead.ProjectID != "" {
+		wtManager := gitops.NewGitWorktreeManager(a.config.Git.ProjectKeyDir)
+		if err := wtManager.CleanupAgentWorktree(bead.ProjectID, beadID); err != nil {
+			log.Printf("[Loom] Worktree cleanup for bead %s failed (non-fatal): %v", beadID, err)
+		}
 	}
 
 	// Auto-create apply-fix bead if this was an approved code fix proposal

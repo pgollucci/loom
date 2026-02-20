@@ -73,11 +73,16 @@ type ProjectGetter interface {
 	GetProject(projectID string) (*models.Project, error)
 }
 
+// EnvReadyFunc is called before executing a command in a project container.
+// It should ensure the container's build environment is initialised.
+type EnvReadyFunc func(ctx context.Context, projectID string, agent *containers.ProjectAgentClient)
+
 // ShellExecutor provides shell command execution with persistent logging
 type ShellExecutor struct {
 	db            *sql.DB
 	containerOrch *containers.Orchestrator
 	projectGetter ProjectGetter
+	envReadyHook  EnvReadyFunc
 }
 
 // NewShellExecutor creates a new shell executor
@@ -91,6 +96,13 @@ func NewShellExecutor(db *sql.DB) *ShellExecutor {
 func (e *ShellExecutor) SetContainerOrchestrator(orch *containers.Orchestrator, projGetter ProjectGetter) {
 	e.containerOrch = orch
 	e.projectGetter = projGetter
+}
+
+// SetEnvReadyHook sets a callback that is invoked before every command
+// executed inside a project container, giving the caller a chance to
+// bootstrap the container's build environment if it hasn't been done yet.
+func (e *ShellExecutor) SetEnvReadyHook(fn EnvReadyFunc) {
+	e.envReadyHook = fn
 }
 
 // validateCommand checks if a command is allowed and returns the parsed command parts
@@ -308,16 +320,26 @@ func (e *ShellExecutor) executeInContainer(ctx context.Context, req ExecuteComma
 		return nil, fmt.Errorf("container agent not available: %w", err)
 	}
 
+	// Ensure the container's build environment is initialised before running
+	if e.envReadyHook != nil {
+		if pac, ok := agentInterface.(*containers.ProjectAgentClient); ok {
+			e.envReadyHook(ctx, req.ProjectID, pac)
+		}
+	}
+
 	// Set default timeout if not specified
 	timeout := req.Timeout
 	if timeout <= 0 {
 		timeout = 300 // 5 minutes default
 	}
 
-	// Set default working directory for container
-	workingDir := req.WorkingDir
-	if workingDir == "" {
-		workingDir = "/workspace" // Container workspace
+	// Container working directory is always /workspace — the loom server's
+	// internal paths (e.g. /app/data/projects/X/main) don't exist inside
+	// the project container. Only honour the request path if it's already
+	// relative to /workspace.
+	workingDir := "/workspace"
+	if strings.HasPrefix(req.WorkingDir, "/workspace") {
+		workingDir = req.WorkingDir
 	}
 
 	taskID := fmt.Sprintf("cmd-%s", uuid.New().String()[:8])

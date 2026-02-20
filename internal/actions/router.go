@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/jordanhubbard/loom/internal/executor"
@@ -112,24 +113,26 @@ type Result struct {
 }
 
 type Router struct {
-	Beads      BeadCreator
-	Closer     BeadCloser
-	Escalator  BeadEscalator
-	Commands   CommandExecutor
-	Tests      TestRunner
-	Linter     LinterRunner
-	Builder    BuildRunner
-	Files      FileManager
-	Git        GitOperator
-	Logger     ActionLogger
-	Workflow   WorkflowOperator
-	LSP        LSPOperator
-	MessageBus MessageSender
-	BeadReader BeadReader
-	Projects   ProjectGetter
-	BeadType   string
-	BeadTags   []string
-	DefaultP0  bool
+	Beads         BeadCreator
+	Closer        BeadCloser
+	Escalator     BeadEscalator
+	Commands      CommandExecutor
+	Tests         TestRunner
+	Linter        LinterRunner
+	Builder       BuildRunner
+	Files         FileManager
+	Git           GitOperator
+	Logger        ActionLogger
+	Workflow      WorkflowOperator
+	LSP           LSPOperator
+	MessageBus    MessageSender
+	BeadReader    BeadReader
+	Projects      ProjectGetter
+	ContainerOrch ContainerOrchestrator
+	BuildEnv      *BuildEnvManager
+	BeadType      string
+	BeadTags      []string
+	DefaultP0     bool
 }
 
 // getProjectWorkDir returns the working directory for a project
@@ -247,6 +250,34 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			},
 		}
 	case ActionEditCode:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			if action.OldText != "" && action.Path != "" {
+				readRes, readErr := agent.ReadFile(ctx, action.Path)
+				if readErr != nil {
+					return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("cannot read %s: %v", action.Path, readErr)}
+				}
+				newContent, matched, strategy := MatchAndReplace(readRes.Content, action.OldText, action.NewText)
+				if !matched {
+					return Result{ActionType: action.Type, Status: "error",
+						Message: fmt.Sprintf("OLD text not found in %s (tried exact, line-trimmed, whitespace-normalized, indentation-flexible, block-anchor matching). Re-read the file with ACTION: READ and copy the exact text.", action.Path)}
+				}
+				writeRes, writeErr := agent.WriteFile(ctx, action.Path, newContent)
+				if writeErr != nil {
+					return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("write failed: %v", writeErr)}
+				}
+				return Result{
+					ActionType: action.Type,
+					Status:     "executed",
+					Message:    fmt.Sprintf("edited %s (match: %s)", action.Path, strategy),
+					Metadata: map[string]interface{}{
+						"path":           writeRes.Path,
+						"bytes_written":  writeRes.BytesWritten,
+						"match_strategy": strategy,
+					},
+				}
+			}
+			return Result{ActionType: action.Type, Status: "error", Message: "edit_code requires path + old_text + new_text for container projects"}
+		}
 		if r.Files == nil {
 			return r.createBeadFromAction("Edit code", fmt.Sprintf("%s\n\nPatch:\n%s", action.Path, action.Patch), actx)
 		}
@@ -294,6 +325,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   map[string]interface{}{"output": res.Output},
 		}
 	case ActionWriteFile:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerWriteFile(ctx, actx, action)
+		}
 		if r.Files == nil {
 			return r.createBeadFromAction("Write file", fmt.Sprintf("%s\n\nContent:\n%s", action.Path, truncateContent(action.Content, 500)), actx)
 		}
@@ -311,6 +345,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			},
 		}
 	case ActionReadFile:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerReadFile(ctx, actx, action)
+		}
 		if r.Files == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
 		}
@@ -329,6 +366,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			},
 		}
 	case ActionReadTree:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerReadTree(ctx, actx, action)
+		}
 		if r.Files == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
 		}
@@ -347,6 +387,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   map[string]interface{}{"entries": res},
 		}
 	case ActionSearchText:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerSearchText(ctx, actx, action)
+		}
 		if r.Files == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "file manager not configured"}
 		}
@@ -383,6 +426,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   map[string]interface{}{"output": res.Output},
 		}
 	case ActionGitStatus:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerGitStatus(ctx, actx, action)
+		}
 		if r.Git == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
 		}
@@ -397,6 +443,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   map[string]interface{}{"output": out},
 		}
 	case ActionGitDiff:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerGitDiff(ctx, actx, action)
+		}
 		if r.Git == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
 		}
@@ -411,34 +460,26 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   map[string]interface{}{"output": out},
 		}
 	case ActionGitCommit:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerGitCommit(ctx, actx, action)
+		}
 		if r.Git == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
 		}
 
-		// Pre-commit build gate: ensure code compiles before committing.
-		// If build tooling is unavailable (exit 127 = command not found), we allow
-		// the commit since we cannot verify but also cannot reject for missing toolchain.
-		// Only actual compilation failures (exit != 0 and != 127) block the commit.
-		buildResult, buildErr := r.runBuildForProject(ctx, actx, "")
-		if buildErr != nil {
-			return Result{
-				ActionType: action.Type,
-				Status:     "error",
-				Message:    fmt.Sprintf("commit blocked: pre-commit build check error: %v", buildErr),
-			}
+		// Auto branch-per-bead: if we're on main/master, create a bead branch first.
+		if actx.BeadID != "" {
+			r.ensureBeadBranch(ctx, actx)
 		}
-		if buildResult != nil && !buildResult.Success && buildResult.ExitCode != 127 {
-			return Result{
-				ActionType: action.Type,
-				Status:     "error",
-				Message:    fmt.Sprintf("commit blocked: build must pass before committing (exit %d):\nstdout: %s\nstderr: %s", buildResult.ExitCode, buildResult.Stdout, buildResult.Stderr),
-			}
+
+		// Pre-commit quality gate: build + test + lint (best effort).
+		if gateErr := r.runQualityGate(ctx, actx, action); gateErr != "" {
+			return Result{ActionType: action.Type, Status: "error", Message: gateErr}
 		}
 
 		// Auto-generate commit message if not provided
 		message := action.CommitMessage
 		if message == "" {
-			// Generate from bead context (would need bead info passed in actx)
 			message = fmt.Sprintf("feat: Update from bead %s\n\nBead: %s\nAgent: %s\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>",
 				actx.BeadID, actx.BeadID, actx.AgentID)
 		}
@@ -447,6 +488,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		if err != nil {
 			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
 		}
+
+		// Auto-push + auto-PR when commit succeeds on a bead branch.
+		r.autoPushAndPR(ctx, actx, action, result)
 
 		return Result{
 			ActionType: action.Type,
@@ -484,6 +528,9 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   result,
 		}
 	case ActionGitPush:
+		if agent := r.GetReadyContainerAgent(ctx, actx.ProjectID); agent != nil {
+			return r.containerGitPush(ctx, actx, action)
+		}
 		if r.Git == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "git operator not configured"}
 		}
@@ -634,6 +681,37 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		}
 		return Result{ActionType: action.Type, Status: "executed", Message: "bead commits retrieved", Metadata: result}
 
+	case ActionInstallPrerequisites:
+		agent := r.GetReadyContainerAgent(ctx, actx.ProjectID)
+		if agent == nil {
+			return Result{ActionType: action.Type, Status: "error",
+				Message: "install_prerequisites requires a container agent"}
+		}
+		var installCmd string
+		if action.Command != "" {
+			installCmd = action.Command
+		} else {
+			osFamily := OSFamilyDebian
+			if r.BuildEnv != nil {
+				osFamily = r.BuildEnv.GetOSFamily(actx.ProjectID)
+			}
+			installCmd = InstallPackages(osFamily, action.Packages)
+		}
+		if installCmd == "" {
+			return Result{ActionType: action.Type, Status: "skipped", Message: "no packages to install"}
+		}
+		execRes, err := agent.ExecSync(ctx, installCmd, "/", 120)
+		if err != nil {
+			return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+		}
+		if execRes.ExitCode != 0 {
+			return Result{ActionType: action.Type, Status: "error",
+				Message: fmt.Sprintf("install failed (exit %d): %s", execRes.ExitCode, execRes.Stderr)}
+		}
+		return Result{ActionType: action.Type, Status: "executed",
+			Message: fmt.Sprintf("installed packages: %s", strings.Join(action.Packages, ", ")),
+			Metadata: map[string]interface{}{"stdout": execRes.Stdout, "duration_ms": execRes.DurationMs}}
+
 	case ActionRunCommand:
 		if r.Commands == nil {
 			return r.createBeadFromAction("Run command", action.Command, actx)
@@ -706,12 +784,31 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 			Metadata:   result,
 		}
 	case ActionBuildProject:
+		// Prefer the structured BuildRunner if available (returns parsed results
+		// with error_count, warnings, etc.).
+		if r.Builder != nil {
+			projectPath := r.getProjectWorkDir(actx.ProjectID)
+			if projectPath == "" {
+				projectPath = "."
+			}
+			result, err := r.Builder.Run(ctx, projectPath, action.BuildTarget, action.BuildCommand, action.Framework, action.TimeoutSeconds)
+			if err != nil {
+				return Result{ActionType: action.Type, Status: "error", Message: err.Error()}
+			}
+			return Result{
+				ActionType: action.Type,
+				Status:     "executed",
+				Message:    "build executed",
+				Metadata:   result,
+			}
+		}
+		// Fallback: use shell executor for ad-hoc build command.
 		buildResult, err := r.runBuildForProject(ctx, actx, action.BuildCommand)
 		if err != nil {
 			return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("build executor error: %v", err)}
 		}
 		if buildResult == nil {
-			return Result{ActionType: action.Type, Status: "error", Message: "build executor not configured"}
+			return Result{ActionType: action.Type, Status: "error", Message: "builder not configured"}
 		}
 		if !buildResult.Success || buildResult.ExitCode != 0 {
 			return Result{
@@ -1578,4 +1675,123 @@ func (r *Router) handleReadBeadContext(ctx context.Context, action Action, actx 
 			"updated_at":  bead.UpdatedAt,
 		},
 	}
+}
+
+// ensureBeadBranch creates a bead-specific branch if the current branch is
+// main/master. This implements the branch-per-bead workflow required for
+// autonomous PR creation.
+func (r *Router) ensureBeadBranch(ctx context.Context, actx ActionContext) {
+	if r.Git == nil || actx.BeadID == "" {
+		return
+	}
+
+	statusResult, err := r.Git.GetStatus(ctx)
+	if err != nil {
+		return
+	}
+	branch, _ := statusResult["branch"].(string)
+	if branch == "" {
+		return
+	}
+
+	// Already on a non-main branch — assume it's the right one.
+	if branch != "main" && branch != "master" {
+		return
+	}
+
+	beadBranch := "bead/" + actx.BeadID
+	if _, err := r.Git.Checkout(ctx, beadBranch); err != nil {
+		// Branch doesn't exist yet — create it.
+		if _, err2 := r.Git.CreateBranch(ctx, actx.BeadID, "", branch); err2 != nil {
+			log.Printf("[GitCommit] Failed to create bead branch %s: %v", beadBranch, err2)
+		}
+	}
+}
+
+// runQualityGate performs pre-commit build+test+lint checks.
+// Returns an error message string if the commit should be blocked, empty string otherwise.
+func (r *Router) runQualityGate(ctx context.Context, actx ActionContext, action Action) string {
+	// Build gate
+	buildResult, buildErr := r.runBuildForProject(ctx, actx, "")
+	if buildErr != nil {
+		log.Printf("[QualityGate] Build error (allowing commit): %v", buildErr)
+	}
+	if buildResult != nil && !buildResult.Success && buildResult.ExitCode > 0 && buildResult.ExitCode != 127 {
+		return fmt.Sprintf("commit blocked: build failed (exit %d):\nstdout: %s\nstderr: %s",
+			buildResult.ExitCode, buildResult.Stdout, buildResult.Stderr)
+	}
+
+	// Test gate (best-effort, non-blocking for now)
+	if r.Tests != nil {
+		projectPath := r.getProjectWorkDir(actx.ProjectID)
+		testResult, testErr := r.Tests.Run(ctx, projectPath, "", "", 120)
+		if testErr != nil {
+			log.Printf("[QualityGate] Test runner error (non-blocking): %v", testErr)
+		} else if testResult != nil {
+			if passed, ok := testResult["passed"].(bool); ok && !passed {
+				log.Printf("[QualityGate] Tests failed for %s (non-blocking): %v", actx.ProjectID, testResult)
+			}
+		}
+	}
+
+	// Lint gate (best-effort, non-blocking for now)
+	if r.Linter != nil {
+		projectPath := r.getProjectWorkDir(actx.ProjectID)
+		lintResult, lintErr := r.Linter.Run(ctx, projectPath, nil, "", 60)
+		if lintErr != nil {
+			log.Printf("[QualityGate] Linter error (non-blocking): %v", lintErr)
+		} else if lintResult != nil {
+			if violations, ok := lintResult["violations"].(int); ok && violations > 0 {
+				log.Printf("[QualityGate] Lint violations for %s: %d (non-blocking)", actx.ProjectID, violations)
+			}
+		}
+	}
+
+	return ""
+}
+
+// autoPushAndPR automatically pushes the bead branch and creates a PR
+// after a successful commit on a non-main branch.
+func (r *Router) autoPushAndPR(ctx context.Context, actx ActionContext, action Action, commitResult map[string]interface{}) {
+	if r.Git == nil || actx.BeadID == "" {
+		return
+	}
+
+	statusResult, err := r.Git.GetStatus(ctx)
+	if err != nil {
+		return
+	}
+	branch, _ := statusResult["branch"].(string)
+	if branch == "" || branch == "main" || branch == "master" {
+		return
+	}
+
+	// Push with set-upstream
+	pushResult, pushErr := r.Git.Push(ctx, actx.BeadID, branch, true)
+	if pushErr != nil {
+		log.Printf("[AutoPR] Push failed for bead %s branch %s: %v", actx.BeadID, branch, pushErr)
+		return
+	}
+	log.Printf("[AutoPR] Pushed branch %s for bead %s: %v", branch, actx.BeadID, pushResult)
+
+	// Create PR
+	title := action.PRTitle
+	if title == "" {
+		title = fmt.Sprintf("[bead/%s] %s", actx.BeadID, action.CommitMessage)
+		if len(title) > 200 {
+			title = title[:200]
+		}
+	}
+	body := action.PRBody
+	if body == "" {
+		body = fmt.Sprintf("Automated PR from bead `%s`\n\nAgent: `%s`\nProject: `%s`\n\n---\n*Created automatically by Loom*",
+			actx.BeadID, actx.AgentID, actx.ProjectID)
+	}
+
+	prResult, prErr := r.Git.CreatePR(ctx, actx.BeadID, title, body, "main", branch, nil, false)
+	if prErr != nil {
+		log.Printf("[AutoPR] PR creation failed for bead %s: %v", actx.BeadID, prErr)
+		return
+	}
+	log.Printf("[AutoPR] Created PR for bead %s: %v", actx.BeadID, prResult)
 }

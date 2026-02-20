@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -23,15 +24,28 @@ type Config struct {
 	WorkDir           string
 	HeartbeatInterval time.Duration
 	NatsURL           string // NATS server URL (optional, for NATS-based communication)
+
+	// Role-based agent service configuration
+	Role              string // "coder", "reviewer", "qa", "pm", "architect"
+	ProviderEndpoint  string // LLM provider endpoint (e.g., "http://llm:8000/v1")
+	ProviderModel     string // LLM model to use
+	ProviderAPIKey    string // API key for the provider
+	PersonaPath       string // Path to persona instructions file
+	ActionLoopEnabled bool   // Whether to use multi-turn action loop
+	MaxLoopIterations int    // Max action loop iterations (default: 20)
 }
 
-// Agent is a lightweight agent that runs inside a project container
+// Agent is a full-featured agent service that runs inside a project container.
+// It supports LLM-driven action loops, role-based behavior, and NATS communication.
 type Agent struct {
 	config       Config
 	httpClient   *http.Client
 	currentTask  *TaskExecution
 	taskResultCh chan *TaskResult
-	messageBus   *messagebus.NatsMessageBus // NATS client for async communication
+	messageBus   *messagebus.NatsMessageBus
+
+	role              string // cached from config
+	personaInstructions string
 }
 
 // TaskRequest represents a task sent from the control plane
@@ -80,12 +94,28 @@ func New(config Config) (*Agent, error) {
 		config.HeartbeatInterval = 30 * time.Second
 	}
 
+	if config.MaxLoopIterations <= 0 {
+		config.MaxLoopIterations = 20
+	}
+
 	agent := &Agent{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
 		taskResultCh: make(chan *TaskResult, 10),
+		role:         config.Role,
+	}
+
+	// Load persona instructions from file if specified
+	if config.PersonaPath != "" {
+		data, err := readFileContent(config.PersonaPath)
+		if err != nil {
+			log.Printf("Warning: Failed to load persona from %s: %v", config.PersonaPath, err)
+		} else {
+			agent.personaInstructions = data
+			log.Printf("Loaded persona instructions from %s (%d bytes)", config.PersonaPath, len(data))
+		}
 	}
 
 	// Initialize NATS if URL is provided
@@ -104,7 +134,22 @@ func New(config Config) (*Agent, error) {
 		}
 	}
 
+	if config.Role != "" {
+		log.Printf("Agent role: %s", config.Role)
+	}
+	if config.ProviderEndpoint != "" {
+		log.Printf("LLM provider: %s (model: %s)", config.ProviderEndpoint, config.ProviderModel)
+	}
+
 	return agent, nil
+}
+
+func readFileContent(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 // Start begins the agent's background tasks (heartbeat, result reporter, NATS subscription)
@@ -175,8 +220,16 @@ func (a *Agent) Start(ctx context.Context) error {
 func (a *Agent) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/health", a.handleHealth)
 	mux.HandleFunc("/task", a.handleTask)
-	mux.HandleFunc("/exec", a.handleExec) // Synchronous execution endpoint
+	mux.HandleFunc("/exec", a.handleExec)
 	mux.HandleFunc("/status", a.handleStatus)
+	mux.HandleFunc("/files/write", a.handleFileWrite)
+	mux.HandleFunc("/files/read", a.handleFileRead)
+	mux.HandleFunc("/files/tree", a.handleFileTree)
+	mux.HandleFunc("/files/search", a.handleFileSearch)
+	mux.HandleFunc("/git/commit", a.handleGitCommit)
+	mux.HandleFunc("/git/push", a.handleGitPush)
+	mux.HandleFunc("/git/status", a.handleGitStatus)
+	mux.HandleFunc("/git/diff", a.handleGitDiff)
 }
 
 // handleExec executes a command synchronously and returns stdout/stderr/exit-code inline.
@@ -328,25 +381,41 @@ func (a *Agent) executeTask(req *TaskRequest) {
 		BeadID: req.BeadID,
 	}
 
-	// Execute action based on type
+	// When the action loop is enabled and a provider is configured,
+	// delegate to the multi-turn LLM loop instead of simple action dispatch.
 	var output string
 	var err error
 
-	switch req.Action {
-	case "bash":
-		output, err = a.executeBash(ctx, req.Params)
-	case "git_commit":
-		output, err = a.executeGitCommit(ctx, req.Params)
-	case "git_push":
-		output, err = a.executeGitPush(ctx, req.Params)
-	case "read":
-		output, err = a.executeRead(ctx, req.Params)
-	case "write":
-		output, err = a.executeWrite(ctx, req.Params)
-	case "scope":
-		output, err = a.executeScope(ctx, req.Params)
-	default:
-		err = fmt.Errorf("unsupported action: %s", req.Action)
+	if a.config.ActionLoopEnabled && a.config.ProviderEndpoint != "" && req.Action == "action_loop" {
+		title, _ := req.Params["title"].(string)
+		desc, _ := req.Params["description"].(string)
+		if title == "" {
+			title = req.BeadID
+		}
+		output, err = a.RunActionLoop(ctx, title, desc, ActionLoopConfig{
+			MaxIterations:       a.config.MaxLoopIterations,
+			ProviderEndpoint:    a.config.ProviderEndpoint,
+			ProviderModel:       a.config.ProviderModel,
+			ProviderAPIKey:      a.config.ProviderAPIKey,
+			PersonaInstructions: a.personaInstructions,
+		})
+	} else {
+		switch req.Action {
+		case "bash":
+			output, err = a.executeBash(ctx, req.Params)
+		case "git_commit":
+			output, err = a.executeGitCommit(ctx, req.Params)
+		case "git_push":
+			output, err = a.executeGitPush(ctx, req.Params)
+		case "read":
+			output, err = a.executeRead(ctx, req.Params)
+		case "write":
+			output, err = a.executeWrite(ctx, req.Params)
+		case "scope":
+			output, err = a.executeScope(ctx, req.Params)
+		default:
+			err = fmt.Errorf("unsupported action: %s", req.Action)
+		}
 	}
 
 	result.Duration = time.Since(startTime)
@@ -493,6 +562,21 @@ func (a *Agent) executeScope(ctx context.Context, params map[string]interface{})
 	return string(output), err
 }
 
+// ensureWorkspaceReady performs minimal workspace sanity checks before
+// executing a task. It verifies git is configured and the workspace has a
+// .git directory. This runs inside the container so direct exec is fine.
+func (a *Agent) ensureWorkspaceReady() {
+	gitDir := filepath.Join(a.config.WorkDir, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		log.Printf("[Agent] Workspace %s has no .git - task may fail", a.config.WorkDir)
+	}
+	// Ensure git safe.directory is set
+	cmd := exec.Command("git", "config", "--global", "--get-all", "safe.directory")
+	if out, err := cmd.Output(); err != nil || !strings.Contains(string(out), "*") {
+		_ = exec.Command("git", "config", "--global", "--add", "safe.directory", "*").Run()
+	}
+}
+
 // register announces the agent to the control plane
 func (a *Agent) register(ctx context.Context) error {
 	url := fmt.Sprintf("%s/api/v1/project-agents/register", a.config.ControlPlaneURL)
@@ -609,44 +693,71 @@ func (a *Agent) sendResult(ctx context.Context, result *TaskResult) error {
 	return nil
 }
 
-// subscribeToTasks subscribes to NATS task messages for this project
+// subscribeToTasks subscribes to NATS task messages for this project.
+// When a role is configured, it also subscribes to the role-specific subject
+// so the dispatcher can route tasks directly to the right agent type.
 func (a *Agent) subscribeToTasks() error {
-	return a.messageBus.SubscribeTasks(a.config.ProjectID, func(taskMsg *messages.TaskMessage) {
+	handler := func(taskMsg *messages.TaskMessage) {
 		log.Printf("Received NATS task: type=%s bead=%s correlation=%s",
 			taskMsg.Type, taskMsg.BeadID, taskMsg.CorrelationID)
 
-		// Handle different task message types
 		switch taskMsg.Type {
 		case "task.assigned":
 			a.handleNatsTask(taskMsg)
 		case "task.updated":
-			// TODO: Handle task updates
 			log.Printf("Received task update for bead %s", taskMsg.BeadID)
 		case "task.cancelled":
-			// TODO: Handle task cancellation
 			log.Printf("Received task cancellation for bead %s", taskMsg.BeadID)
 		default:
 			log.Printf("Unknown task message type: %s", taskMsg.Type)
 		}
-	})
+	}
+
+	// Subscribe to project-level tasks
+	if err := a.messageBus.SubscribeTasks(a.config.ProjectID, handler); err != nil {
+		return err
+	}
+
+	// Also subscribe to role-specific subject when a role is configured
+	if a.config.Role != "" {
+		if err := a.messageBus.SubscribeTasksForRole(a.config.ProjectID, a.config.Role, handler); err != nil {
+			log.Printf("Warning: Failed to subscribe to role-specific tasks (%s): %v", a.config.Role, err)
+		} else {
+			log.Printf("Subscribed to role-specific NATS tasks: loom.tasks.%s.%s", a.config.ProjectID, a.config.Role)
+		}
+	}
+
+	return nil
 }
 
 // handleNatsTask processes a task received via NATS
 func (a *Agent) handleNatsTask(taskMsg *messages.TaskMessage) {
-	// Convert NATS TaskMessage to internal TaskRequest format
-	req := &TaskRequest{
-		TaskID:    taskMsg.BeadID, // Use BeadID as TaskID
-		BeadID:    taskMsg.BeadID,
-		Action:    "bash", // Default action - could be derived from task data
-		ProjectID: taskMsg.ProjectID,
-		Params: map[string]interface{}{
-			"correlation_id": taskMsg.CorrelationID,
-			"task_data":      taskMsg.TaskData,
-			"work_dir":       taskMsg.TaskData.WorkDir,
-		},
+	// Ensure workspace is git-ready before processing any task.
+	a.ensureWorkspaceReady()
+
+	action := "bash"
+	params := map[string]interface{}{
+		"correlation_id": taskMsg.CorrelationID,
+		"task_data":      taskMsg.TaskData,
+		"work_dir":       taskMsg.TaskData.WorkDir,
 	}
 
-	// Execute task asynchronously (same as HTTP handler)
+	// When the agent has a provider configured and the action loop is enabled,
+	// use the full LLM-driven action loop instead of simple bash execution.
+	if a.config.ActionLoopEnabled && a.config.ProviderEndpoint != "" {
+		action = "action_loop"
+		params["title"] = taskMsg.TaskData.Title
+		params["description"] = taskMsg.TaskData.Description
+	}
+
+	req := &TaskRequest{
+		TaskID:    taskMsg.BeadID,
+		BeadID:    taskMsg.BeadID,
+		Action:    action,
+		ProjectID: taskMsg.ProjectID,
+		Params:    params,
+	}
+
 	go a.executeTaskWithNats(req, taskMsg.CorrelationID)
 }
 
@@ -681,6 +792,20 @@ func (a *Agent) executeTaskWithNats(req *TaskRequest, correlationID string) {
 		output, err = a.executeWrite(ctx, req.Params)
 	case "scope":
 		output, err = a.executeScope(ctx, req.Params)
+	case "action_loop":
+		title, _ := req.Params["title"].(string)
+		desc, _ := req.Params["description"].(string)
+		if title == "" {
+			title = "Task from bead " + req.BeadID
+		}
+		loopCfg := ActionLoopConfig{
+			MaxIterations:       a.config.MaxLoopIterations,
+			ProviderEndpoint:    a.config.ProviderEndpoint,
+			ProviderModel:       a.config.ProviderModel,
+			ProviderAPIKey:      a.config.ProviderAPIKey,
+			PersonaInstructions: a.personaInstructions,
+		}
+		output, err = a.RunActionLoop(ctx, title, desc, loopCfg)
 	default:
 		err = fmt.Errorf("unsupported action: %s", req.Action)
 	}

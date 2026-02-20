@@ -162,18 +162,48 @@ services:
       - WORK_DIR=/workspace
       - GITLAB_TOKEN=${GITLAB_TOKEN}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - REPO_URL={{.RepoURL}}
     volumes:
-      # Isolated workspace - NO host mounts to prevent root filesystem contamination
       - loom-project-{{.ProjectID}}-workspace:/workspace
-      # SSH keys for git (read-only)
+      - loom-project-{{.ProjectID}}-history:/root/.loom-history
       - {{.ProjectsRoot}}/{{.ProjectID}}/keys:/root/.ssh:ro
     networks:
       - loom_loom-network
     restart: unless-stopped
     cap_add:
-      - SYS_ADMIN  # For hermetic operations
+      - SYS_ADMIN
     security_opt:
-      - apparmor:unconfined  # Allow full root capabilities in isolated container
+      - apparmor:unconfined
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # Link persistent history/state from named volume
+        mkdir -p /root/.loom-history
+        [ -f /root/.loom-history/.bash_history ] && ln -sf /root/.loom-history/.bash_history /root/.bash_history
+        [ -f /root/.loom-history/.loom-env-ready ] && cp /root/.loom-history/.loom-env-ready /workspace/.loom-env-ready 2>/dev/null || true
+        # Bootstrap workspace: clone if empty, configure git auth
+        git config --global --add safe.directory '*'
+        if [ ! -d /workspace/.git ]; then
+          if [ -n "$$GITHUB_TOKEN" ]; then
+            AUTH_URL=$$(echo "$$REPO_URL" | sed "s|https://|https://oauth2:$$GITHUB_TOKEN@|")
+          elif [ -n "$$GITLAB_TOKEN" ]; then
+            AUTH_URL=$$(echo "$$REPO_URL" | sed "s|https://|https://oauth2:$$GITLAB_TOKEN@|")
+          else
+            AUTH_URL="$$REPO_URL"
+          fi
+          git clone "$$AUTH_URL" /workspace 2>&1 || true
+        fi
+        # Ensure remote uses current token
+        cd /workspace
+        if [ -n "$$GITHUB_TOKEN" ]; then
+          AUTH_URL=$$(echo "$$REPO_URL" | sed "s|https://|https://oauth2:$$GITHUB_TOKEN@|")
+          git remote set-url origin "$$AUTH_URL" 2>/dev/null || true
+        elif [ -n "$$GITLAB_TOKEN" ]; then
+          AUTH_URL=$$(echo "$$REPO_URL" | sed "s|https://|https://oauth2:$$GITLAB_TOKEN@|")
+          git remote set-url origin "$$AUTH_URL" 2>/dev/null || true
+        fi
+        exec loom-project-agent
 
 networks:
   loom_loom-network:
@@ -181,6 +211,8 @@ networks:
 
 volumes:
   loom-project-{{.ProjectID}}-workspace:
+    driver: local
+  loom-project-{{.ProjectID}}-history:
     driver: local
 `
 
@@ -198,11 +230,17 @@ volumes:
 		}
 	}
 
+	repoURL := project.GitRepo
+	if repoURL == "" && project.Context != nil {
+		repoURL = project.Context["repo_url"]
+	}
+
 	data := map[string]string{
 		"ProjectID":        project.ID,
 		"ControlPlaneURL":  o.controlPlaneURL,
 		"Dockerfile":       dockerfilePath,
 		"ProjectsRoot":     o.projectsRoot,
+		"RepoURL":          repoURL,
 	}
 
 	f, err := os.Create(o.composeFile)
@@ -214,9 +252,10 @@ volumes:
 	return t.Execute(f, data)
 }
 
-// generateDefaultDockerfile creates a default Dockerfile for project containers
+// generateDefaultDockerfile creates a default Dockerfile for project containers.
+// It detects whether the base image is Alpine or Debian/Ubuntu and generates
+// the correct package manager commands accordingly.
 func (o *Orchestrator) generateDefaultDockerfile(project *models.Project, path string) error {
-	// Determine base image based on project type
 	baseImage := "ubuntu:22.04"
 	if project.Context != nil {
 		if img, ok := project.Context["base_image"]; ok {
@@ -224,29 +263,45 @@ func (o *Orchestrator) generateDefaultDockerfile(project *models.Project, path s
 		}
 	}
 
-	dockerfile := fmt.Sprintf(`# Auto-generated Dockerfile for project: %s
-FROM %s
+	isAlpine := strings.Contains(strings.ToLower(baseImage), "alpine")
 
-# Install essential tools
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    wget \
-    ca-certificates \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Go (common for many projects) - detect architecture at build time
-RUN ARCH=$(uname -m) && \
+	var installEssentials, installGo string
+	if isAlpine {
+		installEssentials = `RUN apk add --no-cache \
+    git curl wget ca-certificates build-base bash openssh-client`
+		installGo = `RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+        x86_64) GOARCH=amd64 ;; \
+        aarch64|arm64) GOARCH=arm64 ;; \
+        *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
+    esac && \
+    wget -q https://go.dev/dl/go1.25.7.linux-${GOARCH}.tar.gz && \
+    tar -C /usr/local -xzf go1.25.7.linux-${GOARCH}.tar.gz && \
+    rm go1.25.7.linux-${GOARCH}.tar.gz`
+	} else {
+		installEssentials = `RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget ca-certificates build-essential openssh-client \
+    && rm -rf /var/lib/apt/lists/*`
+		installGo = `RUN ARCH=$(uname -m) && \
     case "$ARCH" in \
         x86_64) GOARCH=amd64 ;; \
         aarch64|arm64) GOARCH=arm64 ;; \
         armv7l) GOARCH=armv6l ;; \
         *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
     esac && \
-    wget https://go.dev/dl/go1.25.7.linux-${GOARCH}.tar.gz && \
+    wget -q https://go.dev/dl/go1.25.7.linux-${GOARCH}.tar.gz && \
     tar -C /usr/local -xzf go1.25.7.linux-${GOARCH}.tar.gz && \
-    rm go1.25.7.linux-${GOARCH}.tar.gz
+    rm go1.25.7.linux-${GOARCH}.tar.gz`
+	}
+
+	dockerfile := fmt.Sprintf(`# Auto-generated Dockerfile for project: %s
+FROM %s
+
+# Install essential tools
+%s
+
+# Install Go (detect architecture at build time)
+%s
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/root/go"
@@ -260,11 +315,11 @@ RUN chmod +x /usr/local/bin/loom-project-agent
 
 # Git config
 RUN git config --global user.name "Loom Agent" && \
-    git config --global user.email "loom@localhost"
+    git config --global user.email "loom@localhost" && \
+    git config --global --add safe.directory '*'
 
-# Entrypoint runs project agent
 ENTRYPOINT ["/usr/local/bin/loom-project-agent"]
-`, project.Name, baseImage)
+`, project.Name, baseImage, installEssentials, installGo)
 
 	return os.WriteFile(path, []byte(dockerfile), 0644)
 }
@@ -353,6 +408,31 @@ func (o *Orchestrator) RegisterAgent(projectID, agentURL string) {
 	}
 	o.projectAgents[projectID] = agent
 	log.Printf("[Orchestrator] Agent registered for project %s at %s", projectID, agentURL)
+}
+
+// SnapshotContainer commits the running container state as a new image layer
+// so that tools installed at runtime (by agents or build-env setup) survive
+// container restarts. The new image replaces the old one in the local registry.
+func (o *Orchestrator) SnapshotContainer(ctx context.Context, projectID string) error {
+	containerName := fmt.Sprintf("loom-project-%s", projectID)
+	imageName := fmt.Sprintf("loom-project:%s", projectID)
+
+	cmd := exec.CommandContext(ctx, "docker", "commit", containerName, imageName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker commit failed for %s: %s - %w", projectID, string(output), err)
+	}
+
+	log.Printf("[Containers] Snapshot saved for project %s -> %s", projectID, imageName)
+	return nil
+}
+
+// SnapshotAfterSetup is called after BuildEnvManager finishes environment
+// initialisation. It commits the container so installed tools persist.
+func (o *Orchestrator) SnapshotAfterSetup(ctx context.Context, projectID string) {
+	if err := o.SnapshotContainer(ctx, projectID); err != nil {
+		log.Printf("[Containers] Snapshot failed for %s (non-fatal): %v", projectID, err)
+	}
 }
 
 // StopAll stops all project containers

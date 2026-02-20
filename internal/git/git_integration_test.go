@@ -1348,7 +1348,17 @@ func TestNewGitServiceDefaultKeyDir(t *testing.T) {
 	}
 }
 
-func TestConfigureSSHKeyNotFound(t *testing.T) {
+func TestConfigureAuthKeyNotFound(t *testing.T) {
+	// Temporarily clear token env vars so fallback also fails
+	origGH := os.Getenv("GITHUB_TOKEN")
+	origGL := os.Getenv("GITLAB_TOKEN")
+	os.Setenv("GITHUB_TOKEN", "")
+	os.Setenv("GITLAB_TOKEN", "")
+	defer func() {
+		os.Setenv("GITHUB_TOKEN", origGH)
+		os.Setenv("GITLAB_TOKEN", origGL)
+	}()
+
 	svc := &GitService{
 		projectPath:   "/tmp/test-repo",
 		projectID:     "test-project",
@@ -1356,16 +1366,16 @@ func TestConfigureSSHKeyNotFound(t *testing.T) {
 		branchPrefix:  "agent/",
 	}
 
-	err := svc.configureSSH()
+	err := svc.configureAuth()
 	if err == nil {
-		t.Error("expected error when SSH key does not exist")
+		t.Error("expected error when no credentials are available")
 	}
-	if err != nil && !strings.Contains(err.Error(), "SSH key not found") {
-		t.Errorf("expected 'SSH key not found' error, got: %v", err)
+	if err != nil && !strings.Contains(err.Error(), "no git credentials") {
+		t.Errorf("expected 'no git credentials' error, got: %v", err)
 	}
 }
 
-func TestConfigureSSHWithKeyFile(t *testing.T) {
+func TestConfigureAuthWithKeyFile(t *testing.T) {
 	// Create a temp directory structure matching the expected key path
 	tmpDir, err := os.MkdirTemp("", "ssh-key-test-*")
 	if err != nil {
@@ -1392,9 +1402,9 @@ func TestConfigureSSHWithKeyFile(t *testing.T) {
 		branchPrefix:  "agent/",
 	}
 
-	err = svc.configureSSH()
+	err = svc.configureAuth()
 	if err != nil {
-		t.Fatalf("configureSSH failed: %v", err)
+		t.Fatalf("configureAuth failed: %v", err)
 	}
 
 	// Verify GIT_SSH_COMMAND was set
@@ -1506,13 +1516,13 @@ func TestGitServicePushRunsPrePushTests(t *testing.T) {
 	ctx := context.Background()
 
 	// Push without force should reach the pre-push test phase
-	// Since the repo has no go.mod etc., pre-push tests pass but configureSSH will fail
+	// Since the repo has no go.mod etc., pre-push tests pass but configureAuth will fail
 	_, err := svc.Push(ctx, PushRequest{
 		BeadID: "bead-push-test",
 		Branch: "agent/test/push-branch",
 		Force:  false,
 	})
-	// Should fail at configureSSH (SSH key not found) since pre-push tests pass
+	// Should fail at configureAuth (no credentials) since pre-push tests pass
 	if err == nil {
 		t.Error("expected error (SSH config should fail)")
 	}

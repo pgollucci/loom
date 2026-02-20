@@ -169,6 +169,97 @@ func (m *GitWorktreeManager) CleanupWorktree(projectID, worktree string) error {
 	return nil
 }
 
+// SetupAgentWorktree creates an isolated worktree for a specific agent/bead
+// combination, allowing multiple agents to work on the same repo simultaneously
+// without stepping on each other's changes.
+func (m *GitWorktreeManager) SetupAgentWorktree(projectID, beadID, baseBranch string) (string, error) {
+	projectDir := filepath.Join(m.projectsRoot, projectID)
+	mainWorktree := filepath.Join(projectDir, "main")
+
+	if _, err := os.Stat(mainWorktree); os.IsNotExist(err) {
+		return "", fmt.Errorf("main worktree not found: %s", mainWorktree)
+	}
+
+	branchName := fmt.Sprintf("bead/%s", beadID)
+	worktreePath := filepath.Join(projectDir, "agents", beadID)
+
+	// If worktree already exists, just return the path
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		log.Printf("[Worktree] Agent worktree already exists for bead %s: %s", beadID, worktreePath)
+		return worktreePath, nil
+	}
+
+	// Ensure the agents directory exists
+	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
+		return "", fmt.Errorf("failed to create agents directory: %w", err)
+	}
+
+	// Check if branch exists
+	checkCmd := exec.Command("git", "rev-parse", "--verify", branchName)
+	checkCmd.Dir = mainWorktree
+	if err := checkCmd.Run(); err != nil {
+		// Branch doesn't exist — create it from base
+		if baseBranch == "" {
+			baseBranch = "main"
+		}
+		createCmd := exec.Command("git", "branch", branchName, baseBranch)
+		createCmd.Dir = mainWorktree
+		if output, err := createCmd.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git branch create failed: %s - %w", output, err)
+		}
+	}
+
+	// Create worktree
+	worktreeCmd := exec.Command("git", "worktree", "add", worktreePath, branchName)
+	worktreeCmd.Dir = mainWorktree
+	if output, err := worktreeCmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git worktree add failed: %s - %w", output, err)
+	}
+
+	log.Printf("[Worktree] Created agent worktree for bead %s at %s (branch %s)", beadID, worktreePath, branchName)
+	return worktreePath, nil
+}
+
+// CleanupAgentWorktree removes an agent's worktree after the bead is completed.
+func (m *GitWorktreeManager) CleanupAgentWorktree(projectID, beadID string) error {
+	projectDir := filepath.Join(m.projectsRoot, projectID, "main")
+	worktreePath := filepath.Join(m.projectsRoot, projectID, "agents", beadID)
+
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	cmd := exec.Command("git", "worktree", "remove", "--force", worktreePath)
+	cmd.Dir = projectDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree remove failed: %s - %w", output, err)
+	}
+
+	log.Printf("[Worktree] Cleaned up agent worktree for bead %s", beadID)
+	return nil
+}
+
+// ListAgentWorktrees returns all active agent worktrees for a project.
+func (m *GitWorktreeManager) ListAgentWorktrees(projectID string) ([]string, error) {
+	agentsDir := filepath.Join(m.projectsRoot, projectID, "agents")
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var worktrees []string
+	for _, e := range entries {
+		if e.IsDir() {
+			worktrees = append(worktrees, e.Name())
+		}
+	}
+	return worktrees, nil
+}
+
 // SyncBeadsBranch pulls latest beads from remote
 // This ensures the local beads worktree is up-to-date with git remote
 func (m *GitWorktreeManager) SyncBeadsBranch(projectID string) error {

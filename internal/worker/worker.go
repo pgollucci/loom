@@ -903,6 +903,36 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 		allActions = append(allActions, results...)
 		tracker.Update(iteration+1, results)
 
+		// Auto-checkpoint: if the agent wrote or edited files successfully,
+		// automatically create a WIP checkpoint commit so work is preserved
+		// even if the agent times out or crashes before emitting git_commit.
+		if config.Router != nil {
+			needsCheckpoint := false
+			for i, act := range env.Actions {
+				if i < len(results) && results[i].Status == "executed" {
+					switch act.Type {
+					case actions.ActionWriteFile, actions.ActionEditCode, actions.ActionApplyPatch:
+						needsCheckpoint = true
+					}
+				}
+			}
+			if needsCheckpoint {
+				cpMsg := fmt.Sprintf("[WIP] Auto-checkpoint after file changes\n\nBead: %s\nAgent: %s",
+					task.BeadID, w.agent.ID)
+				if cAgent := config.Router.GetContainerAgent(task.ProjectID); cAgent != nil {
+					cpResult, cpErr := cAgent.GitCommit(ctx, cpMsg, nil)
+					if cpErr == nil {
+						log.Printf("[ActionLoop] Auto-checkpoint (container) for bead %s: %v", task.BeadID, cpResult.CommitSHA)
+					}
+				} else if config.Router.Git != nil {
+					cpResult, cpErr := config.Router.Git.Commit(ctx, task.BeadID, w.agent.ID, cpMsg, nil, true)
+					if cpErr == nil {
+						log.Printf("[ActionLoop] Auto-checkpoint commit created for bead %s: %v", task.BeadID, cpResult)
+					}
+				}
+			}
+		}
+
 		// Track action types for progress stagnation detection
 		for _, act := range env.Actions {
 			actionTypeCount[act.Type]++
@@ -926,6 +956,25 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 		// Check for terminal actions
 		termReason := checkTerminalCondition(env, results)
 		if termReason != "" {
+			// Auto-push on completion: if the agent is done, push any pending commits.
+			if termReason == "completed" && config.Router != nil {
+				if cAgent := config.Router.GetContainerAgent(task.ProjectID); cAgent != nil {
+					pushResult, pushErr := cAgent.GitPush(ctx, "", false)
+					if pushErr != nil {
+						log.Printf("[ActionLoop] Auto-push (container) failed for bead %s: %v", task.BeadID, pushErr)
+					} else {
+						log.Printf("[ActionLoop] Auto-push (container) succeeded for bead %s: %v", task.BeadID, pushResult.Output)
+					}
+				} else if config.Router.Git != nil {
+					pushResult, pushErr := config.Router.Git.Push(ctx, task.BeadID, "", false)
+					if pushErr != nil {
+						log.Printf("[ActionLoop] Auto-push after completion failed for bead %s: %v", task.BeadID, pushErr)
+					} else {
+						log.Printf("[ActionLoop] Auto-push succeeded for bead %s: %v", task.BeadID, pushResult)
+					}
+				}
+			}
+
 			loopResult.TerminalReason = termReason
 			loopResult.Iterations = iteration + 1
 			loopResult.Actions = allActions

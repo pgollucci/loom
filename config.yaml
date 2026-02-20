@@ -48,6 +48,18 @@ agents:
 
 dispatch:
   max_hops: 20
+  use_nats_dispatch: true  # Route tasks to per-project containers via NATS when containers are running
+
+pda:
+  enabled: true           # Enable Plan/Document/Act orchestrator
+  planner_model: ""       # Auto-detected from active providers
+  planner_endpoint: ""    # Auto-detected from active providers
+  planner_api_key: ""
+
+swarm:
+  enabled: true           # Enable dynamic swarm membership
+  peer_nats_urls: []      # URLs of peer Loom NATS instances for federation
+  gateway_name: "loom-primary"
 
 git:
   project_key_dir: /app/data/projects

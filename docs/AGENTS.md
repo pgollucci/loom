@@ -1,6 +1,204 @@
 # Loom Developer & User Guide
 
-Welcome to Loom - the Agent Orchestration System. This guide helps you get started with developing agents, creating work items (beads), and using the system.
+> **ALL AGENTS: READ THIS SECTION FIRST.**
+> This document is the authoritative reference for debugging, observability,
+> and system introspection in Loom. Every agent — regardless of role — MUST
+> use the tools and workflows described below when diagnosing issues, verifying
+> work, or monitoring system health. Do NOT guess at system state; query it.
+
+## Observability & Debugging Quick-Reference
+
+The single fastest way to understand system state:
+
+```bash
+loomctl status                   # health + agents + beads + providers in one call
+loomctl log recent               # last 20 log entries from the DB (dispatcher, actionloop, actions)
+loomctl analytics velocity       # commit/push/build/test funnel — are changes flowing?
+```
+
+### Diagnostic Flowchart
+
+```
+Is the system healthy?
+  └─ loomctl status → check health.status, providers.healthy, agents.working
+
+Are agents executing work?
+  └─ loomctl log recent → look for [actionloop] "Iteration N/M" entries
+  └─ loomctl analytics stats → check total_requests and tokens_by_user
+
+Are commits being created?
+  └─ loomctl analytics velocity → commits_attempted, pushes_attempted
+  └─ docker compose logs loom | grep "Auto-checkpoint\|Auto-push"
+
+Is dispatch working?
+  └─ loomctl log recent → look for [dispatcher] entries
+  └─ Key skip reasons: already_inflight, already_run, cooldown_after_failure
+
+What is a specific agent doing?
+  └─ loomctl agent show <agent-id>
+  └─ DB query: SELECT * FROM logs WHERE agent_id='<id>' ORDER BY timestamp DESC LIMIT 20;
+
+What happened to a specific bead?
+  └─ loomctl bead show <bead-id>
+  └─ DB query: SELECT * FROM logs WHERE bead_id='<id>' ORDER BY timestamp DESC LIMIT 20;
+```
+
+### loomctl Command Reference (Complete)
+
+| Command | Subcommands | Purpose |
+|---------|------------|---------|
+| `loomctl status` | — | Aggregated health, agents, beads, providers |
+| `loomctl agent` | `list`, `show` | Agent state and details |
+| `loomctl bead` | `list`, `show`, `create`, `update`, `delete`, `claim`, `poke` | Bead CRUD and redispatch |
+| `loomctl project` | `list`, `show` | Project listing |
+| `loomctl provider` | `list`, `show`, `register`, `delete` | Provider management |
+| `loomctl log` | `recent`, `stream`, `export` | DB-stored logs (dispatcher, actionloop, actions) |
+| `loomctl metrics` | `cache`, `events`, `patterns`, `prometheus` | Observability metrics |
+| `loomctl analytics` | `stats`, `costs`, `velocity`, `logs`, `export` | Cost, token, and velocity tracking |
+| `loomctl event` | `list`, `activity`, `stream` | Event bus history and live SSE |
+| `loomctl conversation` | `list`, `show` | Agent conversation sessions (requires project_id via API) |
+| `loomctl workflow` | `list`, `show`, `start`, `executions`, `analytics` | Workflow management and analytics |
+| `loomctl config` | `show`, `export` | Server configuration |
+| `loomctl export` | — | Full database export to JSON |
+| `loomctl import` | — | Database import from JSON |
+
+### HTTP API Endpoints (Complete)
+
+All endpoints are at `http://localhost:8080` (external) / port 8081 (internal container).
+
+#### Health & Readiness
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Detailed health with dependency checks (DB latency, message bus, cache) |
+| `/health/live` | GET | Kubernetes liveness probe |
+| `/health/ready` | GET | Kubernetes readiness probe |
+| `/api/v1/health` | GET | Simple health (status, version, uptime) |
+| `/metrics` | GET | Prometheus metrics (Go runtime, cache hits/misses, DB connections) |
+
+#### Core Resources
+| Endpoint | Methods | Purpose |
+|----------|---------|---------|
+| `/api/v1/agents` | GET, POST | List/create agents |
+| `/api/v1/agents/{id}` | GET, PUT, DELETE | Agent CRUD |
+| `/api/v1/beads` | GET, POST | List/create beads |
+| `/api/v1/beads/{id}` | GET, PUT, DELETE | Bead CRUD |
+| `/api/v1/projects` | GET, POST | List/create projects |
+| `/api/v1/projects/{id}` | GET, PUT, DELETE | Project CRUD |
+| `/api/v1/providers` | GET, POST | List/register providers |
+| `/api/v1/providers/{id}` | GET, PUT, DELETE | Provider CRUD |
+
+#### Observability & Analytics
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/analytics/stats` | GET | Aggregate: total requests, tokens, cost by provider/user, error rate, latency |
+| `/api/v1/analytics/costs` | GET | Cost breakdown by provider and user |
+| `/api/v1/analytics/change-velocity?project_id=X` | GET | Commit/push/build/test funnel for a project |
+| `/api/v1/analytics/logs` | GET | Raw analytics log entries (filterable by provider, time range) |
+| `/api/v1/analytics/export` | GET | Export analytics as CSV or JSON |
+| `/api/v1/analytics/export-stats` | GET | Export aggregated stats |
+| `/api/v1/analytics/batching` | GET | Batching optimization recommendations |
+| `/api/v1/logs/recent` | GET | Recent structured log entries from DB |
+| `/api/v1/logs/stream` | GET (SSE) | Live log stream |
+| `/api/v1/logs/export` | GET | Full log export |
+| `/api/v1/system/status` | GET | Dispatcher state (active/parked/error + reason) |
+
+#### Events & Activity
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/events` | GET | Event history (filterable by project_id, type, limit) |
+| `/api/v1/events/stats` | GET | Event bus subscriber count and status |
+| `/api/v1/events/stream` | GET (SSE) | Live event stream (real-time) |
+| `/api/v1/activity-feed` | GET | Aggregated activity feed |
+| `/api/v1/activity-feed/stream` | GET (SSE) | Live activity stream |
+
+#### Pattern Analysis & Optimization
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/patterns/analysis` | GET | Pattern analysis results (latency spikes, anomalies) |
+| `/api/v1/patterns/expensive` | GET | Most expensive request patterns |
+| `/api/v1/patterns/anomalies` | GET | Detected anomalies |
+| `/api/v1/cache/stats` | GET | Cache hit/miss/eviction rates |
+| `/api/v1/cache/analysis` | GET | Cache efficiency analysis |
+| `/api/v1/cache/recommendations` | GET | Optimization recommendations |
+
+#### Workflows
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/workflows` | GET | List workflow definitions |
+| `/api/v1/workflows/start` | POST | Start a workflow execution |
+| `/api/v1/workflows/executions` | GET | List all workflow executions |
+| `/api/v1/workflows/analytics` | GET | Workflow execution stats (status counts, escalation rate) |
+| `/api/v1/workflows/{id}` | GET | Workflow details |
+
+#### Git Operations
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/projects/git/status` | GET | Git status for a project |
+| `/api/v1/projects/git/sync` | POST | Trigger git sync |
+| `/api/v1/projects/git/commit` | POST | Create a commit |
+| `/api/v1/projects/git/push` | POST | Push to remote |
+
+#### Conversations
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/conversations?project_id=X` | GET | List conversation sessions for a project |
+| `/api/v1/conversations/{id}` | GET | Show conversation messages |
+
+### Database Direct Queries (for deep debugging)
+
+When loomctl output is insufficient, query the PostgreSQL database directly:
+
+```bash
+# Connect to the DB
+docker exec loom-postgresql psql -U loom -d loom
+
+# Recent action loop activity
+SELECT id, bead_id, agent_id, substring(message for 100), timestamp
+  FROM logs WHERE source = 'actionloop'
+  ORDER BY timestamp DESC LIMIT 20;
+
+# Recent dispatches
+SELECT substring(message for 120), timestamp
+  FROM logs WHERE source = 'dispatcher'
+  ORDER BY timestamp DESC LIMIT 20;
+
+# Action execution by bead
+SELECT bead_id, agent_id, substring(message for 80), timestamp
+  FROM logs WHERE source = 'actions' AND bead_id = 'bd-022'
+  ORDER BY timestamp DESC LIMIT 20;
+
+# Bead status distribution
+SELECT status, count(*) FROM beads GROUP BY status;
+
+# Agent activity
+SELECT id, status, current_bead, provider_id FROM agents WHERE status = 'working';
+```
+
+### Docker Container Logs
+
+```bash
+# Main loom server logs (includes git operations, container builds)
+docker compose logs loom --tail 100
+
+# Follow logs in real-time
+docker compose logs -f loom
+
+# Search for specific patterns
+docker compose logs loom 2>&1 | grep "Auto-checkpoint\|Auto-push\|SaveBeadToGit"
+```
+
+### Key Log Sources
+
+| Source | What it logs |
+|--------|-------------|
+| `dispatcher` | Bead selection, skip reasons (already_inflight, cooldown, etc.) |
+| `dispatchloop` | Ralph heartbeat, stuck agent detection, reset |
+| `actionloop` | LLM iteration count, parse errors, terminal reasons |
+| `actions` | Individual action execution (read, write, search, commit, push) |
+| `temporal info` | Provider heartbeats, workflow execution |
+| `temporal debug` | Timer/activity scheduling details |
+
+---
 
 ## CLI First: Use loomctl, Not curl
 
@@ -32,26 +230,36 @@ loomctl agent list
 loomctl project list
 
 # Logs and observability
-loomctl log recent --limit=50            # Recent log entries
+loomctl log recent                       # Recent log entries from DB
 loomctl log stream                       # Live SSE log stream
+loomctl log export                       # Full log export
 loomctl metrics prometheus               # Raw Prometheus metrics
-loomctl metrics cache                    # Cache stats
-loomctl analytics stats                  # Analytics overview
-loomctl analytics costs                  # Cost breakdown
+loomctl metrics cache                    # Cache hit/miss stats
+loomctl metrics events                   # Event bus subscriber stats
+loomctl metrics patterns                 # Pattern analysis (anomalies, latency spikes)
+loomctl analytics stats                  # Aggregate: requests, tokens, cost, error rate
+loomctl analytics costs                  # Cost breakdown by provider/user
+loomctl analytics velocity               # Commit/push/build/test funnel
+loomctl analytics logs                   # Raw analytics log entries
+loomctl analytics export                 # Export analytics data
 
 # Events and activity
 loomctl event list                       # Recent events
-loomctl event stream                     # Live event stream
-loomctl event activity                   # Activity feed
+loomctl event stream                     # Live event stream (SSE)
+loomctl event activity                   # Aggregated activity feed
 
 # Conversations and workflows
-loomctl conversation list
+loomctl conversation list                # Requires project_id via API
 loomctl conversation show <session-id>
-loomctl workflow list
-loomctl workflow executions
+loomctl workflow list                    # Workflow definitions
+loomctl workflow executions              # Active/completed executions
+loomctl workflow analytics               # Execution stats, escalation rates
+loomctl workflow show <id>               # Workflow details
+loomctl workflow start --bead=X --workflow=Y --project=Z
 
 # Server config
-loomctl config show
+loomctl config show                      # Current config (all sections)
+loomctl config export                    # Export as YAML
 ```
 
 **Environment:** Set `LOOM_SERVER=http://localhost:8080` or use `--server` flag.
@@ -401,82 +609,17 @@ Temporal UI is at `http://localhost:8088`.
 
 ### Telemetry & Observability APIs
 
-All endpoints are at `http://localhost:8080`.
+> See the **Observability & Debugging Quick-Reference** at the top of this document
+> for the complete API endpoint table, loomctl command reference, database queries,
+> and the diagnostic flowchart. Use `loomctl` for all queries — never raw `curl`.
 
-#### Analytics Endpoints
-
+**Key loomctl commands for monitoring:**
 ```bash
-# Request logs — filter by provider, time range
-curl 'http://localhost:8080/api/v1/analytics/logs?provider_id=prov-1&start_time=2026-01-01T00:00:00Z'
-
-# Aggregated stats — total requests, tokens, costs
-curl 'http://localhost:8080/api/v1/analytics/stats'
-
-# Cost breakdown by provider and user
-curl 'http://localhost:8080/api/v1/analytics/costs'
-
-# Export logs as CSV
-curl 'http://localhost:8080/api/v1/analytics/export?format=csv'
-
-# Export stats as JSON
-curl 'http://localhost:8080/api/v1/analytics/export-stats?format=json'
-
-# Batching optimization recommendations
-curl 'http://localhost:8080/api/v1/analytics/batching?max_recommendations=5&window_minutes=60'
-```
-
-**Analytics log fields:** timestamp, user, method, path, provider, model, tokens (input/output), latency_ms, status, cost_usd
-
-#### Event Endpoints
-
-```bash
-# Recent events (with optional filters)
-curl 'http://localhost:8080/api/v1/events?project_id=myapp&type=bead.status_change&limit=50'
-
-# Event bus statistics
-curl 'http://localhost:8080/api/v1/events/stats'
-
-# Live SSE event stream (real-time)
-curl -N 'http://localhost:8080/api/v1/events/stream?project_id=myapp'
-```
-
-#### Health & Readiness
-
-```bash
-# Detailed health with dependency checks
-curl 'http://localhost:8080/health'
-
-# Kubernetes liveness probe
-curl 'http://localhost:8080/health/live'
-
-# Kubernetes readiness probe (checks DB, providers)
-curl 'http://localhost:8080/health/ready'
-
-# Prometheus metrics
-curl 'http://localhost:8080/metrics'
-```
-
-### Monitoring & Debugging
-
-**System overview (one command):**
-```bash
-loomctl status | jq .
-```
-
-**Check agent status:**
-```bash
-loomctl agent list | jq '.[] | {name, status, provider_id, current_bead}'
-```
-
-**Check provider health:**
-```bash
-loomctl provider list | jq '.[] | {id, status, model}'
-```
-Provider status must be `"healthy"` (set by heartbeat workflow), not `"active"`.
-
-**Check bead status distribution:**
-```bash
-loomctl status | jq '.beads.by_status'
+loomctl status                           # One-stop health + agents + beads + providers
+loomctl log recent                       # Recent DB logs (dispatcher, actionloop, actions)
+loomctl analytics velocity               # Commit/push/build/test funnel
+loomctl metrics patterns                 # Latency anomalies and expensive patterns
+loomctl event activity                   # Aggregated activity feed
 ```
 
 **Loop detection:** When Ralph detects a stuck agent loop (dispatch_count exceeds max_hops with no progress), it auto-blocks the bead and records:

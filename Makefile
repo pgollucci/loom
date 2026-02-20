@@ -1,4 +1,4 @@
-.PHONY: all build build-all start stop restart prune bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch k8s-apply k8s-delete linkerd-setup linkerd-check linkerd-dashboard linkerd-tap proto-gen
+.PHONY: all build build-all start stop restart prune bootstrap test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch k8s-apply k8s-delete linkerd-setup linkerd-check linkerd-dashboard linkerd-tap proto-gen agents scale-coders scale-reviewers scale-qa scale-agents logs-agents stop-agents
 
 # Build variables
 BINARY_NAME=loom
@@ -341,6 +341,42 @@ release-minor:
 release-major:
 	@BATCH=$(BATCH) ./scripts/release.sh major
 
+# ── Agent Swarm targets ───────────────────────────────────────────────────
+
+# Start agent swarm (all three agent roles)
+agents: start
+	@echo "Scaling agent swarm..."
+	docker compose up -d loom-agent-coder loom-agent-reviewer loom-agent-qa
+	@echo "Agent swarm running."
+
+# Scale coder agents (usage: make scale-coders N=3)
+scale-coders:
+	docker compose up -d --scale loom-agent-coder=$(N) --no-recreate
+
+# Scale reviewer agents (usage: make scale-reviewers N=2)
+scale-reviewers:
+	docker compose up -d --scale loom-agent-reviewer=$(N) --no-recreate
+
+# Scale QA agents (usage: make scale-qa N=2)
+scale-qa:
+	docker compose up -d --scale loom-agent-qa=$(N) --no-recreate
+
+# Scale all agent types independently (usage: make scale-agents CODERS=3 REVIEWERS=2 QA=2)
+scale-agents:
+	docker compose up -d \
+		--scale loom-agent-coder=$(CODERS) \
+		--scale loom-agent-reviewer=$(REVIEWERS) \
+		--scale loom-agent-qa=$(QA) \
+		--no-recreate
+
+# View agent container logs
+logs-agents:
+	docker compose logs -f loom-agent-coder loom-agent-reviewer loom-agent-qa
+
+# Stop only agent containers (keep control plane running)
+stop-agents:
+	docker compose stop loom-agent-coder loom-agent-reviewer loom-agent-qa
+
 # ── Kubernetes / Linkerd targets ──────────────────────────────────────────
 
 # Apply base + local overlay (requires kubectl context set to loom-dev cluster)
@@ -409,6 +445,15 @@ help:
 	@echo "  make install      - Install binary to GOPATH/bin"
 	@echo "  make config       - Create config.yaml from example"
 	@echo "  make dev-setup    - Set up development environment"
+	@echo ""
+	@echo "Agent Swarm:"
+	@echo "  make agents           - Start all agent service containers"
+	@echo "  make scale-coders N=3 - Scale coder agents to N replicas"
+	@echo "  make scale-reviewers N=2 - Scale reviewer agents"
+	@echo "  make scale-qa N=2     - Scale QA agents"
+	@echo "  make scale-agents CODERS=3 REVIEWERS=2 QA=2 - Scale all agent types"
+	@echo "  make logs-agents      - Follow agent container logs"
+	@echo "  make stop-agents      - Stop only agent containers"
 	@echo ""
 	@echo "Kubernetes / Linkerd:"
 	@echo "  make linkerd-setup    - Create k3d cluster, install Linkerd, deploy loom"

@@ -2,12 +2,16 @@ package api
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/jordanhubbard/loom/internal/loom"
 	"github.com/jordanhubbard/loom/pkg/config"
@@ -335,13 +339,57 @@ func TestImportDryRun(t *testing.T) {
 	}
 }
 
-// Helper function to create test loom instance
+// Helper function to create test loom instance with an isolated test database.
 func createTestLoom(t *testing.T) (*loom.Loom, func()) {
 	t.Helper()
 	tmpDir, err := os.MkdirTemp("", "loom-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
+
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("POSTGRES_PORT")
+	if port == "" {
+		port = "5432"
+	}
+	user := os.Getenv("POSTGRES_USER")
+	if user == "" {
+		user = "loom"
+	}
+	password := os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		password = "loom"
+	}
+	adminDSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=postgres sslmode=disable connect_timeout=5",
+		host, port, user, password)
+
+	adminDB, adminErr := sql.Open("postgres", adminDSN)
+	if adminErr != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("Failed to connect to postgres: %v", adminErr)
+	}
+	if err := adminDB.Ping(); err != nil {
+		adminDB.Close()
+		os.RemoveAll(tmpDir)
+		t.Skipf("Skipping: postgres not reachable: %v", err)
+	}
+
+	testDBName := fmt.Sprintf("loom_api_test_%d", time.Now().UnixNano())
+	if _, err := adminDB.Exec(`CREATE DATABASE "` + testDBName + `"`); err != nil {
+		adminDB.Close()
+		os.RemoveAll(tmpDir)
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	adminDB.Close()
+
+	t.Setenv("POSTGRES_HOST", host)
+	t.Setenv("POSTGRES_PORT", port)
+	t.Setenv("POSTGRES_USER", user)
+	t.Setenv("POSTGRES_PASSWORD", password)
+	t.Setenv("POSTGRES_DB", testDBName)
 
 	cfg := &config.Config{
 		Agents: config.AgentsConfig{
@@ -366,7 +414,12 @@ func createTestLoom(t *testing.T) (*loom.Loom, func()) {
 	}
 
 	cleanup := func() {
+		app.Shutdown()
 		os.RemoveAll(tmpDir)
+		if a, e := sql.Open("postgres", adminDSN); e == nil {
+			a.Exec(`DROP DATABASE IF EXISTS "` + testDBName + `"`)
+			a.Close()
+		}
 	}
 
 	return app, cleanup

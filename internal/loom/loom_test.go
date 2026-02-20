@@ -85,11 +85,7 @@ func testLoom(t *testing.T, opts ...func(*config.Config)) (*Loom, string) {
 		t.Fatalf("Failed to create loom: %v", err)
 	}
 	t.Cleanup(func() {
-		// Close DB to return connections to the pool and prevent exhaustion.
-		// Use GetDatabase().Close() instead of Shutdown() to avoid double-close panics.
-		if db := l.GetDatabase(); db != nil {
-			db.Close()
-		}
+		l.Shutdown()
 		os.RemoveAll(tmpDir)
 	})
 	return l, tmpDir

@@ -195,6 +195,99 @@ services:
       retries: 3
       start_period: 40s
 
+  # Agent Service: Coder -- subscribes to loom.tasks.*.coder
+  loom-agent-coder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: loom:latest
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+      loom:
+        condition: service_healthy
+    environment:
+      - PROJECT_ID=${PROJECT_ID:-loom}
+      - CONTROL_PLANE_URL=http://loom:8081
+      - NATS_URL=nats://nats:4222
+      - AGENT_ROLE=coder
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - ACTION_LOOP_ENABLED=true
+      - MAX_LOOP_ITERATIONS=25
+      - WORK_DIR=/workspace
+    networks:
+      - loom-network
+    volumes:
+      - agent-coder-workspace:/workspace
+    entrypoint: ["/app/loom-project-agent"]
+    deploy:
+      replicas: ${CODER_REPLICAS:-1}
+
+  # Agent Service: Reviewer -- subscribes to loom.reviews.*
+  loom-agent-reviewer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: loom:latest
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+      loom:
+        condition: service_healthy
+    environment:
+      - PROJECT_ID=${PROJECT_ID:-loom}
+      - CONTROL_PLANE_URL=http://loom:8081
+      - NATS_URL=nats://nats:4222
+      - AGENT_ROLE=reviewer
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - ACTION_LOOP_ENABLED=true
+      - MAX_LOOP_ITERATIONS=15
+      - WORK_DIR=/workspace
+    networks:
+      - loom-network
+    volumes:
+      - agent-reviewer-workspace:/workspace
+    entrypoint: ["/app/loom-project-agent"]
+    deploy:
+      replicas: ${REVIEWER_REPLICAS:-1}
+
+  # Agent Service: QA -- subscribes to loom.tasks.*.qa
+  loom-agent-qa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: loom:latest
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+      loom:
+        condition: service_healthy
+    environment:
+      - PROJECT_ID=${PROJECT_ID:-loom}
+      - CONTROL_PLANE_URL=http://loom:8081
+      - NATS_URL=nats://nats:4222
+      - AGENT_ROLE=qa
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - ACTION_LOOP_ENABLED=true
+      - MAX_LOOP_ITERATIONS=10
+      - WORK_DIR=/workspace
+    networks:
+      - loom-network
+    volumes:
+      - agent-qa-workspace:/workspace
+    entrypoint: ["/app/loom-project-agent"]
+    deploy:
+      replicas: ${QA_REPLICAS:-1}
+
   loom-test:
     build:
       context: .
@@ -322,3 +415,6 @@ volumes:
   prometheus-data:
   grafana-data:
   loki-data:
+  agent-coder-workspace:
+  agent-reviewer-workspace:
+  agent-qa-workspace:

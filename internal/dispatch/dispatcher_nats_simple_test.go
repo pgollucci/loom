@@ -19,6 +19,12 @@ func (m *MockSimpleMessageBus) PublishTask(ctx context.Context, projectID string
 	return nil
 }
 
+func (m *MockSimpleMessageBus) PublishTaskForRole(ctx context.Context, projectID, role string, task *messages.TaskMessage) error {
+	m.publishedTasks = append(m.publishedTasks, task)
+	m.publishCount++
+	return nil
+}
+
 // TestMessageBusInterface verifies the MessageBus interface contract
 func TestMessageBusInterface(t *testing.T) {
 	var _ MessageBus = (*MockSimpleMessageBus)(nil)

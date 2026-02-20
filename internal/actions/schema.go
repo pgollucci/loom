@@ -78,6 +78,9 @@ const (
 	ActionGitDiffBranches = "git_diff_branches"
 	ActionGitBeadCommits  = "git_bead_commits"
 
+	// Environment setup actions
+	ActionInstallPrerequisites = "install_prerequisites"
+
 	// Agent signals
 	ActionDone = "done"
 
@@ -123,6 +126,9 @@ type Action struct {
 	// Build execution fields
 	BuildTarget  string `json:"build_target,omitempty"`  // Build target (e.g., binary name)
 	BuildCommand string `json:"build_command,omitempty"` // Custom build command
+
+	// Prerequisite installation fields
+	Packages []string `json:"packages,omitempty"` // OS packages to install (auto-detects apt vs apk)
 
 	// Git operation fields
 	CommitMessage string   `json:"commit_message,omitempty"` // Commit message (auto-generated if empty)
@@ -453,6 +459,10 @@ func validateAction(action Action) error {
 		}
 	case ActionGitBeadCommits:
 		// bead_id comes from action context
+	case ActionInstallPrerequisites:
+		if len(action.Packages) == 0 && action.Command == "" {
+			return errors.New("install_prerequisites requires packages list or command")
+		}
 	case ActionRunCommand:
 		if action.Command == "" {
 			return errors.New("run_command requires command")

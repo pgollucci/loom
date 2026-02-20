@@ -59,93 +59,101 @@ func NewPostgreSQL() (*Database, error) {
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbname, sslmode)
 
-db, err := sql.Open("postgres", connStr)
-if err != nil {
-	return nil, fmt.Errorf("failed to open PostgreSQL database: %w", err)
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open PostgreSQL database: %w", err)
+	}
+
+	// Test connection
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping PostgreSQL database: %w", err)
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	d := &Database{
+		db:         db,
+		supportsHA: true,
+	}
+
+	// Initialize schema
+	if err := d.initSchemaPostgres(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to initialize PostgreSQL schema: %w", err)
+	}
+
+	// Run migrations
+	if err := d.migrateProviderOwnership(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate provider ownership: %w", err)
+	}
+
+	if err := d.migrateProviderRouting(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate provider routing: %w", err)
+	}
+
+	if err := d.migrateProviderScoring(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate provider scoring: %w", err)
+	}
+
+	if err := d.migrateMotivations(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate motivations: %w", err)
+	}
+
+	if err := d.migrateWorkflows(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate workflows: %w", err)
+	}
+
+	if err := d.migrateActivity(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate activity: %w", err)
+	}
+
+	if err := d.migrateComments(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate comments: %w", err)
+	}
+
+	if err := d.migrateConversations(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate conversations: %w", err)
+	}
+
+	if err := migratePatterns(d.db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate patterns: %w", err)
+	}
+
+	if err := d.migrateCredentials(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate credentials: %w", err)
+	}
+
+	if err := d.migrateLessons(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate lessons: %w", err)
+	}
+
+	if err := d.migrateRequestLogs(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate request logs: %w", err)
+	}
+
+	if err := d.migrateProviderAPIKey(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate provider api key: %w", err)
+	}
+
+	return d, nil
 }
-
-// Test connection
-if err := db.Ping(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to ping PostgreSQL database: %w", err)
-}
-
-// Configure connection pool
-db.SetMaxOpenConns(25)
-db.SetMaxIdleConns(5)
-db.SetConnMaxLifetime(5 * time.Minute)
-
-// Initialize schema
-if err := d.initSchemaPostgres(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to initialize PostgreSQL schema: %w", err)
-}
-
-// Run migrations
-if err := d.migrateProviderOwnership(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate provider ownership: %w", err)
-}
-
-if err := d.migrateProviderRouting(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate provider routing: %w", err)
-}
-
-if err := d.migrateProviderScoring(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate provider scoring: %w", err)
-}
-
-if err := d.migrateMotivations(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate motivations: %w", err)
-}
-
-if err := d.migrateWorkflows(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate workflows: %w", err)
-}
-
-if err := d.migrateActivity(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate activity: %w", err)
-}
-
-if err := d.migrateComments(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate comments: %w", err)
-}
-
-if err := d.migrateConversations(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate conversations: %w", err)
-}
-
-if err := migratePatterns(d.db); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate patterns: %w", err)
-}
-
-if err := d.migrateCredentials(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate credentials: %w", err)
-}
-
-if err := d.migrateLessons(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate lessons: %w", err)
-}
-
-if err := d.migrateRequestLogs(); err != nil {
-	db.Close()
-	return nil, fmt.Errorf("failed to migrate request logs: %w", err)
-}
-
-return &Database{
-	db:         db,
-	supportsHA: true,
-}, nil}
 
 // migrateRequestLogs adds columns to request_logs that the analytics package expects.
 func (d *Database) migrateRequestLogs() error {
@@ -519,8 +527,8 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 	provider.UpdatedAt = time.Now()
 
 	query := `
-		INSERT INTO providers (id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, owner_id, is_shared, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, context_window, model_params_b, capability_score, avg_latency_ms, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO providers (id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, api_key, owner_id, is_shared, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, context_window, model_params_b, capability_score, avg_latency_ms, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name = excluded.name,
 			type = excluded.type,
@@ -534,6 +542,7 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 			description = excluded.description,
 			requires_key = excluded.requires_key,
 			key_id = excluded.key_id,
+			api_key = CASE WHEN excluded.api_key != '' THEN excluded.api_key ELSE providers.api_key END,
 			owner_id = excluded.owner_id,
 			is_shared = excluded.is_shared,
 			status = excluded.status,
@@ -561,6 +570,7 @@ func (d *Database) UpsertProvider(provider *internalmodels.Provider) error {
 		provider.Description,
 		provider.RequiresKey,
 		provider.KeyID,
+		provider.APIKey,
 		provider.OwnerID,
 		provider.IsShared,
 		provider.Status,
@@ -663,7 +673,7 @@ func (d *Database) GetProvider(id string) (*internalmodels.Provider, error) {
 // ListProviders retrieves all providers
 func (d *Database) ListProviders() ([]*internalmodels.Provider, error) {
 	query := `
-		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, owner_id, is_shared, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, model_params_b, capability_score, avg_latency_ms, created_at, updated_at
+		SELECT id, name, type, endpoint, model, configured_model, selected_model, selection_reason, model_score, selected_gpu, description, requires_key, key_id, COALESCE(api_key, '') as api_key, owner_id, is_shared, status, last_heartbeat_at, last_heartbeat_latency_ms, last_heartbeat_error, model_params_b, capability_score, avg_latency_ms, created_at, updated_at
 		FROM providers
 		ORDER BY created_at DESC
 	`
@@ -677,42 +687,68 @@ func (d *Database) ListProviders() ([]*internalmodels.Provider, error) {
 	var providers []*internalmodels.Provider
 	for rows.Next() {
 		provider := &internalmodels.Provider{}
-		var ownerID sql.NullString
-		var isShared sql.NullBool
-		var modelParamsB, capabilityScore, avgLatencyMs sql.NullFloat64
+		var (
+			model, configuredModel, selectedModel sql.NullString
+			selectionReason, selectedGPU          sql.NullString
+			description, keyID, lastHBError       sql.NullString
+			apiKey                                sql.NullString
+			ownerID                               sql.NullString
+			isShared                              sql.NullBool
+			modelScore                            sql.NullFloat64
+			modelParamsB, capabilityScore         sql.NullFloat64
+			avgLatencyMs                          sql.NullFloat64
+			lastHBAt                              sql.NullTime
+			lastHBLatencyMs                       sql.NullInt64
+		)
 		err := rows.Scan(
 			&provider.ID,
 			&provider.Name,
 			&provider.Type,
 			&provider.Endpoint,
-			&provider.Model,
-			&provider.ConfiguredModel,
-			&provider.SelectedModel,
-			&provider.SelectionReason,
-			&provider.ModelScore,
-			&provider.SelectedGPU,
-			&provider.Description,
+			&model,
+			&configuredModel,
+			&selectedModel,
+			&selectionReason,
+			&modelScore,
+			&selectedGPU,
+			&description,
 			&provider.RequiresKey,
-			&provider.KeyID,
+			&keyID,
+			&apiKey,
 			&ownerID,
 			&isShared,
 			&provider.Status,
-			&provider.LastHeartbeatAt,
-			&provider.LastHeartbeatLatencyMs,
-			&provider.LastHeartbeatError,
+			&lastHBAt,
+			&lastHBLatencyMs,
+			&lastHBError,
 			&modelParamsB,
 			&capabilityScore,
 			&avgLatencyMs,
 			&provider.CreatedAt,
 			&provider.UpdatedAt,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan provider: %w", err)
+		}
+		provider.Model = model.String
+		provider.ConfiguredModel = configuredModel.String
+		provider.SelectedModel = selectedModel.String
+		provider.SelectionReason = selectionReason.String
+		provider.SelectedGPU = selectedGPU.String
+		provider.Description = description.String
+		provider.KeyID = keyID.String
+		provider.APIKey = apiKey.String
+		provider.LastHeartbeatError = lastHBError.String
 		if ownerID.Valid {
 			provider.OwnerID = ownerID.String
 		}
 		if isShared.Valid {
 			provider.IsShared = isShared.Bool
 		} else {
-			provider.IsShared = true // Default to shared for backwards compat
+			provider.IsShared = true
+		}
+		if modelScore.Valid {
+			provider.ModelScore = modelScore.Float64
 		}
 		if modelParamsB.Valid {
 			provider.ModelParamsB = modelParamsB.Float64
@@ -723,8 +759,11 @@ func (d *Database) ListProviders() ([]*internalmodels.Provider, error) {
 		if avgLatencyMs.Valid {
 			provider.AvgLatencyMs = avgLatencyMs.Float64
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan provider: %w", err)
+		if lastHBAt.Valid {
+			provider.LastHeartbeatAt = lastHBAt.Time
+		}
+		if lastHBLatencyMs.Valid {
+			provider.LastHeartbeatLatencyMs = lastHBLatencyMs.Int64
 		}
 		providers = append(providers, provider)
 	}
@@ -751,35 +790,50 @@ func (d *Database) ListProvidersForUser(userID string) ([]*internalmodels.Provid
 	var providers []*internalmodels.Provider
 	for rows.Next() {
 		provider := &internalmodels.Provider{}
-		var ownerID sql.NullString
-		var isShared sql.NullBool
+		var (
+			model, configuredModel, selectedModel sql.NullString
+			selectionReason, selectedGPU          sql.NullString
+			description, keyID, lastHBError       sql.NullString
+			ownerID                               sql.NullString
+			isShared                              sql.NullBool
+			modelScore                            sql.NullFloat64
+			lastHBAt                              sql.NullTime
+			lastHBLatencyMs                       sql.NullInt64
+		)
 		err := rows.Scan(
 			&provider.ID,
 			&provider.Name,
 			&provider.Type,
 			&provider.Endpoint,
-			&provider.Model,
-			&provider.ConfiguredModel,
-			&provider.SelectedModel,
-			&provider.SelectionReason,
-			&provider.ModelScore,
-			&provider.SelectedGPU,
-			&provider.Description,
+			&model,
+			&configuredModel,
+			&selectedModel,
+			&selectionReason,
+			&modelScore,
+			&selectedGPU,
+			&description,
 			&provider.RequiresKey,
-			&provider.KeyID,
+			&keyID,
 			&ownerID,
 			&isShared,
 			&provider.Status,
-			&provider.LastHeartbeatAt,
-			&provider.LastHeartbeatLatencyMs,
-			&provider.LastHeartbeatError,
+			&lastHBAt,
+			&lastHBLatencyMs,
+			&lastHBError,
 			&provider.CreatedAt,
 			&provider.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan provider: %w", err)
 		}
-
+		provider.Model = model.String
+		provider.ConfiguredModel = configuredModel.String
+		provider.SelectedModel = selectedModel.String
+		provider.SelectionReason = selectionReason.String
+		provider.SelectedGPU = selectedGPU.String
+		provider.Description = description.String
+		provider.KeyID = keyID.String
+		provider.LastHeartbeatError = lastHBError.String
 		if ownerID.Valid {
 			provider.OwnerID = ownerID.String
 		}
@@ -788,7 +842,15 @@ func (d *Database) ListProvidersForUser(userID string) ([]*internalmodels.Provid
 		} else {
 			provider.IsShared = true
 		}
-
+		if modelScore.Valid {
+			provider.ModelScore = modelScore.Float64
+		}
+		if lastHBAt.Valid {
+			provider.LastHeartbeatAt = lastHBAt.Time
+		}
+		if lastHBLatencyMs.Valid {
+			provider.LastHeartbeatLatencyMs = lastHBLatencyMs.Int64
+		}
 		providers = append(providers, provider)
 	}
 
