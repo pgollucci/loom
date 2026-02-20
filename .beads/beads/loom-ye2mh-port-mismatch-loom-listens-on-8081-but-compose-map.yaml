@@ -9,7 +9,7 @@ title: 'Port mismatch: loom listens on 8081 but compose maps 8080'
 description: Loom API binds to :8081 (main.go:161) but docker-compose exposes 8080:8080. The UI is unreachable on the host. Either change the app to listen on 8080 or fix the compose port mapping to 8080:8081.
 status: closed
 priority: 1
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

@@ -9,7 +9,7 @@ title: Fix circular dependency in dispatch layer
 description: Refactor internal/dispatch to eliminate circular imports.
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

@@ -9,7 +9,7 @@ title: Improve concurrency safety in workflow
 description: Wrap goroutine groups with context cancellation and wait groups.
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

@@ -31,7 +31,7 @@ description: |
     - Release approval includes the review evidence.
 status: closed
 priority: 1
-projectid: loom-self
+projectid: loom
 assignedto: agent-1768861966-project-manager
 blockedby: []
 blocks: []

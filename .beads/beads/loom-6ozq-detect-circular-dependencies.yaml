@@ -9,7 +9,7 @@ title: Detect circular dependencies
 description: Search for circular function calls and package imports.
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

@@ -7,20 +7,22 @@ id: loom-m0p1
 type: task
 title: System diagnostic check
 description: This bead was auto-created to verify the work flow is operational. The system detected no beads in any project and created this diagnostic task. If you see this bead completed successfully, the work flow is functioning correctly.
-status: in_progress
+status: open
 priority: 2
-projectid: loom-self
-assignedto: Engineering Manager (Default)
+projectid: loom
+assignedto: ""
 blockedby: []
 blocks: []
 relatedto: []
 parent: ""
 children: []
 tags: []
-context: {}
+context:
+    redispatch_requested: "true"
+    redispatch_requested_at: "2026-02-20T20:52:59Z"
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-05T17:49:21Z
-updatedat: 2026-02-07T23:40:51.368912-08:00
+updatedat: 2026-02-20T20:52:59.666730716Z
 closedat: null

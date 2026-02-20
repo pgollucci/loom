@@ -33,7 +33,7 @@ description: |-
     I recommend approval because this is an infrastructure setup issue required for project readiness, not a code defect. The fix involves creating necessary directories and does not impact existing functionality. This is a prerequisite for all future development on the loom-self project.
 status: closed
 priority: 0
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

@@ -27,7 +27,7 @@ description: |-
     Expected result: Git log shows commit by agent, not human author
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

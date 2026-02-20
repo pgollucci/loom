@@ -37,7 +37,7 @@ description: |-
     This is not a code bug per se but a system configuration issue critical to project viability. The fix enables future automated operations and aligns with the project's self-improvement mandate.
 status: closed
 priority: 0
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

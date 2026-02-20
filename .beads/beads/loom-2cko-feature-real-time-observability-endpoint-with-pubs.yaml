@@ -75,7 +75,7 @@ description: |-
     This will enable real-time visibility into Loom's self-improvement work.
 status: closed
 priority: 1
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []
