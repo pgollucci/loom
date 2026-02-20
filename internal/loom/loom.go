@@ -109,6 +109,7 @@ type Loom struct {
 	readinessCache      map[string]projectReadinessState
 	readinessFailures   map[string]time.Time
 	shutdownOnce        sync.Once
+	startedAt           time.Time
 }
 
 // New creates a new Loom instance
@@ -339,6 +340,7 @@ func New(cfg *config.Config) (*Loom, error) {
 
 	arb := &Loom{
 		config:              cfg,
+		startedAt:           time.Now().UTC(),
 		agentManager:        agentMgr,
 		projectManager:      project.NewManager(),
 		personaManager:      persona.NewManager(personaPath),
@@ -4010,4 +4012,14 @@ func (a *Loom) GetBeadConversation(beadID string) ([]models.ChatMessage, error) 
 // GetMemoryManager returns the per-project memory manager (nil if no database).
 func (a *Loom) GetMemoryManager() *memory.MemoryManager {
 	return a.memoryManager
+}
+
+// GetSwarmManager returns the swarm manager (nil if NATS is not configured).
+func (a *Loom) GetSwarmManager() *swarm.Manager {
+	return a.swarmManager
+}
+
+// StartedAt returns when this Loom instance was created.
+func (a *Loom) StartedAt() time.Time {
+	return a.startedAt
 }

@@ -256,6 +256,7 @@ func (s *Server) SetupRoutes() http.Handler {
 
 	// System
 	mux.HandleFunc("/api/v1/system/status", s.handleSystemStatus)
+	mux.HandleFunc("/api/v1/system/state", s.handleSystemState)
 
 	// Work (non-bead prompts)
 	mux.HandleFunc("/api/v1/work", s.handleWork)
