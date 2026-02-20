@@ -9,7 +9,7 @@ title: Error handling and defer usage
 description: Add missing defer statements and improve error wrapping in critical paths
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

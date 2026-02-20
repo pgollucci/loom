@@ -191,7 +191,7 @@ projects:
     name: Loom
     git_repo: "https://github.com/jordanhubbard/loom.git"  # HTTPS for token-based auth
     branch: main
-    beads_path: ".beads"  # Path within beads worktree
+    beads_path: "/.beads"  # Path within beads worktree
     beads_branch: "beads-sync"  # Branch for beads storage
     use_worktrees: true  # Enable git worktree isolation
     use_container: true  # Enable per-project container for hermetic execution

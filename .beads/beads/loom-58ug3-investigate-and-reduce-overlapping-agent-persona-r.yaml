@@ -9,7 +9,7 @@ title: Investigate and reduce overlapping agent persona roles
 description: 'Carefully analyze each agent''s persona definition and compare them pairwise. Any two agents with > 90% similarity in role, responsibilities, and capabilities should be combined into a single agent. This requires: 1) Reading all persona files in personas/default/ and personas/loom/, 2) Computing similarity metrics across responsibilities, skills, and decision authority, 3) Proposing merges for highly overlapping agents, 4) Implementing the merges while preserving unique capabilities from both'
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

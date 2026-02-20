@@ -9,7 +9,7 @@ title: Investigate circular dependencies in dispatch and workflow packages
 description: Review package import graphs for cycles; schedule refactor if needed.
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

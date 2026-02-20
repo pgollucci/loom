@@ -33,7 +33,7 @@ description: |-
     I recommend approval because this is an infrastructure setup issue required for project readiness, not a code defect. The fix enables all future development on loom-self by establishing the required directory structure and SSH configuration.
 status: closed
 priority: 0
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

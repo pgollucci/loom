@@ -9,7 +9,7 @@ title: Add proper defer cleanup in error paths
 description: Insert defer statements for file handles and DB connections in error handling paths.
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: ""
 blockedby: []
 blocks: []

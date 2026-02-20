@@ -7,10 +7,10 @@ id: loom-fpmlv
 type: task
 title: '[auto-filed] P0 - Project readiness failed for loom-self'
 description: "Project readiness failed for loom-self.\n\nIssues:\n- git remote access failed: git ls-remote failed: context deadline exceeded: \n- beads path missing: data/projects/loom-self/.beads\n\nProject SSH public key (register this with your git host):\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHqhB8uG2MZxybZL5qctdKkKKN8AHxGxonTQOK0vFnvd jkh@plubbit.local"
-status: in_progress
+status: blocked
 priority: 0
-projectid: loom-self
-assignedto: agent-1770537362-CEO (Default)
+projectid: loom
+assignedto: agent-1771534515-Engineering Manager (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -22,15 +22,21 @@ context:
     conversation_session_id: 40acc318-d11c-4011-8476-c0d11f8fe982
     dispatch_count: "11329"
     dispatch_history: '["agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)","agent-1770537362-CEO (Default)"]'
+    error_history: '[{"timestamp":"2026-02-20T20:23:29.09461892Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 404: {\"error\":{\"message\":\"The model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` does not exist.\",\"type\":\"NotFoundError\",\"param\":null,\"code\":404}}","dispatch":11329},{"timestamp":"2026-02-20T20:23:31.004668585Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 404: {\"error\":{\"message\":\"The model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` does not exist.\",\"type\":\"NotFoundError\",\"param\":null,\"code\":404}}","dispatch":11329},{"timestamp":"2026-02-20T20:23:37.737473573Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 404: {\"error\":{\"message\":\"The model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` does not exist.\",\"type\":\"NotFoundError\",\"param\":null,\"code\":404}}","dispatch":11329},{"timestamp":"2026-02-20T20:23:47.738602276Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 404: {\"error\":{\"message\":\"The model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` does not exist.\",\"type\":\"NotFoundError\",\"param\":null,\"code\":404}}","dispatch":11329},{"timestamp":"2026-02-20T20:23:57.740833163Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 404: {\"error\":{\"message\":\"The model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` does not exist.\",\"type\":\"NotFoundError\",\"param\":null,\"code\":404}}","dispatch":11329}]'
     last_run_at: "2026-02-09T19:33:39Z"
     last_run_error: 'action loop failed: LLM call failed on iteration 1: unexpected status code 404: {"error":{"message":"The model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` does not exist.","type":"NotFoundError","param":null,"code":404}}'
     loop_detected: "false"
+    loop_detection_reason: 'Identical error repeated 5 times - error pattern: action loop failed: LLM call failed on iteration 1: unexpected status code 404: {"error":{"message":'
+    progress_summary: No progress data
     provider_id: sparky-local
-    redispatch_requested: "true"
+    ralph_blocked_at: "2026-02-20T20:23:57Z"
+    ralph_blocked_reason: 'dispatch_count=11329 exceeded max_hops=20, stuck in loop: Identical error repeated 5 times - error pattern: action loop failed: LLM call failed on iteration 1: unexpected status code 404: {"error":{"message":'
+    redispatch_requested: "false"
     redispatch_requested_at: "2026-02-09T18:10:42Z"
+    revert_status: not_attempted
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-09T16:45:38Z
-updatedat: 2026-02-09T11:33:39.006381-08:00
+updatedat: 2026-02-20T20:23:57.740887436Z
 closedat: null

@@ -48,7 +48,7 @@ description: |-
     This is a self-improvement task - Loom reviewing and improving itself.
 status: closed
 priority: 2
-projectid: loom-self
+projectid: loom
 assignedto: agent-1769932530-Engineering Manager (Default)
 blockedby: []
 blocks: []
