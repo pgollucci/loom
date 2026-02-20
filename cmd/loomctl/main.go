@@ -327,12 +327,15 @@ func newBeadListCommand() *cobra.Command {
 		status     string
 		beadType   string
 		assignedTo string
+		priority   int
+		hasPriority bool
 	)
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List beads",
 		Example: `  loomctl bead list
-  loomctl bead list --status=open --project=loom-self`,
+  loomctl bead list --status=open --project=loom
+  loomctl bead list --priority=0 --status=open`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			params := url.Values{}
@@ -348,6 +351,9 @@ func newBeadListCommand() *cobra.Command {
 			if assignedTo != "" {
 				params.Set("assigned_to", assignedTo)
 			}
+			if hasPriority {
+				params.Set("priority", fmt.Sprintf("%d", priority))
+			}
 			data, err := client.get("/api/v1/beads", params)
 			if err != nil {
 				return err
@@ -357,9 +363,17 @@ func newBeadListCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
-	cmd.Flags().StringVar(&status, "status", "", "Filter by status")
-	cmd.Flags().StringVar(&beadType, "type", "", "Filter by bead type")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status (open, in_progress, closed, blocked)")
+	cmd.Flags().StringVar(&beadType, "type", "", "Filter by bead type (task, bug, feature)")
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "Filter by assigned agent")
+	cmd.Flags().IntVarP(&priority, "priority", "P", 0, "Filter by priority (0=P0/highest, 4=lowest)")
+	cmd.Flags().BoolVar(&hasPriority, "has-priority", false, "")
+	cmd.Flags().MarkHidden("has-priority")
+	// Use PreRunE to detect if --priority was explicitly set
+	cmd.PreRunE = func(c *cobra.Command, args []string) error {
+		hasPriority = c.Flags().Changed("priority")
+		return nil
+	}
 	return cmd
 }
 
@@ -645,16 +659,42 @@ func newLogCommand() *cobra.Command {
 }
 
 func newLogRecentCommand() *cobra.Command {
-	var limit int
+	var (
+		limit     int
+		projectID string
+		source    string
+		level     string
+		agentID   string
+		beadID    string
+		since     string
+	)
 	cmd := &cobra.Command{
 		Use:     "recent",
 		Short:   "Show recent log entries",
-		Example: `  loomctl log recent --limit=50`,
+		Example: `  loomctl log recent --limit=50 --project=loom --level=error --since=1h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			params := url.Values{}
 			if limit > 0 {
 				params.Set("limit", fmt.Sprintf("%d", limit))
+			}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if source != "" {
+				params.Set("source", source)
+			}
+			if level != "" {
+				params.Set("level", level)
+			}
+			if agentID != "" {
+				params.Set("agent_id", agentID)
+			}
+			if beadID != "" {
+				params.Set("bead_id", beadID)
+			}
+			if since != "" {
+				params.Set("since", since)
 			}
 			data, err := client.get("/api/v1/logs/recent", params)
 			if err != nil {
@@ -665,18 +705,47 @@ func newLogRecentCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Number of log entries")
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
+	cmd.Flags().StringVar(&source, "source", "", "Filter by log source")
+	cmd.Flags().StringVar(&level, "level", "", "Filter by log level (info, warn, error)")
+	cmd.Flags().StringVar(&agentID, "agent", "", "Filter by agent ID")
+	cmd.Flags().StringVar(&beadID, "bead", "", "Filter by bead ID")
+	cmd.Flags().StringVar(&since, "since", "", "Show logs since timestamp (RFC3339) or duration (e.g. 1h, 30m)")
 	return cmd
 }
 
 func newLogStreamCommand() *cobra.Command {
-	return &cobra.Command{
+	var (
+		projectID string
+		source    string
+		level     string
+	)
+	cmd := &cobra.Command{
 		Use:   "stream",
 		Short: "Stream live logs (SSE)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-			return client.streamSSE("/api/v1/logs/stream")
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if source != "" {
+				params.Set("source", source)
+			}
+			if level != "" {
+				params.Set("level", level)
+			}
+			u := "/api/v1/logs/stream"
+			if len(params) > 0 {
+				u += "?" + params.Encode()
+			}
+			return client.streamSSE(u)
 		},
 	}
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
+	cmd.Flags().StringVar(&source, "source", "", "Filter by log source")
+	cmd.Flags().StringVar(&level, "level", "", "Filter by log level")
+	return cmd
 }
 
 func newLogExportCommand() *cobra.Command {
@@ -879,12 +948,23 @@ func newConversationCommand() *cobra.Command {
 }
 
 func newConversationListCommand() *cobra.Command {
-	return &cobra.Command{
+	var (
+		projectID string
+		limit     int
+	)
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List conversation sessions",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-			data, err := client.get("/api/v1/conversations", nil)
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if limit > 0 {
+				params.Set("limit", fmt.Sprintf("%d", limit))
+			}
+			data, err := client.get("/api/v1/conversations", params)
 			if err != nil {
 				return err
 			}
@@ -892,6 +972,9 @@ func newConversationListCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID (required by server)")
+	cmd.Flags().IntVarP(&limit, "limit", "n", 50, "Number of conversations")
+	return cmd
 }
 
 func newConversationShowCommand() *cobra.Command {
@@ -1018,7 +1101,7 @@ Shows files modified, builds/tests run, commits made, and pushes completed.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&projectID, "project", "p", "loom-self", "Project ID to query")
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Project ID to query (required)")
 	cmd.Flags().StringVarP(&timeWindow, "window", "w", "24h", "Time window (e.g., 24h, 7d, 30d)")
 
 	return cmd
@@ -1087,12 +1170,27 @@ func newEventCommand() *cobra.Command {
 }
 
 func newEventListCommand() *cobra.Command {
-	return &cobra.Command{
+	var (
+		projectID string
+		eventType string
+		limit     int
+	)
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List recent events",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-			data, err := client.get("/api/v1/events", nil)
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if eventType != "" {
+				params.Set("type", eventType)
+			}
+			if limit > 0 {
+				params.Set("limit", fmt.Sprintf("%d", limit))
+			}
+			data, err := client.get("/api/v1/events", params)
 			if err != nil {
 				return err
 			}
@@ -1100,17 +1198,39 @@ func newEventListCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
+	cmd.Flags().StringVar(&eventType, "type", "", "Filter by event type")
+	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Number of events")
+	return cmd
 }
 
 func newEventStreamCommand() *cobra.Command {
-	return &cobra.Command{
+	var (
+		projectID string
+		eventType string
+	)
+	cmd := &cobra.Command{
 		Use:   "stream",
 		Short: "Stream events in real-time (SSE)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-			return client.streamSSE("/api/v1/events/stream")
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if eventType != "" {
+				params.Set("type", eventType)
+			}
+			u := "/api/v1/events/stream"
+			if len(params) > 0 {
+				u += "?" + params.Encode()
+			}
+			return client.streamSSE(u)
 		},
 	}
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
+	cmd.Flags().StringVar(&eventType, "type", "", "Filter by event type")
+	return cmd
 }
 
 func newEventActivityCommand() *cobra.Command {
@@ -1145,12 +1265,23 @@ func newWorkflowCommand() *cobra.Command {
 }
 
 func newWorkflowListCommand() *cobra.Command {
-	return &cobra.Command{
+	var (
+		projectID    string
+		workflowType string
+	)
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List workflows",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-			data, err := client.get("/api/v1/workflows", nil)
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			if workflowType != "" {
+				params.Set("type", workflowType)
+			}
+			data, err := client.get("/api/v1/workflows", params)
 			if err != nil {
 				return err
 			}
@@ -1158,6 +1289,9 @@ func newWorkflowListCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
+	cmd.Flags().StringVar(&workflowType, "type", "", "Filter by workflow type")
+	return cmd
 }
 
 func newWorkflowShowCommand() *cobra.Command {
@@ -1255,12 +1389,17 @@ func newAgentCommand() *cobra.Command {
 }
 
 func newAgentListCommand() *cobra.Command {
-	return &cobra.Command{
+	var projectID string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
-			data, err := client.get("/api/v1/agents", nil)
+			params := url.Values{}
+			if projectID != "" {
+				params.Set("project_id", projectID)
+			}
+			data, err := client.get("/api/v1/agents", params)
 			if err != nil {
 				return err
 			}
@@ -1268,6 +1407,8 @@ func newAgentListCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&projectID, "project", "p", "", "Filter by project ID")
+	return cmd
 }
 
 func newAgentShowCommand() *cobra.Command {

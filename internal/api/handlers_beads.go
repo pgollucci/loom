@@ -18,6 +18,7 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 		statusStr := r.URL.Query().Get("status")
 		beadType := r.URL.Query().Get("type")
 		assignedTo := r.URL.Query().Get("assigned_to")
+		priorityStr := r.URL.Query().Get("priority")
 
 		filters := make(map[string]interface{})
 		if projectID != "" {
@@ -28,6 +29,11 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 		}
 		if beadType != "" {
 			filters["type"] = beadType
+		}
+		if priorityStr != "" {
+			if p, err := strconv.Atoi(priorityStr); err == nil {
+				filters["priority"] = models.BeadPriority(p)
+			}
 		}
 		if assignedTo != "" {
 			if strings.Contains(assignedTo, ",") {
