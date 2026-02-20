@@ -1634,9 +1634,16 @@ func (a *Loom) ensureOrgChart(ctx context.Context, projectID string) error {
 
 	// Also check DB agents for this project to avoid creating duplicates when
 	// agents couldn't be restored to memory (e.g. persona loading failures on restart).
+	// Prefer the most recently active agent per role to avoid accumulating stale duplicates.
 	if a.database != nil {
 		dbAgents, err := a.database.ListAgents()
 		if err == nil {
+			// Track the most recently active agent per role.
+			type roleCandidate struct {
+				id         string
+				lastActive time.Time
+			}
+			bestByRole := map[string]roleCandidate{}
 			for _, dbAgent := range dbAgents {
 				if dbAgent == nil || dbAgent.ProjectID != project.ID {
 					continue
@@ -1645,8 +1652,17 @@ func (a *Loom) ensureOrgChart(ctx context.Context, projectID string) error {
 				if role == "" {
 					role = roleFromPersonaName(dbAgent.PersonaName)
 				}
-				if role != "" && existingByRole[role] == "" {
-					existingByRole[role] = dbAgent.ID
+				if role == "" {
+					continue
+				}
+				current, exists := bestByRole[role]
+				if !exists || dbAgent.LastActive.After(current.lastActive) {
+					bestByRole[role] = roleCandidate{id: dbAgent.ID, lastActive: dbAgent.LastActive}
+				}
+			}
+			for role, candidate := range bestByRole {
+				if existingByRole[role] == "" {
+					existingByRole[role] = candidate.id
 				}
 			}
 		}
