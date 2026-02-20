@@ -10,7 +10,7 @@ description: desc
 status: open
 priority: 1
 projectid: proj-9
-assignedto: agent-1771545637-Engineering Manager (Default)
+assignedto: agent-1771546080-Engineering Manager (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -21,6 +21,6 @@ context: {}
 duedate: null
 milestoneid: ""
 estimatedtime: 0
-createdat: 2026-02-20T00:00:37.439181121Z
-updatedat: 2026-02-20T00:00:37.439326244Z
+createdat: 2026-02-20T00:08:00.93379226Z
+updatedat: 2026-02-20T00:08:00.933975624Z
 closedat: null

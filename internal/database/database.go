@@ -75,99 +75,77 @@ db.SetMaxOpenConns(25)
 db.SetMaxIdleConns(5)
 db.SetConnMaxLifetime(5 * time.Minute)
 
+// Initialize schema
+if err := d.initSchemaPostgres(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to initialize PostgreSQL schema: %w", err)
+}
+
+// Run migrations
+if err := d.migrateProviderOwnership(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate provider ownership: %w", err)
+}
+
+if err := d.migrateProviderRouting(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate provider routing: %w", err)
+}
+
+if err := d.migrateProviderScoring(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate provider scoring: %w", err)
+}
+
+if err := d.migrateMotivations(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate motivations: %w", err)
+}
+
+if err := d.migrateWorkflows(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate workflows: %w", err)
+}
+
+if err := d.migrateActivity(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate activity: %w", err)
+}
+
+if err := d.migrateComments(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate comments: %w", err)
+}
+
+if err := d.migrateConversations(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate conversations: %w", err)
+}
+
+if err := migratePatterns(d.db); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate patterns: %w", err)
+}
+
+if err := d.migrateCredentials(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate credentials: %w", err)
+}
+
+if err := d.migrateLessons(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate lessons: %w", err)
+}
+
+if err := d.migrateRequestLogs(); err != nil {
+	db.Close()
+	return nil, fmt.Errorf("failed to migrate request logs: %w", err)
+}
+
 return &Database{
 	db:         db,
 	supportsHA: true,
-}, nil
-	if err != nil {
-		return nil, fmt.Errorf("failed to open PostgreSQL database: %w", err)
-	}
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to ping PostgreSQL database: %w", err)
-	}
-
-	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
-	d := &Database{
-		db:         db,
-		supportsHA: true,
-	}
-
-	// Initialize schema
-	if err := d.initSchemaPostgres(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to initialize PostgreSQL schema: %w", err)
-	}
-
-	// Run migrations
-	if err := d.migrateProviderOwnership(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate provider ownership: %w", err)
-	}
-
-	if err := d.migrateProviderRouting(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate provider routing: %w", err)
-	}
-
-	if err := d.migrateProviderScoring(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate provider scoring: %w", err)
-	}
-
-	if err := d.migrateMotivations(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate motivations: %w", err)
-	}
-
-	if err := d.migrateWorkflows(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate workflows: %w", err)
-	}
-
-	if err := d.migrateActivity(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate activity: %w", err)
-	}
-
-	if err := d.migrateComments(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate comments: %w", err)
-	}
-
-	if err := d.migrateConversations(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate conversations: %w", err)
-	}
-
-	if err := migratePatterns(d.db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate patterns: %w", err)
-	}
-
-	if err := d.migrateCredentials(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate credentials: %w", err)
-	}
-
-	if err := d.migrateLessons(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate lessons: %w", err)
-	}
-
-	if err := d.migrateRequestLogs(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to migrate request logs: %w", err)
-	}
-
-	return d, nil
-}
+}, nil}
 
 // migrateRequestLogs adds columns to request_logs that the analytics package expects.
 func (d *Database) migrateRequestLogs() error {

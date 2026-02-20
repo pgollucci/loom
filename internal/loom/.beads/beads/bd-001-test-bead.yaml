@@ -10,7 +10,7 @@ description: Test description
 status: open
 priority: 2
 projectid: proj-8
-assignedto: agent-1771545637-Engineering Manager (Default)
+assignedto: agent-1771546080-Engineering Manager (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -21,6 +21,6 @@ context: {}
 duedate: null
 milestoneid: ""
 estimatedtime: 0
-createdat: 2026-02-20T00:00:37.433854723Z
-updatedat: 2026-02-20T00:00:37.434267036Z
+createdat: 2026-02-20T00:08:00.92963895Z
+updatedat: 2026-02-20T00:08:00.929891547Z
 closedat: null
