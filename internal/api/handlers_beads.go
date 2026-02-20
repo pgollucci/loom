@@ -60,7 +60,7 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 			Type        string            `json:"type"`
 			Title       string            `json:"title"`
 			Description string            `json:"description"`
-			Priority    int               `json:"priority"`
+			Priority    *int              `json:"priority"`
 			ProjectID   string            `json:"project_id"`
 			Parent      string            `json:"parent"`
 			Tags        []string          `json:"tags"`
@@ -79,11 +79,12 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 		if req.Type == "" {
 			req.Type = "task"
 		}
-		if req.Priority == 0 {
-			req.Priority = 2
+		priority := 2
+		if req.Priority != nil {
+			priority = *req.Priority
 		}
 
-		bead, err := s.app.CreateBead(req.Title, req.Description, models.BeadPriority(req.Priority), req.Type, req.ProjectID)
+		bead, err := s.app.CreateBead(req.Title, req.Description, models.BeadPriority(priority), req.Type, req.ProjectID)
 		if err != nil {
 			s.respondError(w, http.StatusInternalServerError, err.Error())
 			return
