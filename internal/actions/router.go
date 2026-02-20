@@ -751,9 +751,10 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		if r.Tests == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "test runner not configured"}
 		}
-		// Get project path from Files manager or use default
-		projectPath := "."
-		// TODO: Get actual project path from context or Files manager
+		projectPath := r.getProjectWorkDir(actx.ProjectID)
+		if projectPath == "" {
+			projectPath = "."
+		}
 
 		result, err := r.Tests.Run(ctx, projectPath, action.TestPattern, action.Framework, action.TimeoutSeconds)
 		if err != nil {
@@ -769,9 +770,10 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		if r.Linter == nil {
 			return Result{ActionType: action.Type, Status: "error", Message: "linter not configured"}
 		}
-		// Get project path from Files manager or use default
-		projectPath := "."
-		// TODO: Get actual project path from context or Files manager
+		projectPath := r.getProjectWorkDir(actx.ProjectID)
+		if projectPath == "" {
+			projectPath = "."
+		}
 
 		result, err := r.Linter.Run(ctx, projectPath, action.Files, action.Framework, action.TimeoutSeconds)
 		if err != nil {
@@ -1297,24 +1299,35 @@ func (r *Router) handleReviewCode(ctx context.Context, action Action, actx Actio
 		criteria = []string{"quality", "functionality", "testing", "security", "documentation"}
 	}
 
-	// TODO: Implement actual code analysis against criteria
-	// For now, return placeholder review result
+	// Run static analysis (go vet) via the container executor if available.
+	// Falls back to informational result if no executor is configured.
+	analysisOutput := "code analysis not available (no executor configured)"
+	if r.Commands != nil {
+		projectPath := r.getProjectWorkDir(actx.ProjectID)
+		if projectPath == "" {
+			projectPath = "."
+		}
+		vetResult, vetErr := r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
+			AgentID:    actx.AgentID,
+			ProjectID:  actx.ProjectID,
+			Command:    "go vet ./...",
+			WorkingDir: projectPath,
+			Timeout:    120,
+		})
+		if vetErr == nil && vetResult != nil {
+			if vetResult.Success {
+				analysisOutput = "go vet: no issues found"
+			} else {
+				analysisOutput = fmt.Sprintf("go vet issues:\n%s\n%s", vetResult.Stdout, vetResult.Stderr)
+			}
+		}
+	}
+
 	reviewResult := map[string]interface{}{
-		"pr_number": action.PRNumber,
-		"criteria":  criteria,
-		"status":    "review_completed",
-		"score":     85, // Placeholder score
-		"issues": []map[string]interface{}{
-			{
-				"severity": "medium",
-				"category": "testing",
-				"message":  "Test coverage could be improved",
-			},
-		},
-		"recommendations": []string{
-			"Add more unit tests",
-			"Consider edge case handling",
-		},
+		"pr_number":       action.PRNumber,
+		"criteria":        criteria,
+		"status":          "review_completed",
+		"static_analysis": analysisOutput,
 	}
 
 	return Result{

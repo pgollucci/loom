@@ -11,14 +11,18 @@ GO_TOOLCHAIN_VERSION ?= $(GO_REQUIRED).0
 
 all: build
 
-# Build both Go binaries (loom server and loomctl CLI)
+# Build all Go binaries
 build:
 	@mkdir -p $(BIN_DIR)
 	@echo "Building loom server..."
 	go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) ./cmd/loom
 	@echo "Building loomctl CLI..."
 	CGO_ENABLED=1 go build $(LDFLAGS) -o $(BIN_DIR)/loomctl ./cmd/loomctl
-	@echo "Build complete: bin/loom and bin/loomctl"
+	@echo "Building loom-project-agent..."
+	go build $(LDFLAGS) -o $(BIN_DIR)/loom-project-agent ./cmd/loom-project-agent
+	@echo "Building connectors-service..."
+	go build $(LDFLAGS) -o $(BIN_DIR)/connectors-service ./cmd/connectors-service
+	@echo "Build complete: bin/loom, bin/loomctl, bin/loom-project-agent, bin/connectors-service"
 
 # Build for multiple platforms
 build-all: lint-yaml
@@ -28,6 +32,10 @@ build-all: lint-yaml
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/loom
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/loom
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/loom
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BIN_DIR)/loom-project-agent-linux-amd64 ./cmd/loom-project-agent
+	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BIN_DIR)/loom-project-agent-linux-arm64 ./cmd/loom-project-agent
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BIN_DIR)/connectors-service-linux-amd64 ./cmd/connectors-service
+	GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BIN_DIR)/connectors-service-linux-arm64 ./cmd/connectors-service
 
 # Start loom (build binaries + container + start full stack in background)
 start: build

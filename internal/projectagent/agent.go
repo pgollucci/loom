@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/messagebus"
@@ -43,8 +44,9 @@ type Agent struct {
 	currentTask  *TaskExecution
 	taskResultCh chan *TaskResult
 	messageBus   *messagebus.NatsMessageBus
+	resultStore  sync.Map // taskID -> *TaskResult, for /results/{taskID} polling
 
-	role              string // cached from config
+	role                string // cached from config
 	personaInstructions string
 }
 
@@ -222,6 +224,7 @@ func (a *Agent) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/task", a.handleTask)
 	mux.HandleFunc("/exec", a.handleExec)
 	mux.HandleFunc("/status", a.handleStatus)
+	mux.HandleFunc("/results/", a.handleResults)
 	mux.HandleFunc("/files/write", a.handleFileWrite)
 	mux.HandleFunc("/files/read", a.handleFileRead)
 	mux.HandleFunc("/files/tree", a.handleFileTree)
@@ -230,6 +233,27 @@ func (a *Agent) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/git/push", a.handleGitPush)
 	mux.HandleFunc("/git/status", a.handleGitStatus)
 	mux.HandleFunc("/git/diff", a.handleGitDiff)
+}
+
+// handleResults returns the result of a completed task by task ID.
+// GET /results/{taskID}
+func (a *Agent) handleResults(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	taskID := strings.TrimPrefix(r.URL.Path, "/results/")
+	if taskID == "" {
+		http.Error(w, "task_id required", http.StatusBadRequest)
+		return
+	}
+	val, ok := a.resultStore.Load(taskID)
+	if !ok {
+		http.Error(w, "result not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(val)
 }
 
 // handleExec executes a command synchronously and returns stdout/stderr/exit-code inline.
@@ -428,6 +452,9 @@ func (a *Agent) executeTask(req *TaskRequest) {
 	} else {
 		log.Printf("Task %s completed successfully in %v", req.TaskID, result.Duration)
 	}
+
+	// Store result for /results/{taskID} polling by the control plane.
+	a.resultStore.Store(req.TaskID, result)
 
 	// Send result - prefer NATS if available, fallback to HTTP
 	if a.messageBus != nil {
@@ -648,19 +675,42 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 	return nil
 }
 
-// resultReporter sends task results back to control plane
+// resultReporter sends task results back to control plane with exponential backoff retry.
 func (a *Agent) resultReporter(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case result := <-a.taskResultCh:
-			if err := a.sendResult(ctx, result); err != nil {
-				log.Printf("Failed to send result for task %s: %v", result.TaskID, err)
-				// TODO: Retry logic
+			if err := a.sendResultWithRetry(ctx, result); err != nil {
+				log.Printf("Exhausted retries sending result for task %s: %v", result.TaskID, err)
 			}
 		}
 	}
+}
+
+// sendResultWithRetry attempts to send a result up to 5 times with exponential backoff.
+func (a *Agent) sendResultWithRetry(ctx context.Context, result *TaskResult) error {
+	backoff := 2 * time.Second
+	const maxBackoff = 30 * time.Second
+	for attempt := 1; attempt <= 5; attempt++ {
+		if err := a.sendResult(ctx, result); err == nil {
+			return nil
+		} else if attempt < 5 {
+			log.Printf("Failed to send result for task %s (attempt %d/5): %v, retrying in %v", result.TaskID, attempt, err, backoff)
+		} else {
+			return fmt.Errorf("failed after 5 attempts: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		if backoff < maxBackoff {
+			backoff *= 2
+		}
+	}
+	return nil
 }
 
 // sendResult sends a task result to the control plane

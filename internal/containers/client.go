@@ -294,26 +294,43 @@ func (c *ProjectAgentClient) ExecuteTaskSync(ctx context.Context, req *TaskReque
 			return nil, ctx.Err()
 		case <-ticker.C:
 			if time.Now().After(deadline) {
-				return nil, fmt.Errorf("task execution timeout")
+				return nil, fmt.Errorf("task execution timeout after %v", timeout)
 			}
 
-			// Check if agent is still busy with this task
-			status, err := c.Status(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("failed to check status: %w", err)
+			// Poll the agent's /results/{taskID} endpoint for the completed result.
+			result, err := c.fetchResult(ctx, req.TaskID)
+			if err == nil && result != nil {
+				return result, nil
 			}
-
-			// If not busy, task completed (we'd need proper result retrieval)
-			// For now, return success if agent is idle
-			if !status.Busy {
-				// TODO: Implement proper result retrieval endpoint
-				return &TaskResult{
-					TaskID:  req.TaskID,
-					BeadID:  req.BeadID,
-					Success: true,
-					Output:  "Task completed (result retrieval TBD)",
-				}, nil
-			}
+			// 404 means still in progress; any other error is transient — keep polling.
 		}
 	}
+}
+
+// fetchResult retrieves a completed task result from the agent's /results/{taskID} endpoint.
+// Returns (nil, nil) if the result is not yet available (404).
+func (c *ProjectAgentClient) fetchResult(ctx context.Context, taskID string) (*TaskResult, error) {
+	url := fmt.Sprintf("%s/results/%s", c.baseURL, taskID)
+	reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(reqHTTP)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil // still in progress
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d from /results/%s", resp.StatusCode, taskID)
+	}
+
+	var result TaskResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding result: %w", err)
+	}
+	return &result, nil
 }

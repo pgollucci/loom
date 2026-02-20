@@ -9,14 +9,21 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
-// Manager manages agent lifecycle and coordination
+// Manager manages agent lifecycle and coordination.
+//
+// Deprecated: Use internal/agent/worker_manager.go WorkerManager for production
+// agent management. This Manager type is retained for reference and testing only.
+// WorkerManager provides full lifecycle management including LLM provider assignment,
+// worker pool integration, and database persistence.
 type Manager struct {
 	agents    map[string]*models.Agent
 	mu        sync.RWMutex
 	maxAgents int
 }
 
-// NewManager creates a new agent manager
+// NewManager creates a new agent manager.
+//
+// Deprecated: Use WorkerManager instead.
 func NewManager(maxAgents int) *Manager {
 	return &Manager{
 		agents:    make(map[string]*models.Agent),
@@ -24,14 +31,17 @@ func NewManager(maxAgents int) *Manager {
 	}
 }
 
-// SpawnAgent creates and starts a new agent
+// SpawnAgent creates an agent struct and registers it in the in-memory map.
+// It does NOT start an LLM worker goroutine — use WorkerManager.SpawnAgentWorker for that.
+//
+// Deprecated: Use WorkerManager.SpawnAgentWorker instead.
 func (m *Manager) SpawnAgent(ctx context.Context, name, personaName, projectID string, persona *models.Persona) (*models.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// Check if we've reached max agents
 	if len(m.agents) >= m.maxAgents {
-		return nil, fmt.Errorf("maximum number of agents (%d) reached", m.maxAgents)
+		return nil, fmt.Errorf("maximum number of agents (%d) reached; use WorkerManager for production use", m.maxAgents)
 	}
 
 	// Generate agent ID
@@ -54,10 +64,6 @@ func (m *Manager) SpawnAgent(ctx context.Context, name, personaName, projectID s
 	}
 
 	m.agents[agentID] = agent
-
-	// TODO: Actually spawn the agent process/goroutine
-	// This would integrate with an LLM service to run the agent
-
 	return agent, nil
 }
 
@@ -135,23 +141,19 @@ func (m *Manager) AssignBead(agentID, beadID string) error {
 	return nil
 }
 
-// StopAgent stops and removes an agent
+// StopAgent removes an agent from the in-memory registry.
+// It does NOT stop an LLM worker goroutine — use WorkerManager.StopWorker for that.
+//
+// Deprecated: Use WorkerManager.StopWorker instead.
 func (m *Manager) StopAgent(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	agent, ok := m.agents[id]
-	if !ok {
+	if _, ok := m.agents[id]; !ok {
 		return fmt.Errorf("agent not found: %s", id)
 	}
 
-	// TODO: Actually stop the agent process/goroutine
-
 	delete(m.agents, id)
-
-	// Return the agent for logging purposes
-	_ = agent
-
 	return nil
 }
 
