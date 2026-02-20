@@ -79,6 +79,8 @@ func main() {
 		WorkDir:           *workDir,
 		HeartbeatInterval: *heartbeatInterval,
 		NatsURL:           *natsURL,
+		ServiceID:         getEnvOrDefault("SERVICE_ID", fmt.Sprintf("agent-%s", *projectID)),
+		InstanceID:        getEnvOrDefault("INSTANCE_ID", ""),
 		Role:              *role,
 		ProviderEndpoint:  *providerEndpoint,
 		ProviderModel:     *providerModel,

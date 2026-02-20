@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +39,18 @@ type Orchestrator struct {
 	projectAgents   map[string]*ProjectAgentClient
 	mu              sync.RWMutex
 	controlPlaneURL string
+	natsURL         string     // NATS URL injected into project containers
 	messageBus      MessageBus // NATS message bus for async task publishing
+}
+
+// shortID returns a 6-character random alphanumeric string for container instance IDs.
+func shortID() string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
 }
 
 // NewOrchestrator creates a new container orchestrator
@@ -59,6 +71,13 @@ func (o *Orchestrator) SetMessageBus(mb MessageBus) {
 	defer o.mu.Unlock()
 	o.messageBus = mb
 	log.Printf("[Orchestrator] Message bus configured for container orchestration")
+}
+
+// SetNatsURL sets the NATS URL injected into project container environments.
+func (o *Orchestrator) SetNatsURL(url string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.natsURL = url
 }
 
 // EnsureProjectContainer ensures a project container is running
@@ -163,6 +182,9 @@ services:
       - GITLAB_TOKEN=${GITLAB_TOKEN}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - REPO_URL={{.RepoURL}}
+      - NATS_URL={{.NatsURL}}
+      - SERVICE_ID={{.ServiceID}}
+      - INSTANCE_ID={{.InstanceID}}
     volumes:
       - loom-project-{{.ProjectID}}-workspace:/workspace
       - loom-project-{{.ProjectID}}-history:/root/.loom-history
@@ -235,12 +257,22 @@ volumes:
 		repoURL = project.Context["repo_url"]
 	}
 
+	natsURL := o.natsURL
+	if natsURL == "" {
+		natsURL = "nats://nats:4222"
+	}
+	serviceID := fmt.Sprintf("agent-%s", project.ID)
+	instanceID := fmt.Sprintf("%s-%s", serviceID, shortID())
+
 	data := map[string]string{
-		"ProjectID":        project.ID,
-		"ControlPlaneURL":  o.controlPlaneURL,
-		"Dockerfile":       dockerfilePath,
-		"ProjectsRoot":     o.projectsRoot,
-		"RepoURL":          repoURL,
+		"ProjectID":       project.ID,
+		"ControlPlaneURL": o.controlPlaneURL,
+		"Dockerfile":      dockerfilePath,
+		"ProjectsRoot":    o.projectsRoot,
+		"RepoURL":         repoURL,
+		"NatsURL":         natsURL,
+		"ServiceID":       serviceID,
+		"InstanceID":      instanceID,
 	}
 
 	f, err := os.Create(o.composeFile)

@@ -1155,6 +1155,10 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			if err := a.swarmManager.Start(ctx, []string{"control-plane"}, projectIDs, endpoint); err != nil {
 				log.Printf("[Loom] Warning: Failed to start swarm manager: %v", err)
 			}
+			// Wire swarm manager to dispatcher for dynamic service discovery routing.
+			if a.dispatcher != nil {
+				a.dispatcher.SetSwarmManager(a.swarmManager)
+			}
 
 			// Federation with peer NATS instances
 			if len(a.config.Swarm.PeerNATSURLs) > 0 {

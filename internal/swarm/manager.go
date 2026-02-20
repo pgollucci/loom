@@ -59,10 +59,15 @@ func NewManager(bus SwarmBus, selfID, selfType string) *Manager {
 }
 
 // Start begins swarm management: announce self, subscribe to swarm messages, send heartbeats.
+// A random suffix is appended to selfID to form the instance ID.
 func (m *Manager) Start(ctx context.Context, roles, projectIDs []string, endpoint string) error {
-	ctx, m.cancel = context.WithCancel(ctx)
+	return m.StartWithInstanceID(ctx, m.selfID+"-"+uuid.New().String()[:8], roles, projectIDs, endpoint)
+}
 
-	instanceID := m.selfID + "-" + uuid.New().String()[:8]
+// StartWithInstanceID is like Start but uses the provided instanceID instead of generating one.
+// Use this when a stable, injected instance ID is available (e.g., from INSTANCE_ID env var).
+func (m *Manager) StartWithInstanceID(ctx context.Context, instanceID string, roles, projectIDs []string, endpoint string) error {
+	ctx, m.cancel = context.WithCancel(ctx)
 
 	// Subscribe to swarm messages
 	if err := m.bus.SubscribeSwarm(func(msg *messages.SwarmMessage) {

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/messagebus"
+	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/pkg/messages"
 )
 
@@ -25,6 +26,10 @@ type Config struct {
 	WorkDir           string
 	HeartbeatInterval time.Duration
 	NatsURL           string // NATS server URL (optional, for NATS-based communication)
+
+	// Service identity for swarm registration
+	ServiceID  string // e.g. "agent-loom" (injected via SERVICE_ID env var)
+	InstanceID string // e.g. "agent-loom-abc123" (injected via INSTANCE_ID env var)
 
 	// Role-based agent service configuration
 	Role              string // "coder", "reviewer", "qa", "pm", "architect"
@@ -44,6 +49,7 @@ type Agent struct {
 	currentTask  *TaskExecution
 	taskResultCh chan *TaskResult
 	messageBus   *messagebus.NatsMessageBus
+	swarmMgr     *swarm.Manager   // announces this agent to the control plane via NATS swarm
 	resultStore  sync.Map // taskID -> *TaskResult, for /results/{taskID} polling
 
 	role                string // cached from config
@@ -186,6 +192,29 @@ func (a *Agent) Start(ctx context.Context) error {
 			log.Printf("Warning: Failed to subscribe to NATS tasks: %v", err)
 		} else {
 			log.Printf("Subscribed to NATS tasks for project %s", a.config.ProjectID)
+		}
+
+		// Announce this agent via the swarm protocol so the control plane can
+		// discover it dynamically without relying solely on HTTP registration.
+		serviceID := a.config.ServiceID
+		if serviceID == "" {
+			serviceID = fmt.Sprintf("agent-%s", a.config.ProjectID)
+		}
+		instanceID := a.config.InstanceID
+		if instanceID == "" {
+			instanceID = serviceID
+		}
+		serviceType := "agent"
+		if a.config.Role != "" {
+			serviceType = "agent-" + a.config.Role
+		}
+		agentURL := fmt.Sprintf("http://loom-project-%s:8090", a.config.ProjectID)
+		a.swarmMgr = swarm.NewManager(a.messageBus, serviceID, serviceType)
+		// Override the instance ID to use our injected value.
+		if err := a.swarmMgr.StartWithInstanceID(ctx, instanceID, []string{a.config.Role}, []string{a.config.ProjectID}, agentURL); err != nil {
+			log.Printf("Warning: Failed to start swarm manager: %v", err)
+		} else {
+			log.Printf("[Agent] Announced to swarm as %s (instance=%s)", serviceID, instanceID)
 		}
 	}
 

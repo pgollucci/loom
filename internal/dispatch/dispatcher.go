@@ -19,6 +19,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/gitops"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
+	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/telemetry"
 	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
@@ -69,8 +70,9 @@ type Dispatcher struct {
 	eventBus            *eventbus.EventBus
 	messageBus          MessageBus // NATS message bus for async agent communication
 	workflowEngine      *workflow.Engine
-	containerOrch       *containers.Orchestrator // Per-project container orchestration
+	containerOrch       *containers.Orchestrator   // Per-project container orchestration
 	worktreeManager     *gitops.GitWorktreeManager // Per-agent worktree isolation
+	swarmMgr            *swarm.Manager             // Dynamic service discovery
 	personaMatcher      *PersonaMatcher
 	autoBugRouter       *AutoBugRouter
 	complexityEstimator *provider.ComplexityEstimator
@@ -100,6 +102,7 @@ type MessageBus interface {
 	PublishTask(ctx context.Context, projectID string, task *messages.TaskMessage) error
 	PublishTaskForRole(ctx context.Context, projectID, role string, task *messages.TaskMessage) error
 }
+
 
 // UseNATSDispatch controls whether the dispatcher routes tasks exclusively to NATS
 // container agents instead of in-process workers. When true and the MessageBus is
@@ -281,6 +284,15 @@ func (d *Dispatcher) SetContainerOrchestrator(orch *containers.Orchestrator) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.containerOrch = orch
+}
+
+// SetSwarmManager sets the swarm manager used for dynamic service discovery.
+// When set, the dispatcher consults the swarm registry to route tasks to
+// remote agent instances before falling back to in-process workers.
+func (d *Dispatcher) SetSwarmManager(mgr *swarm.Manager) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.swarmMgr = mgr
 }
 
 // SetWorktreeManager sets the git worktree manager for parallel agent isolation.
@@ -516,6 +528,39 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 	if UseNATSDispatch && d.messageBus != nil {
 		log.Printf("[Dispatcher] NATS-only dispatch for bead %s — skipping in-process execution", candidate.ID)
 		return dispatchResult, nil
+	}
+
+	// If a swarm member is registered for this project, prefer routing to the
+	// remote container agent via NATS task publish rather than the in-process worker pool.
+	if d.swarmMgr != nil && d.messageBus != nil {
+		members := d.swarmMgr.GetMembersByProject(selectedProjectID)
+		for _, m := range members {
+			if m.Status == "online" || m.Status == "" {
+				// Publish role-targeted task so the correct agent role picks it up.
+				taskMsg := messages.TaskAssigned(
+					selectedProjectID,
+					candidate.ID,
+					ag.ID,
+					messages.TaskData{
+						Title:       candidate.Title,
+						Description: candidate.Description,
+						Type:        "bead",
+						Context: map[string]interface{}{
+							"bead_id": candidate.ID,
+							"role":    ag.Role,
+						},
+					},
+					task.ID, // correlation ID
+				)
+				if err := d.messageBus.PublishTaskForRole(ctx, selectedProjectID, ag.Role, taskMsg); err != nil {
+					log.Printf("[Dispatcher] Swarm-based NATS dispatch failed for bead %s: %v; falling through to in-process", candidate.ID, err)
+				} else {
+					log.Printf("[Dispatcher] Routed bead %s to swarm member %s (role=%s)", candidate.ID, m.ServiceID, ag.Role)
+					return dispatchResult, nil
+				}
+				break
+			}
+		}
 	}
 
 	// Prevent duplicate in-flight execution of the same bead
