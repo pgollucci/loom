@@ -230,9 +230,16 @@ func (s *Server) handleCreateMotivation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cooldown := time.Duration(req.CooldownMinutes) * time.Minute
-	if cooldown == 0 {
-		cooldown = 5 * time.Minute // Default 5 minute cooldown
+	// Handle cooldown - default to 5 minutes if not specified
+	cooldown := 5 * time.Minute
+	if req.CooldownMinutes != nil {
+		cooldown = time.Duration(*req.CooldownMinutes) * time.Minute
+	}
+
+	// Handle priority - default to 0 if not specified
+	priority := 0
+	if req.Priority != nil {
+		priority = *req.Priority
 	}
 
 	m := &motivation.Motivation{
@@ -245,7 +252,7 @@ func (s *Server) handleCreateMotivation(w http.ResponseWriter, r *http.Request) 
 		ProjectID:           req.ProjectID,
 		Parameters:          req.Parameters,
 		CooldownPeriod:      cooldown,
-		Priority:            req.Priority,
+		Priority:            priority,
 		CreateBeadOnTrigger: req.CreateBead,
 		BeadTemplate:        req.BeadTemplate,
 		WakeAgent:           req.WakeAgent,
