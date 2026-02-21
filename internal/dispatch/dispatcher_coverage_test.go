@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
@@ -416,110 +415,6 @@ func TestDispatcher_SetReadinessCheck_WithFunc(t *testing.T) {
 	}
 }
 
-// --- estimateBeadComplexity edge cases ---
-
-func TestEstimateBeadComplexity_P0Simple(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	// P0 task should be at least medium even if content is simple
-	bead := &models.Bead{
-		ID:          "b-p0-simple",
-		Title:       "fix typo",
-		Description: "change one word",
-		Type:        "task",
-		Priority:    models.BeadPriorityP0,
-	}
-
-	result := d.estimateBeadComplexity(bead)
-	if result < provider.ComplexityMedium {
-		t.Errorf("Expected at least medium for P0, got %s", result.String())
-	}
-}
-
-func TestEstimateBeadComplexity_DecisionAlwaysComplex(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	bead := &models.Bead{
-		ID:          "b-decision-simple",
-		Title:       "simple question",
-		Description: "yes or no",
-		Type:        "decision",
-		Priority:    models.BeadPriorityP3,
-	}
-
-	result := d.estimateBeadComplexity(bead)
-	if result != provider.ComplexityComplex {
-		t.Errorf("Expected ComplexityComplex for decision bead, got %s", result.String())
-	}
-}
-
-func TestEstimateBeadComplexity_WithErrorContext(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	bead := &models.Bead{
-		ID:          "b-with-errors",
-		Title:       "Debug issue",
-		Description: "Something broke",
-		Type:        "bug",
-		Priority:    models.BeadPriorityP2,
-		Context: map[string]string{
-			"error_message": "fatal: architecture design flaw in distributed system",
-			"agent_output":  "This requires refactoring the entire module",
-		},
-	}
-
-	result := d.estimateBeadComplexity(bead)
-	// With error context containing complexity keywords, should be at least medium
-	if result < provider.ComplexitySimple {
-		t.Errorf("Expected at least simple complexity with error context, got %s", result.String())
-	}
-}
-
-func TestEstimateBeadComplexity_EmptyDescription(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	bead := &models.Bead{
-		ID:          "b-no-desc",
-		Title:       "task",
-		Description: "",
-		Type:        "task",
-		Priority:    models.BeadPriorityP2,
-	}
-
-	// Should not panic with empty description
-	result := d.estimateBeadComplexity(bead)
-	if result < provider.ComplexitySimple {
-		t.Errorf("Expected at least simple complexity, got %s", result.String())
-	}
-}
-
-func TestEstimateBeadComplexity_NilContext(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	bead := &models.Bead{
-		ID:          "b-nil-ctx",
-		Title:       "Fix something",
-		Description: "It's broken",
-		Type:        "task",
-		Priority:    models.BeadPriorityP1,
-		Context:     nil,
-	}
-
-	// Should not panic with nil context
-	result := d.estimateBeadComplexity(bead)
-	_ = result // Just ensuring no panic
-}
-
 // --- SystemStatus JSON edge cases ---
 
 func TestSystemStatusJSON_EmptyState(t *testing.T) {
@@ -645,9 +540,6 @@ func TestNewDispatcher_NilArgs(t *testing.T) {
 	}
 	if d.autoBugRouter == nil {
 		t.Error("Expected autoBugRouter to be initialized")
-	}
-	if d.complexityEstimator == nil {
-		t.Error("Expected complexityEstimator to be initialized")
 	}
 	if d.loopDetector == nil {
 		t.Error("Expected loopDetector to be initialized")

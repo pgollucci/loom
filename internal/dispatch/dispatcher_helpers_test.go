@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
@@ -846,103 +845,6 @@ func TestSystemStatusJSON(t *testing.T) {
 	}
 	if decoded.Reason != "dispatching bead-123" {
 		t.Errorf("Reason mismatch: got %v, want %v", decoded.Reason, "dispatching bead-123")
-	}
-}
-
-// --- estimateBeadComplexity tests (indirect through exported types) ---
-
-func TestEstimateBeadComplexity_NilEstimator(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: nil,
-	}
-
-	bead := &models.Bead{
-		ID:       "b-1",
-		Title:    "Simple fix",
-		Type:     "task",
-		Priority: models.BeadPriorityP1,
-	}
-
-	// With nil estimator, should return medium
-	result := d.estimateBeadComplexity(bead)
-	if result != provider.ComplexityMedium {
-		t.Errorf("Expected ComplexityMedium with nil estimator, got %s", result.String())
-	}
-}
-
-func TestEstimateBeadComplexity_WithEstimator(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	tests := []struct {
-		name        string
-		bead        *models.Bead
-		minExpected provider.ComplexityLevel
-	}{
-		{
-			name: "decision bead always complex",
-			bead: &models.Bead{
-				ID:       "b-decision",
-				Title:    "Review strategy",
-				Type:     "decision",
-				Priority: models.BeadPriorityP1,
-			},
-			minExpected: provider.ComplexityComplex,
-		},
-		{
-			name: "P0 bead at least medium",
-			bead: &models.Bead{
-				ID:       "b-p0",
-				Title:    "Fix typo",
-				Type:     "task",
-				Priority: models.BeadPriorityP0,
-			},
-			minExpected: provider.ComplexityMedium,
-		},
-		{
-			name: "regular task with context",
-			bead: &models.Bead{
-				ID:       "b-regular",
-				Title:    "Fix login bug",
-				Type:     "task",
-				Priority: models.BeadPriorityP2,
-				Context: map[string]string{
-					"agent_output":  "The issue is in auth.go",
-					"error_message": "nil pointer in handler",
-				},
-			},
-			minExpected: provider.ComplexitySimple, // At least simple
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := d.estimateBeadComplexity(tt.bead)
-			if result < tt.minExpected {
-				t.Errorf("Expected at least %s complexity, got %s", tt.minExpected.String(), result.String())
-			}
-		})
-	}
-}
-
-func TestEstimateBeadComplexity_ArchitectureTask(t *testing.T) {
-	d := &Dispatcher{
-		complexityEstimator: provider.NewComplexityEstimator(),
-	}
-
-	bead := &models.Bead{
-		ID:          "b-arch",
-		Title:       "Design new microservice architecture",
-		Description: "Create a comprehensive architecture for distributed system",
-		Type:        "epic",
-		Priority:    models.BeadPriorityP1,
-	}
-
-	result := d.estimateBeadComplexity(bead)
-	// Architecture tasks should be at least medium complexity
-	if result < provider.ComplexityMedium {
-		t.Errorf("Expected at least medium complexity for architecture task, got %s", result.String())
 	}
 }
 

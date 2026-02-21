@@ -63,26 +63,25 @@ type DispatchResult struct {
 // Dispatcher is responsible for selecting ready work and executing it using agents/providers.
 // For now it focuses on turning beads into LLM tasks and storing the output back into bead context.
 type Dispatcher struct {
-	beads               *beads.Manager
-	projects            *project.Manager
-	agents              *agent.WorkerManager
-	providers           *provider.Registry
-	db                  *database.Database
-	eventBus            *eventbus.EventBus
-	messageBus          MessageBus // NATS message bus for async agent communication
-	workflowEngine      *workflow.Engine
-	containerOrch       *containers.Orchestrator   // Per-project container orchestration
-	worktreeManager     *gitops.GitWorktreeManager // Per-agent worktree isolation
-	swarmMgr            *swarm.Manager             // Dynamic service discovery
-	memoryMgr           *memory.MemoryManager      // Per-project memory for context injection
-	personaMatcher      *PersonaMatcher
-	autoBugRouter       *AutoBugRouter
-	complexityEstimator *provider.ComplexityEstimator
-	readinessCheck      func(context.Context, string) (bool, []string)
-	readinessMode       ReadinessMode
-	escalator           Escalator
-	maxDispatchHops     int
-	loopDetector        *LoopDetector
+	beads           *beads.Manager
+	projects        *project.Manager
+	agents          *agent.WorkerManager
+	providers       *provider.Registry
+	db              *database.Database
+	eventBus        *eventbus.EventBus
+	messageBus      MessageBus // NATS message bus for async agent communication
+	workflowEngine  *workflow.Engine
+	containerOrch   *containers.Orchestrator   // Per-project container orchestration
+	worktreeManager *gitops.GitWorktreeManager // Per-agent worktree isolation
+	swarmMgr        *swarm.Manager             // Dynamic service discovery
+	memoryMgr       *memory.MemoryManager      // Per-project memory for context injection
+	personaMatcher  *PersonaMatcher
+	autoBugRouter   *AutoBugRouter
+	readinessCheck  func(context.Context, string) (bool, []string)
+	readinessMode   ReadinessMode
+	escalator       Escalator
+	maxDispatchHops int
+	loopDetector    *LoopDetector
 
 	// Commit serialization (Gap #2)
 	commitLock        sync.Mutex         // Global commit lock
@@ -91,9 +90,8 @@ type Dispatcher struct {
 	commitInProgress  *commitState       // Current commit state
 	commitStateMutex  sync.RWMutex       // Protects commitInProgress
 
-	mu              sync.RWMutex
-	status          SystemStatus
-	providerCounter uint64 // round-robin counter for load distribution across providers
+	mu     sync.RWMutex
+	status SystemStatus
 
 	inflightMu sync.Mutex
 	inflight   map[string]struct{} // bead IDs currently being executed
@@ -133,19 +131,18 @@ type Escalator interface {
 
 func NewDispatcher(beadsMgr *beads.Manager, projMgr *project.Manager, agentMgr *agent.WorkerManager, registry *provider.Registry, eb *eventbus.EventBus) *Dispatcher {
 	d := &Dispatcher{
-		beads:               beadsMgr,
-		projects:            projMgr,
-		agents:              agentMgr,
-		providers:           registry,
-		eventBus:            eb,
-		personaMatcher:      NewPersonaMatcher(),
-		autoBugRouter:       NewAutoBugRouter(),
-		complexityEstimator: provider.NewComplexityEstimator(),
-		loopDetector:        NewLoopDetector(),
-		readinessMode:       ReadinessWarn,
-		commitQueue:         make(chan commitRequest, 100),
-		commitLockTimeout:   5 * time.Minute,
-		inflight:            make(map[string]struct{}),
+		beads:             beadsMgr,
+		projects:          projMgr,
+		agents:            agentMgr,
+		providers:         registry,
+		eventBus:          eb,
+		personaMatcher:    NewPersonaMatcher(),
+		autoBugRouter:     NewAutoBugRouter(),
+		loopDetector:      NewLoopDetector(),
+		readinessMode:     ReadinessWarn,
+		commitQueue:       make(chan commitRequest, 100),
+		commitLockTimeout: 5 * time.Minute,
+		inflight:          make(map[string]struct{}),
 		status: SystemStatus{
 			State:     StatusParked,
 			Reason:    "not started",
@@ -993,45 +990,6 @@ func (d *Dispatcher) getWorkflowRoleRequirement(execution *workflow.WorkflowExec
 	}
 
 	return node.RoleRequired
-}
-
-// estimateBeadComplexity analyzes a bead to estimate task complexity for smart provider routing.
-// Simple tasks (review, check) go to small models; complex tasks (design, architect) go to large models.
-func (d *Dispatcher) estimateBeadComplexity(bead *models.Bead) provider.ComplexityLevel {
-	if d.complexityEstimator == nil {
-		return provider.ComplexityMedium // Default fallback
-	}
-
-	// Start with type-based estimation
-	typeComplexity := d.complexityEstimator.EstimateFromBeadType(string(bead.Type))
-
-	// Analyze content for more specific estimation
-	description := bead.Description
-	if bead.Context != nil {
-		// Include any agent output or error messages in complexity analysis
-		if agentOutput, ok := bead.Context["agent_output"]; ok {
-			description += " " + agentOutput
-		}
-		if errorMsg, ok := bead.Context["error_message"]; ok {
-			description += " " + errorMsg
-		}
-	}
-	contentComplexity := d.complexityEstimator.EstimateComplexity(bead.Title, description)
-
-	// Combine estimates (take the higher one)
-	result := d.complexityEstimator.CombineEstimates(typeComplexity, contentComplexity)
-
-	// Priority escalation: P0 tasks get at least medium complexity treatment
-	if bead.Priority == models.BeadPriorityP0 && result < provider.ComplexityMedium {
-		result = provider.ComplexityMedium
-	}
-
-	// Decision beads always require complex reasoning
-	if bead.Type == "decision" {
-		result = provider.ComplexityComplex
-	}
-
-	return result
 }
 
 func normalizeRoleName(role string) string {

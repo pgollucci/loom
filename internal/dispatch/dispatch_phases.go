@@ -438,24 +438,11 @@ func (d *Dispatcher) selectCandidate(
 // round-robin across healthy providers. Returns the selected provider ID
 // or empty string if none available.
 func (d *Dispatcher) selectProviderForTask(candidate *models.Bead, ag *models.Agent) string {
-	complexity := d.estimateBeadComplexity(candidate)
-	activeProviders := d.providers.ListActiveForComplexity(complexity)
+	activeProviders := d.providers.ListActive()
 	if len(activeProviders) == 0 {
 		return ""
 	}
-
-	idx := d.providerCounter % uint64(len(activeProviders))
-	d.providerCounter++
-	selected := activeProviders[idx]
-	prevProvider := ag.ProviderID
-	ag.ProviderID = selected.Config.ID
-
-	if selected.Config.ID != prevProvider {
-		log.Printf("[Dispatcher] Selected provider %s (%d/%d) for %s complexity task %s (prev=%s)",
-			selected.Config.ID, idx+1, len(activeProviders),
-			complexity.String(), candidate.ID, prevProvider)
-	}
-	return selected.Config.ID
+	return activeProviders[0].Config.ID
 }
 
 // claimAndAssign claims the bead for the agent, increments the dispatch count,
