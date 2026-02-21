@@ -86,6 +86,55 @@ services:
     networks:
       - loom-network
 
+  # TokenHub: LLM routing proxy with intelligent provider selection,
+  # health tracking, failover, and Thompson Sampling.
+  # All Loom agents route LLM requests through TokenHub instead of
+  # directly hitting provider endpoints.
+  tokenhub:
+    build:
+      context: ../tokenhub
+      dockerfile: Dockerfile.slim
+    image: tokenhub:latest
+    container_name: tokenhub
+    restart: unless-stopped
+    environment:
+      - TOKENHUB_LISTEN_ADDR=:8080
+      - TOKENHUB_LOG_LEVEL=info
+      - TOKENHUB_DB_DSN=file:/data/tokenhub.sqlite?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)
+      - TOKENHUB_VAULT_ENABLED=false
+      # vLLM endpoints (sparky local): round-robin across both
+      - TOKENHUB_VLLM_ENDPOINTS=http://sparky.local:8000/v1,http://sparky.local:8001/v1
+      # Additional OpenAI-compatible providers (NVIDIA NIM cloud)
+      - TOKENHUB_EXTRA_PROVIDERS=${TOKENHUB_EXTRA_PROVIDERS:-}
+      # Disable health probes (providers use auth that probes can't supply)
+      - TOKENHUB_HEALTH_PROBE_DISABLED=true
+      # Routing policy: balanced selection, generous budget/latency for agent workloads
+      - TOKENHUB_DEFAULT_MODE=normal
+      - TOKENHUB_DEFAULT_MAX_BUDGET_USD=1.00
+      - TOKENHUB_DEFAULT_MAX_LATENCY_MS=120000
+      - TOKENHUB_PROVIDER_TIMEOUT_SECS=120
+      # Security: admin token for provider/model registration API
+      - TOKENHUB_ADMIN_TOKEN=${TOKENHUB_ADMIN_TOKEN:-loom-tokenhub-admin}
+      - TOKENHUB_CORS_ORIGINS=*
+      - TOKENHUB_RATE_LIMIT_RPS=120
+      - TOKENHUB_RATE_LIMIT_BURST=240
+      # Temporal disabled — Loom has its own Temporal
+      - TOKENHUB_TEMPORAL_ENABLED=false
+    extra_hosts:
+      - "sparky.local:10.11.100.116"
+    networks:
+      - loom-network
+    volumes:
+      - tokenhub-data:/data
+    ports:
+      - "8090:8080"  # TokenHub admin UI on 8090 to avoid conflict with Loom on 8080
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   # NATS message bus with JetStream for inter-service communication
   nats:
     image: nats:2.10-alpine
@@ -156,9 +205,11 @@ services:
         condition: service_healthy
       pgbouncer:
         condition: service_healthy
+      tokenhub:
+        condition: service_healthy
     ports:
       - "8080:8081"
-      - "3307:3307"     # Dolt SQL server for beads federation
+      - "3307:3307"
     environment:
       - LOOM_PASSWORD=${LOOM_PASSWORD}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
@@ -177,6 +228,8 @@ services:
       - POSTGRES_DB=loom
       - CONNECTORS_SERVICE_ADDR=connectors-service:50051
       - OTEL_ENDPOINT=otel-collector:4317
+      - TOKENHUB_URL=http://tokenhub:8080
+      - TOKENHUB_ADMIN_TOKEN=${TOKENHUB_ADMIN_TOKEN:-loom-tokenhub-admin}
     networks:
       - loom-network
     extra_hosts:
@@ -459,6 +512,7 @@ volumes:
   prometheus-data:
   grafana-data:
   loki-data:
+  tokenhub-data:
   agent-coder-workspace:
   agent-reviewer-workspace:
   agent-qa-workspace:

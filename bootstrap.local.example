@@ -5,34 +5,43 @@
 # Runs automatically after: make start, make restart
 # Or manually via: make bootstrap, ./bootstrap.local
 #
-# NOTE: Providers with the same ID will be replaced (upsert behavior).
-# This makes bootstrap.local safe to run multiple times.
+# Architecture: Loom -> TokenHub -> LLM Providers
+# TokenHub handles routing, health tracking, failover, and scoring.
+# Loom registers TokenHub as its single provider endpoint.
 
-LOOM_URL="${LOOM_URL:-http://localhost:8081}"
+set -e
 
-register_provider() {
-  local id="$1" name="$2" type="$3" endpoint="$4" model="$5" api_key="${6:-}"
+LOOM_URL="${LOOM_URL:-http://localhost:8080}"
+TOKENHUB_URL="${TOKENHUB_URL:-http://localhost:8090}"
+TOKENHUB_ADMIN_TOKEN="${TOKENHUB_ADMIN_TOKEN:-loom-tokenhub-admin}"
+LOOMCTL="${LOOMCTL:-./loomctl}"
 
-  local body
-  if [ -n "$api_key" ]; then
-    body=$(printf '{"id":"%s","name":"%s","type":"%s","endpoint":"%s","model":"%s","api_key":"%s"}' \
-      "$id" "$name" "$type" "$endpoint" "$model" "$api_key")
-  else
-    body=$(printf '{"id":"%s","name":"%s","type":"%s","endpoint":"%s","model":"%s"}' \
-      "$id" "$name" "$type" "$endpoint" "$model")
-  fi
+if [ ! -f "$LOOMCTL" ]; then
+    echo "Building loomctl..."
+    go build -o loomctl ./cmd/loomctl
+fi
 
-  echo "Registering provider: $name ($id)"
-  curl -s -X POST "$LOOM_URL/api/v1/providers" \
-    -H "Content-Type: application/json" \
-    -d "$body" | head -c 200
-  echo
+th_admin() {
+    curl -sf -X POST "$TOKENHUB_URL/admin/v1/$1" \
+        -H "Authorization: Bearer $TOKENHUB_ADMIN_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$2"
 }
 
-# === Add your providers below ===
+# === Phase 1: Register your LLM providers with TokenHub ===
 
-# Local vLLM example (no API key needed):
-# register_provider "local-vllm" "Local vLLM" "local" "http://localhost:8000/v1" "my-model"
+# Local vLLM example (configured via TOKENHUB_VLLM_ENDPOINTS env var in docker-compose):
+# th_admin "models" '{"id":"my-model","provider_id":"vllm","weight":7,"max_context_tokens":32000,"enabled":true}'
 
-# Cloud provider example (with API key):
-# register_provider "nvidia-cloud" "NVIDIA Cloud" "openai" "https://inference-api.nvidia.com/v1" "nvidia/openai/gpt-oss-20b" "$NVIDIA_API_KEY"
+# Cloud provider example:
+# th_admin "providers" '{"id":"my-cloud","type":"openai","endpoint":"https://api.example.com","api_key":"sk-..."}'
+# th_admin "models" '{"id":"cloud-model","provider_id":"my-cloud","weight":8,"max_context_tokens":128000,"enabled":true}'
+
+# === Phase 2: Register TokenHub as Loom's single provider ===
+
+# $LOOMCTL provider register "tokenhub" \
+#     --name "TokenHub (LLM Router)" \
+#     --type "openai" \
+#     --endpoint "http://tokenhub:8080/v1" \
+#     --model "my-model" \
+#     --server "$LOOM_URL"
