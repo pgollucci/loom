@@ -540,8 +540,12 @@ helm-secrets:
 docs:
 	@echo ""
 	@echo "=== Building Documentation ==="
-	@pip install --quiet mkdocs-material 2>/dev/null || pip install --quiet --user mkdocs-material
-	@mkdocs build
+	@if command -v mkdocs >/dev/null 2>&1; then \
+		mkdocs build; \
+	else \
+		echo "⚠ mkdocs not installed, skipping docs build"; \
+		echo "  Install with: pip install mkdocs-material"; \
+	fi
 
 docs-serve:
 	@echo ""
