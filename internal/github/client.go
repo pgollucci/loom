@@ -59,7 +59,7 @@ func (c *Client) DetectRepoURL(ctx context.Context) (string, error) {
 // GetRepoInfo returns basic information about the current repository.
 func (c *Client) GetRepoInfo(ctx context.Context) (*RepoInfo, error) {
 	type ghRepo struct {
-		NameWithOwner string `json:"nameWithOwner"`
+		NameWithOwner    string `json:"nameWithOwner"`
 		DefaultBranchRef struct {
 			Name string `json:"name"`
 		} `json:"defaultBranchRef"`
@@ -225,12 +225,14 @@ func (c *Client) ListPRs(ctx context.Context, state string) ([]PullRequest, erro
 		return nil, err
 	}
 	type ghPR struct {
-		Number      int    `json:"number"`
-		Title       string `json:"title"`
-		Body        string `json:"body"`
-		State       string `json:"state"`
-		URL         string `json:"url"`
-		Author      struct{ Login string `json:"login"` } `json:"author"`
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		State  string `json:"state"`
+		URL    string `json:"url"`
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
 		HeadRefName string `json:"headRefName"`
 		BaseRefName string `json:"baseRefName"`
 		Mergeable   string `json:"mergeable"`

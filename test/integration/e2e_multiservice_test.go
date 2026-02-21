@@ -76,10 +76,7 @@ func TestE2E_BridgeForwardsLocalEventsToNATS(t *testing.T) {
 	// NATS → Local: publish an agent message on NATS, verify it reaches EventBus
 	receivedLocally := make(chan bool, 1)
 	sub := eb.Subscribe("test-nats-to-local", func(event *eventbus.Event) bool {
-		if event.Source == "nats-bridge" {
-			return true
-		}
-		return false
+		return event.Source == "nats-bridge"
 	})
 
 	go func() {

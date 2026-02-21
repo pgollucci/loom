@@ -31,11 +31,11 @@ type ChangeVelocityMetrics struct {
 
 // Funnel represents the conversion funnel from edits to pushes
 type Funnel struct {
-	Edits   int     `json:"edits"`
-	Builds  int     `json:"builds"`
-	Tests   int     `json:"tests"`
-	Commits int     `json:"commits"`
-	Pushes  int     `json:"pushes"`
+	Edits            int     `json:"edits"`
+	Builds           int     `json:"builds"`
+	Tests            int     `json:"tests"`
+	Commits          int     `json:"commits"`
+	Pushes           int     `json:"pushes"`
 	EditToCommitRate float64 `json:"edit_to_commit_rate"` // commits/edits
 	CommitToPushRate float64 `json:"commit_to_push_rate"` // pushes/commits
 }
@@ -67,7 +67,7 @@ func (t *ChangeVelocityTracker) GetChangeVelocity(ctx context.Context, projectID
 	// This can be implemented once the schema is added
 
 	// For now, return metrics based on git status only
-	metrics.FilesModified = 0  // Would come from action_logs
+	metrics.FilesModified = 0 // Would come from action_logs
 	metrics.BuildsAttempted = 0
 	metrics.BuildsSucceeded = 0
 	metrics.TestsAttempted = 0

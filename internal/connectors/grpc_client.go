@@ -26,9 +26,9 @@ func NewGRPCClient(addr string) (*GRPCClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr,
+	conn, err := grpc.DialContext(ctx, addr, //nolint:staticcheck // TODO: migrate to grpc.NewClient
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck // TODO: migrate to grpc.NewClient
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to connectors service at %s: %w", addr, err)

@@ -50,8 +50,8 @@ func (rg *ReviewGate) CreateReview(ctx context.Context, projectID, sourceBeadID,
 		Commits:      codeResult.Result.Commits,
 		FilesChanged: codeResult.Result.Artifacts,
 		Context: map[string]interface{}{
-			"source_bead":    sourceBeadID,
-			"source_agent":   codeResult.AgentID,
+			"source_bead":  sourceBeadID,
+			"source_agent": codeResult.AgentID,
 		},
 	}, correlationID)
 
@@ -66,8 +66,8 @@ func (rg *ReviewGate) CreateReview(ctx context.Context, projectID, sourceBeadID,
 		Priority:    2,
 		Type:        "review",
 		Context: map[string]interface{}{
-			"commits":    codeResult.Result.Commits,
-			"artifacts":  codeResult.Result.Artifacts,
+			"commits":     codeResult.Result.Commits,
+			"artifacts":   codeResult.Result.Artifacts,
 			"source_bead": sourceBeadID,
 		},
 	}, correlationID)

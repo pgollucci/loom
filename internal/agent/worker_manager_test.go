@@ -557,7 +557,7 @@ func TestWorkerManager_RestoreAgentWorker(t *testing.T) {
 
 	// Test restoring existing agent (should update)
 	agent.Status = "working"
-	restored, err = m.RestoreAgentWorker(ctx, agent)
+	_, err = m.RestoreAgentWorker(ctx, agent)
 	if err != nil {
 		t.Fatalf("RestoreAgentWorker() on existing agent error = %v", err)
 	}

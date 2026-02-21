@@ -49,8 +49,8 @@ type Agent struct {
 	currentTask  *TaskExecution
 	taskResultCh chan *TaskResult
 	messageBus   *messagebus.NatsMessageBus
-	swarmMgr     *swarm.Manager   // announces this agent to the control plane via NATS swarm
-	resultStore  sync.Map // taskID -> *TaskResult, for /results/{taskID} polling
+	swarmMgr     *swarm.Manager // announces this agent to the control plane via NATS swarm
+	resultStore  sync.Map       // taskID -> *TaskResult, for /results/{taskID} polling
 
 	role                string // cached from config
 	personaInstructions string

@@ -6,7 +6,7 @@ import "time"
 // This bridges the in-memory AgentMessageBus to cross-container communication.
 type AgentCommunicationMessage struct {
 	MessageID        string                 `json:"message_id"`
-	Type             string                 `json:"type"`               // "agent_message", "broadcast", "request", "response", "notification", "consensus_request", "consensus_vote"
+	Type             string                 `json:"type"` // "agent_message", "broadcast", "request", "response", "notification", "consensus_request", "consensus_vote"
 	FromAgentID      string                 `json:"from_agent_id"`
 	ToAgentID        string                 `json:"to_agent_id,omitempty"`
 	ToAgentIDs       []string               `json:"to_agent_ids,omitempty"`
@@ -45,8 +45,8 @@ type PlanData struct {
 // PlanStep describes a single step in a plan
 type PlanStep struct {
 	StepID      string                 `json:"step_id"`
-	Role        string                 `json:"role"`    // "coder", "reviewer", "qa", "pm", "architect"
-	Action      string                 `json:"action"`  // "implement", "review", "test", "plan", "document"
+	Role        string                 `json:"role"`   // "coder", "reviewer", "qa", "pm", "architect"
+	Action      string                 `json:"action"` // "implement", "review", "test", "plan", "document"
 	Description string                 `json:"description"`
 	DependsOn   []string               `json:"depends_on,omitempty"`
 	Context     map[string]interface{} `json:"context,omitempty"`
@@ -67,14 +67,14 @@ type ReviewMessage struct {
 
 // ReviewData contains the review details
 type ReviewData struct {
-	Commits     []string               `json:"commits,omitempty"`
-	FilesChanged []string              `json:"files_changed,omitempty"`
-	Diff        string                 `json:"diff,omitempty"`
-	Score       int                    `json:"score,omitempty"`       // 0-100
-	Decision    string                 `json:"decision,omitempty"`    // "approve", "request_changes", "comment"
-	Comments    []ReviewComment        `json:"comments,omitempty"`
-	Summary     string                 `json:"summary,omitempty"`
-	Context     map[string]interface{} `json:"context,omitempty"`
+	Commits      []string               `json:"commits,omitempty"`
+	FilesChanged []string               `json:"files_changed,omitempty"`
+	Diff         string                 `json:"diff,omitempty"`
+	Score        int                    `json:"score,omitempty"`    // 0-100
+	Decision     string                 `json:"decision,omitempty"` // "approve", "request_changes", "comment"
+	Comments     []ReviewComment        `json:"comments,omitempty"`
+	Summary      string                 `json:"summary,omitempty"`
+	Context      map[string]interface{} `json:"context,omitempty"`
 }
 
 // ReviewComment is a single review comment

@@ -59,9 +59,9 @@ type CreateIssueRequest struct {
 
 // CreatePRRequest holds parameters for creating a pull request.
 type CreatePRRequest struct {
-	Title  string
-	Body   string
-	Head   string // branch name
-	Base   string // target branch (default: "main")
-	Draft  bool
+	Title string
+	Body  string
+	Head  string // branch name
+	Base  string // target branch (default: "main")
+	Draft bool
 }

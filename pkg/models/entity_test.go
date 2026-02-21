@@ -59,7 +59,7 @@ func TestEntityMetadata_GetAttribute(t *testing.T) {
 
 	// Get from nil attributes
 	meta.Attributes = nil
-	val, ok = meta.GetAttribute("key1")
+	_, ok = meta.GetAttribute("key1")
 	if ok {
 		t.Error("Expected ok=false when attributes is nil")
 	}

@@ -48,8 +48,8 @@ func New(cfg *config.TemporalConfig) (*Client, error) {
 			ConnectionOptions: client.ConnectionOptions{
 				TLS: nil,
 				DialOptions: []grpc.DialOption{
-					grpc.WithBlock(),
-					grpc.FailOnNonTempDialError(false),
+					grpc.WithBlock(),                   //nolint:staticcheck // TODO: migrate to grpc.NewClient
+					grpc.FailOnNonTempDialError(false), //nolint:staticcheck // TODO: migrate to grpc.NewClient
 				},
 			},
 		}

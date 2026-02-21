@@ -10,16 +10,16 @@ import (
 
 // ConnectorResponse is the API response format for a connector
 type ConnectorResponse struct {
-	ID          string                    `json:"id"`
-	Name        string                    `json:"name"`
-	Type        connectors.ConnectorType  `json:"type"`
-	Mode        connectors.ConnectionMode `json:"mode"`
-	Enabled     bool                      `json:"enabled"`
-	Description string                    `json:"description"`
-	Endpoint    string                    `json:"endpoint"`
+	ID          string                     `json:"id"`
+	Name        string                     `json:"name"`
+	Type        connectors.ConnectorType   `json:"type"`
+	Mode        connectors.ConnectionMode  `json:"mode"`
+	Enabled     bool                       `json:"enabled"`
+	Description string                     `json:"description"`
+	Endpoint    string                     `json:"endpoint"`
 	Status      connectors.ConnectorStatus `json:"status"`
-	Tags        []string                  `json:"tags"`
-	Metadata    map[string]string         `json:"metadata,omitempty"`
+	Tags        []string                   `json:"tags"`
+	Metadata    map[string]string          `json:"metadata,omitempty"`
 }
 
 // HandleConnectors routes connector requests based on path and method

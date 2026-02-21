@@ -500,7 +500,7 @@ func (w *Worker) responseFormat() *provider.ResponseFormat {
 		strings.Contains(ep, ".local") ||
 		strings.Contains(ep, ".local:") ||
 		strings.HasPrefix(ep, "http://172.") || // Docker bridge gateway IPs
-		strings.HasPrefix(ep, "http://10.") ||  // Private network ranges
+		strings.HasPrefix(ep, "http://10.") || // Private network ranges
 		strings.HasPrefix(ep, "http://192.168.") {
 		return &provider.ResponseFormat{Type: "json_object"}
 	}

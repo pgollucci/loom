@@ -4,10 +4,10 @@ import "time"
 
 // TaskMessage represents a task assignment message sent via NATS
 type TaskMessage struct {
-	Type          string                 `json:"type"`           // "task.assigned", "task.updated", "task.cancelled"
+	Type          string                 `json:"type"` // "task.assigned", "task.updated", "task.cancelled"
 	ProjectID     string                 `json:"project_id"`
 	BeadID        string                 `json:"bead_id"`
-	AssignedTo    string                 `json:"assigned_to"`    // Agent ID
+	AssignedTo    string                 `json:"assigned_to"` // Agent ID
 	TaskData      TaskData               `json:"task_data"`
 	CorrelationID string                 `json:"correlation_id"` // For request tracking
 	Timestamp     time.Time              `json:"timestamp"`
@@ -21,7 +21,7 @@ type TaskData struct {
 	Priority      int                    `json:"priority"`
 	Type          string                 `json:"type"` // "task", "bug", "feature", etc.
 	Context       map[string]interface{} `json:"context,omitempty"`
-	WorkDir       string                 `json:"work_dir,omitempty"` // Project working directory
+	WorkDir       string                 `json:"work_dir,omitempty"`       // Project working directory
 	MemoryContext string                 `json:"memory_context,omitempty"` // Pre-built markdown summary from MemoryManager
 }
 

@@ -11,11 +11,11 @@ import (
 )
 
 type mockSwarmBus struct {
-	mu             sync.Mutex
-	published      []*messages.SwarmMessage
-	subscribeErr   error
-	publishErr     error
-	swarmHandler   func(*messages.SwarmMessage)
+	mu           sync.Mutex
+	published    []*messages.SwarmMessage
+	subscribeErr error
+	publishErr   error
+	swarmHandler func(*messages.SwarmMessage)
 }
 
 func (m *mockSwarmBus) PublishSwarm(_ context.Context, msg *messages.SwarmMessage) error {

@@ -131,10 +131,10 @@ type AgentRequest struct {
 
 // AgentResponse represents the response from OpenClaw agent execution
 type AgentResponse struct {
-	RunID    string      `json:"run_id"`
-	Response string      `json:"response"`
+	RunID    string       `json:"run_id"`
+	Response string       `json:"response"`
 	Events   []AgentEvent `json:"events,omitempty"`
-	Error    string      `json:"error,omitempty"`
+	Error    string       `json:"error,omitempty"`
 }
 
 // AgentEvent represents an event from agent execution

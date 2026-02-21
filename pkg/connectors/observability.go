@@ -24,12 +24,12 @@ func NewPrometheusConnector(config Config) *PrometheusConnector {
 	}
 }
 
-func (p *PrometheusConnector) ID() string                    { return p.config.ID }
-func (p *PrometheusConnector) Name() string                  { return p.config.Name }
-func (p *PrometheusConnector) Type() ConnectorType           { return ConnectorTypeObservability }
-func (p *PrometheusConnector) Description() string           { return p.config.Description }
-func (p *PrometheusConnector) GetEndpoint() string           { return p.config.GetFullURL() }
-func (p *PrometheusConnector) GetConfig() Config             { return p.config }
+func (p *PrometheusConnector) ID() string          { return p.config.ID }
+func (p *PrometheusConnector) Name() string        { return p.config.Name }
+func (p *PrometheusConnector) Type() ConnectorType { return ConnectorTypeObservability }
+func (p *PrometheusConnector) Description() string { return p.config.Description }
+func (p *PrometheusConnector) GetEndpoint() string { return p.config.GetFullURL() }
+func (p *PrometheusConnector) GetConfig() Config   { return p.config }
 
 func (p *PrometheusConnector) Initialize(ctx context.Context, config Config) error {
 	p.config = config
@@ -105,12 +105,12 @@ func NewGrafanaConnector(config Config) *GrafanaConnector {
 	}
 }
 
-func (g *GrafanaConnector) ID() string                    { return g.config.ID }
-func (g *GrafanaConnector) Name() string                  { return g.config.Name }
-func (g *GrafanaConnector) Type() ConnectorType           { return ConnectorTypeObservability }
-func (g *GrafanaConnector) Description() string           { return g.config.Description }
-func (g *GrafanaConnector) GetEndpoint() string           { return g.config.GetFullURL() }
-func (g *GrafanaConnector) GetConfig() Config             { return g.config }
+func (g *GrafanaConnector) ID() string          { return g.config.ID }
+func (g *GrafanaConnector) Name() string        { return g.config.Name }
+func (g *GrafanaConnector) Type() ConnectorType { return ConnectorTypeObservability }
+func (g *GrafanaConnector) Description() string { return g.config.Description }
+func (g *GrafanaConnector) GetEndpoint() string { return g.config.GetFullURL() }
+func (g *GrafanaConnector) GetConfig() Config   { return g.config }
 
 func (g *GrafanaConnector) Initialize(ctx context.Context, config Config) error {
 	g.config = config
@@ -169,12 +169,12 @@ func NewJaegerConnector(config Config) *JaegerConnector {
 	}
 }
 
-func (j *JaegerConnector) ID() string                    { return j.config.ID }
-func (j *JaegerConnector) Name() string                  { return j.config.Name }
-func (j *JaegerConnector) Type() ConnectorType           { return ConnectorTypeObservability }
-func (j *JaegerConnector) Description() string           { return j.config.Description }
-func (j *JaegerConnector) GetEndpoint() string           { return j.config.GetFullURL() }
-func (j *JaegerConnector) GetConfig() Config             { return j.config }
+func (j *JaegerConnector) ID() string          { return j.config.ID }
+func (j *JaegerConnector) Name() string        { return j.config.Name }
+func (j *JaegerConnector) Type() ConnectorType { return ConnectorTypeObservability }
+func (j *JaegerConnector) Description() string { return j.config.Description }
+func (j *JaegerConnector) GetEndpoint() string { return j.config.GetFullURL() }
+func (j *JaegerConnector) GetConfig() Config   { return j.config }
 
 func (j *JaegerConnector) Initialize(ctx context.Context, config Config) error {
 	j.config = config

@@ -131,17 +131,17 @@ func NewServer(arb *loom.Loom, km *keymanager.KeyManager, am *auth.Manager, cfg 
 	}
 
 	return &Server{
-		app:             arb,
-		keyManager:      km,
-		authManager:     am,
-		analyticsLogger: analyticsLogger,
-		logManager:      logMgr,
-		cache:           responseCache,
-		config:          cfg,
-		fileManager:     fileManager,
+		app:              arb,
+		keyManager:       km,
+		authManager:      am,
+		analyticsLogger:  analyticsLogger,
+		logManager:       logMgr,
+		cache:            responseCache,
+		config:           cfg,
+		fileManager:      fileManager,
 		connectorService: connSvc,
-		metrics:         promMetrics,
-		apiFailureLast:  make(map[string]time.Time),
+		metrics:          promMetrics,
+		apiFailureLast:   make(map[string]time.Time),
 	}
 }
 

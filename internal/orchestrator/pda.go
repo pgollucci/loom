@@ -27,14 +27,14 @@ type PDABus interface {
 //  3. Acts: Dispatches sub-beads to specialized agent services, tracks results,
 //     and automatically gates code changes through review and QA before closing.
 type PDAOrchestrator struct {
-	bus           PDABus
-	planner       Planner
-	beadCreator   BeadCreator
-	beadUpdater   BeadUpdater
+	bus         PDABus
+	planner     Planner
+	beadCreator BeadCreator
+	beadUpdater BeadUpdater
 
-	activePlans   map[string]*ActivePlan // planID -> plan
-	mu            sync.RWMutex
-	cancel        context.CancelFunc
+	activePlans map[string]*ActivePlan // planID -> plan
+	mu          sync.RWMutex
+	cancel      context.CancelFunc
 }
 
 // Planner generates structured plans from a bead description using an LLM.
@@ -354,9 +354,9 @@ func (o *PDAOrchestrator) createReviewGate(ctx context.Context, plan *ActivePlan
 			Priority:    plan.Plan.Priority,
 			Type:        "review",
 			Context: map[string]interface{}{
-				"commits":      codeResult.Result.Commits,
-				"artifacts":    codeResult.Result.Artifacts,
-				"source_step":  afterStepID,
+				"commits":     codeResult.Result.Commits,
+				"artifacts":   codeResult.Result.Artifacts,
+				"source_step": afterStepID,
 			},
 		},
 		plan.CorrelationID,
@@ -413,9 +413,9 @@ func (o *PDAOrchestrator) completePlan(ctx context.Context, plan *ActivePlan) {
 			Action:   "completed",
 			Category: "pda",
 			Data: map[string]interface{}{
-				"plan_id":  plan.PlanID,
-				"status":   pdaStatus,
-				"bead_id":  plan.SourceBeadID,
+				"plan_id": plan.PlanID,
+				"status":  pdaStatus,
+				"bead_id": plan.SourceBeadID,
 			},
 		},
 		CorrelationID: plan.CorrelationID,

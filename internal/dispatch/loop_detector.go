@@ -180,23 +180,23 @@ func (ld *LoopDetector) checkRepeatedErrors(bead *models.Bead) (bool, string) {
 	for _, errRec := range recentErrors {
 		// Authentication errors (401, 403)
 		if contains(errRec.Error, "401") || contains(errRec.Error, "Authentication") ||
-		   contains(errRec.Error, "403") || contains(errRec.Error, "Forbidden") ||
-		   contains(errRec.Error, "No api key") {
+			contains(errRec.Error, "403") || contains(errRec.Error, "Forbidden") ||
+			contains(errRec.Error, "No api key") {
 			authErrors++
 		}
 
 		// Rate limiting (429)
 		if contains(errRec.Error, "429") || contains(errRec.Error, "rate limit") ||
-		   contains(errRec.Error, "Rate limit") {
+			contains(errRec.Error, "Rate limit") {
 			rateLimitErrors++
 		}
 
 		// Provider/infrastructure errors (500, 502, 503, 504)
 		if contains(errRec.Error, "500") || contains(errRec.Error, "502") ||
-		   contains(errRec.Error, "503") || contains(errRec.Error, "504") ||
-		   contains(errRec.Error, "Internal Server Error") ||
-		   contains(errRec.Error, "Bad Gateway") ||
-		   contains(errRec.Error, "Service Unavailable") {
+			contains(errRec.Error, "503") || contains(errRec.Error, "504") ||
+			contains(errRec.Error, "Internal Server Error") ||
+			contains(errRec.Error, "Bad Gateway") ||
+			contains(errRec.Error, "Service Unavailable") {
 			providerErrors++
 		}
 
@@ -271,7 +271,7 @@ func (ld *LoopDetector) saveErrorHistory(bead *models.Bead, history []ErrorRecor
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		 findSubstring(s, substr)))
+			findSubstring(s, substr)))
 }
 
 // findSubstring does a simple substring search

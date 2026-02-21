@@ -23,8 +23,8 @@ const (
 type ProjectMemory struct {
 	ProjectID  string         `json:"project_id"`
 	Category   MemoryCategory `json:"category"`
-	Key        string         `json:"key"`   // e.g. "build_command", "repo_url"
-	Value      string         `json:"value"` // plain text or markdown
+	Key        string         `json:"key"`        // e.g. "build_command", "repo_url"
+	Value      string         `json:"value"`      // plain text or markdown
 	Confidence float64        `json:"confidence"` // 0-1; increases with repeated confirmation
 	UpdatedAt  time.Time      `json:"updated_at"`
 	SourceBead string         `json:"source_bead,omitempty"` // bead that produced this entry

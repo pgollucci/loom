@@ -57,8 +57,9 @@ func projectIDFromWorkDir(workDir string) string {
 
 // convertSSHtoHTTPS converts SSH-style git URLs to HTTPS for token authentication
 // Examples:
-//   git@github.com:user/repo.git -> https://github.com/user/repo.git
-//   git@gitlab.com:group/project.git -> https://gitlab.com/group/project.git
+//
+//	git@github.com:user/repo.git -> https://github.com/user/repo.git
+//	git@gitlab.com:group/project.git -> https://gitlab.com/group/project.git
 func convertSSHtoHTTPS(gitURL string) string {
 	// Check if it's already HTTPS
 	if strings.HasPrefix(gitURL, "https://") || strings.HasPrefix(gitURL, "http://") {

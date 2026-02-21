@@ -42,7 +42,7 @@ type MessageBus interface {
 type ProjectAgentClient struct {
 	baseURL    string
 	projectID  string
-	roles      []string   // roles running in this container (e.g. ["coder","reviewer","qa","pm","architect"])
+	roles      []string // roles running in this container (e.g. ["coder","reviewer","qa","pm","architect"])
 	httpClient *http.Client
 	messageBus MessageBus // NATS message bus for async task publishing
 }

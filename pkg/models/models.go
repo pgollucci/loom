@@ -160,8 +160,8 @@ type Project struct {
 	GitConfigOptions map[string]string `json:"git_config_options,omitempty"` // Custom git config for this project
 
 	// Container isolation (per-project containers)
-	UseContainer     bool              `json:"use_container"`                // If true, project executes in isolated container
-	UseWorktrees     bool              `json:"use_worktrees"`               // If true, use git worktrees for parallel agent work
+	UseContainer bool `json:"use_container"` // If true, project executes in isolated container
+	UseWorktrees bool `json:"use_worktrees"` // If true, use git worktrees for parallel agent work
 
 	// GitHub integration
 	GitHubRepo    string `json:"github_repo,omitempty"`    // "owner/repo" e.g. "jordanhubbard/loom"

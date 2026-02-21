@@ -10,11 +10,11 @@ import (
 )
 
 type mockReviewBus struct {
-	mu             sync.Mutex
-	reviews        []*messages.ReviewMessage
-	tasks          []*messages.TaskMessage
-	taskRoles      []string
-	publishErr     error
+	mu         sync.Mutex
+	reviews    []*messages.ReviewMessage
+	tasks      []*messages.TaskMessage
+	taskRoles  []string
+	publishErr error
 }
 
 func (m *mockReviewBus) PublishReview(_ context.Context, _ string, review *messages.ReviewMessage) error {

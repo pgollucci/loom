@@ -12,7 +12,7 @@ import (
 )
 
 // newTestServerWithAuth creates a server with auth enabled
-func newTestServerWithAuth() *Server {
+func newTestServerWithAuth() *Server { //nolint:unused // test helper for future use
 	return &Server{
 		config: &config.Config{
 			Security: config.SecurityConfig{

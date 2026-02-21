@@ -30,6 +30,18 @@ func startTestGRPCServer(t *testing.T) (string, func()) {
 	}
 }
 
+func dialTestServer(t *testing.T, ctx context.Context, addr string) *grpc.ClientConn {
+	t.Helper()
+	conn, err := grpc.DialContext(ctx, addr, //nolint:staticcheck // TODO: migrate to grpc.NewClient
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck // TODO: migrate to grpc.NewClient
+	)
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+	return conn
+}
+
 func TestGRPCClient_ListConnectors(t *testing.T) {
 	addr, cleanup := startTestGRPCServer(t)
 	defer cleanup()
@@ -37,13 +49,7 @@ func TestGRPCClient_ListConnectors(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		t.Fatalf("dial failed: %v", err)
-	}
+	conn := dialTestServer(t, ctx, addr)
 	defer conn.Close()
 
 	client := &GRPCClient{conn: conn, client: pb.NewConnectorsServiceClient(conn)}
@@ -75,13 +81,7 @@ func TestGRPCClient_GetConnector(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		t.Fatalf("dial failed: %v", err)
-	}
+	conn := dialTestServer(t, ctx, addr)
 	defer conn.Close()
 
 	client := &GRPCClient{conn: conn, client: pb.NewConnectorsServiceClient(conn)}
@@ -105,18 +105,12 @@ func TestGRPCClient_GetConnector_NotFound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		t.Fatalf("dial failed: %v", err)
-	}
+	conn := dialTestServer(t, ctx, addr)
 	defer conn.Close()
 
 	client := &GRPCClient{conn: conn, client: pb.NewConnectorsServiceClient(conn)}
 
-	_, _, err = client.GetConnector(ctx, "nonexistent")
+	_, _, err := client.GetConnector(ctx, "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for missing connector")
 	}
@@ -131,13 +125,7 @@ func TestGRPCClient_HealthCheckAll(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		t.Fatalf("dial failed: %v", err)
-	}
+	conn := dialTestServer(t, ctx, addr)
 	defer conn.Close()
 
 	client := &GRPCClient{conn: conn, client: pb.NewConnectorsServiceClient(conn)}

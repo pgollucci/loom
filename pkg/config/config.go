@@ -75,7 +75,7 @@ type DatabaseConfig struct {
 
 // BeadsConfig configures beads integration
 type BeadsConfig struct {
-	BDPath         string                `yaml:"bd_path"`       // Path to bd executable
+	BDPath         string                `yaml:"bd_path"` // Path to bd executable
 	AutoSync       bool                  `yaml:"auto_sync"`
 	SyncInterval   time.Duration         `yaml:"sync_interval"`
 	CompactOldDays int                   `yaml:"compact_old_days"` // Days before compacting closed beads
@@ -120,23 +120,23 @@ type ReadinessConfig struct {
 
 // DispatchConfig controls dispatcher guardrails
 type DispatchConfig struct {
-	MaxHops        int  `yaml:"max_hops" json:"max_hops,omitempty"`
+	MaxHops         int  `yaml:"max_hops" json:"max_hops,omitempty"`
 	UseNATSDispatch bool `yaml:"use_nats_dispatch" json:"use_nats_dispatch,omitempty"`
 }
 
 // PDAConfig configures the Plan/Document/Act orchestrator
 type PDAConfig struct {
-	Enabled          bool   `yaml:"enabled" json:"enabled"`
-	PlannerModel     string `yaml:"planner_model" json:"planner_model,omitempty"`
-	PlannerEndpoint  string `yaml:"planner_endpoint" json:"planner_endpoint,omitempty"`
-	PlannerAPIKey    string `yaml:"planner_api_key" json:"planner_api_key,omitempty"`
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	PlannerModel    string `yaml:"planner_model" json:"planner_model,omitempty"`
+	PlannerEndpoint string `yaml:"planner_endpoint" json:"planner_endpoint,omitempty"`
+	PlannerAPIKey   string `yaml:"planner_api_key" json:"planner_api_key,omitempty"`
 }
 
 // SwarmConfig configures dynamic swarm membership
 type SwarmConfig struct {
-	Enabled        bool     `yaml:"enabled" json:"enabled"`
-	PeerNATSURLs   []string `yaml:"peer_nats_urls" json:"peer_nats_urls,omitempty"`
-	GatewayName    string   `yaml:"gateway_name" json:"gateway_name,omitempty"`
+	Enabled      bool     `yaml:"enabled" json:"enabled"`
+	PeerNATSURLs []string `yaml:"peer_nats_urls" json:"peer_nats_urls,omitempty"`
+	GatewayName  string   `yaml:"gateway_name" json:"gateway_name,omitempty"`
 }
 
 // GitConfig controls git-related settings
@@ -197,12 +197,12 @@ type CacheConfig struct {
 type ProjectConfig struct {
 	ID              string            `yaml:"id"`
 	Name            string            `yaml:"name"`
-	GitRepo         string            `yaml:"git_repo"`         // No more "." - always a git URL
-	Branch          string            `yaml:"branch"`           // Main branch (default: "main")
-	BeadsPath       string            `yaml:"beads_path"`       // Path within beads worktree
-	BeadsBranch     string            `yaml:"beads_branch"`     // Branch for beads (default: "beads-sync")
-	UseWorktrees    bool              `yaml:"use_worktrees"`    // Enable git worktree isolation (default: true)
-	UseContainer    bool              `yaml:"use_container"`    // Enable per-project container for hermetic execution
+	GitRepo         string            `yaml:"git_repo"`      // No more "." - always a git URL
+	Branch          string            `yaml:"branch"`        // Main branch (default: "main")
+	BeadsPath       string            `yaml:"beads_path"`    // Path within beads worktree
+	BeadsBranch     string            `yaml:"beads_branch"`  // Branch for beads (default: "beads-sync")
+	UseWorktrees    bool              `yaml:"use_worktrees"` // Enable git worktree isolation (default: true)
+	UseContainer    bool              `yaml:"use_container"` // Enable per-project container for hermetic execution
 	GitAuthMethod   string            `yaml:"git_auth_method" json:"git_auth_method,omitempty"`
 	GitStrategy     string            `yaml:"git_strategy" json:"git_strategy,omitempty"`
 	GitCredentialID string            `yaml:"git_credential_id" json:"git_credential_id,omitempty"`

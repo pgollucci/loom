@@ -482,11 +482,8 @@ func TestGetRecentEvents(t *testing.T) {
 		// The last published event (index 4) should be first
 		firstIdx, ok := events[0].Data["index"]
 		lastIdx, ok2 := events[len(events)-1].Data["index"]
-		if ok && ok2 {
-			// Allow for float64 from JSON
-			if firstIdx != lastIdx {
-				// Just verify we got all events, order is newest-first
-			}
+		if ok && ok2 && firstIdx == lastIdx && len(events) > 1 {
+			t.Logf("unexpected: first and last events have same index %v", firstIdx)
 		}
 	}
 }

@@ -134,7 +134,7 @@ func (b *Bridge) formatMessage(event *eventbus.Event) (message, sessionKey, prio
 	case eventbus.EventTypeDecisionCreated:
 		// Filter: if escalations-only, skip non-P0 decisions.
 		if b.escalationsOnly {
-			p, _ := data["priority"]
+			p := data["priority"]
 			pStr := fmt.Sprintf("%v", p)
 			if pStr != "0" && !strings.EqualFold(pStr, "p0") {
 				return "", "", ""

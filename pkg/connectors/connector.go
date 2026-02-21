@@ -72,25 +72,25 @@ type Connector interface {
 
 // Config holds the configuration for a connector
 type Config struct {
-	ID          string            `json:"id" yaml:"id"`
-	Name        string            `json:"name" yaml:"name"`
-	Type        ConnectorType     `json:"type" yaml:"type"`
-	Mode        ConnectionMode    `json:"mode" yaml:"mode"`
-	Enabled     bool              `json:"enabled" yaml:"enabled"`
-	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
+	ID          string         `json:"id" yaml:"id"`
+	Name        string         `json:"name" yaml:"name"`
+	Type        ConnectorType  `json:"type" yaml:"type"`
+	Mode        ConnectionMode `json:"mode" yaml:"mode"`
+	Enabled     bool           `json:"enabled" yaml:"enabled"`
+	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
 
 	// Connection details
-	Host        string            `json:"host" yaml:"host"`           // e.g., "localhost", "prometheus.example.com"
-	Port        int               `json:"port" yaml:"port"`           // e.g., 9090, 3000
-	Scheme      string            `json:"scheme,omitempty" yaml:"scheme,omitempty"` // http, https, grpc
-	BasePath    string            `json:"base_path,omitempty" yaml:"base_path,omitempty"`
+	Host     string `json:"host" yaml:"host"`                         // e.g., "localhost", "prometheus.example.com"
+	Port     int    `json:"port" yaml:"port"`                         // e.g., 9090, 3000
+	Scheme   string `json:"scheme,omitempty" yaml:"scheme,omitempty"` // http, https, grpc
+	BasePath string `json:"base_path,omitempty" yaml:"base_path,omitempty"`
 
 	// Authentication
-	Auth        *AuthConfig       `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Auth *AuthConfig `json:"auth,omitempty" yaml:"auth,omitempty"`
 
 	// Additional metadata
-	Metadata    map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
-	Tags        []string          `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Tags     []string          `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// Health check configuration
 	HealthCheck *HealthCheckConfig `json:"health_check,omitempty" yaml:"health_check,omitempty"`
@@ -109,8 +109,8 @@ type AuthConfig struct {
 // HealthCheckConfig configures health check behavior
 type HealthCheckConfig struct {
 	Enabled  bool          `json:"enabled" yaml:"enabled"`
-	Interval time.Duration `json:"interval" yaml:"interval"` // How often to check
-	Timeout  time.Duration `json:"timeout" yaml:"timeout"`   // Request timeout
+	Interval time.Duration `json:"interval" yaml:"interval"`             // How often to check
+	Timeout  time.Duration `json:"timeout" yaml:"timeout"`               // Request timeout
 	Path     string        `json:"path,omitempty" yaml:"path,omitempty"` // Health check endpoint path
 }
 

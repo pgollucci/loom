@@ -21,12 +21,12 @@ import (
 type ContainerSnapshotter func(ctx context.Context, projectID string)
 
 type BuildEnvManager struct {
-	mu          sync.RWMutex
-	ready       map[string]bool      // projectID → initialised
-	running     map[string]bool      // projectID → currently initialising
-	osFamilies  map[string]OSFamily  // projectID → detected OS family
-	registry    *provider.Registry
-	onReady     ContainerSnapshotter // optional: called after successful init
+	mu         sync.RWMutex
+	ready      map[string]bool     // projectID → initialised
+	running    map[string]bool     // projectID → currently initialising
+	osFamilies map[string]OSFamily // projectID → detected OS family
+	registry   *provider.Registry
+	onReady    ContainerSnapshotter // optional: called after successful init
 }
 
 func NewBuildEnvManager(registry *provider.Registry) *BuildEnvManager {
@@ -450,4 +450,3 @@ func (m *BuildEnvManager) heuristicSetupForOS(entries []string, manifests map[st
 
 	return cmds
 }
-

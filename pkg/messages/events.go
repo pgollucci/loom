@@ -4,7 +4,7 @@ import "time"
 
 // EventMessage represents a system event message sent via NATS
 type EventMessage struct {
-	Type          string                 `json:"type"` // "bead.created", "agent.started", "dispatch.cycle", etc.
+	Type          string                 `json:"type"`   // "bead.created", "agent.started", "dispatch.cycle", etc.
 	Source        string                 `json:"source"` // Service that generated the event
 	ProjectID     string                 `json:"project_id,omitempty"`
 	EntityID      string                 `json:"entity_id,omitempty"` // Bead ID, Agent ID, etc.
@@ -16,8 +16,8 @@ type EventMessage struct {
 
 // EventData contains the event-specific information
 type EventData struct {
-	Action      string                 `json:"action"`      // "created", "updated", "deleted", "started", "stopped"
-	Category    string                 `json:"category"`    // "bead", "agent", "dispatch", "system"
+	Action      string                 `json:"action"`   // "created", "updated", "deleted", "started", "stopped"
+	Category    string                 `json:"category"` // "bead", "agent", "dispatch", "system"
 	Description string                 `json:"description,omitempty"`
 	Data        map[string]interface{} `json:"data,omitempty"`
 }

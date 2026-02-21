@@ -238,7 +238,7 @@ func TestAgentHTTPFallback(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	_ = ctx  // Would be used for actual execution
+	_ = ctx // Would be used for actual execution
 	_ = req // Would be used for actual execution
 
 	// For testing, we just verify the structure exists

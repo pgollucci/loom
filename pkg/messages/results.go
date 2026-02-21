@@ -16,14 +16,14 @@ type ResultMessage struct {
 
 // ResultData contains the task execution result
 type ResultData struct {
-	Status       string                 `json:"status"`        // "success", "failure", "in_progress"
-	Output       string                 `json:"output"`        // Agent output/response
-	Error        string                 `json:"error,omitempty"`
-	Commits      []string               `json:"commits,omitempty"`      // Git commit hashes
-	Artifacts    []string               `json:"artifacts,omitempty"`    // Paths to artifacts
-	Duration     int64                  `json:"duration,omitempty"`     // Execution time in ms
-	NextAction   string                 `json:"next_action,omitempty"`  // "redispatch", "escalate", "close"
-	Context      map[string]interface{} `json:"context,omitempty"`
+	Status     string                 `json:"status"` // "success", "failure", "in_progress"
+	Output     string                 `json:"output"` // Agent output/response
+	Error      string                 `json:"error,omitempty"`
+	Commits    []string               `json:"commits,omitempty"`     // Git commit hashes
+	Artifacts  []string               `json:"artifacts,omitempty"`   // Paths to artifacts
+	Duration   int64                  `json:"duration,omitempty"`    // Execution time in ms
+	NextAction string                 `json:"next_action,omitempty"` // "redispatch", "escalate", "close"
+	Context    map[string]interface{} `json:"context,omitempty"`
 }
 
 // TaskCompleted creates a task.completed message

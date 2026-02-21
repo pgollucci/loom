@@ -23,12 +23,12 @@ type Provider struct {
 	SelectedGPU            string          `json:"selected_gpu"`
 	GPUConstraints         *GPUConstraints `json:"gpu_constraints,omitempty"`
 	Description            string          `json:"description"`
-	RequiresKey            bool            `json:"requires_key"` // Whether this provider needs API credentials
-	KeyID                  string          `json:"key_id"`       // Reference to encrypted key in key manager
+	RequiresKey            bool            `json:"requires_key"`      // Whether this provider needs API credentials
+	KeyID                  string          `json:"key_id"`            // Reference to encrypted key in key manager
 	APIKey                 string          `json:"api_key,omitempty"` // Plaintext API key (persisted encrypted-at-rest via DB)
-	OwnerID                string          `json:"owner_id"`     // User ID who owns this provider (for multi-tenant)
-	IsShared               bool            `json:"is_shared"`    // If true, provider available to all users
-	Status                 string          `json:"status"`       // active, inactive, etc.
+	OwnerID                string          `json:"owner_id"`          // User ID who owns this provider (for multi-tenant)
+	IsShared               bool            `json:"is_shared"`         // If true, provider available to all users
+	Status                 string          `json:"status"`            // active, inactive, etc.
 	LastHeartbeatAt        time.Time       `json:"last_heartbeat_at"`
 	LastHeartbeatLatencyMs int64           `json:"last_heartbeat_latency_ms"`
 	LastHeartbeatError     string          `json:"last_heartbeat_error"`
@@ -42,9 +42,9 @@ type Provider struct {
 	Tags              []string `json:"tags"`               // Custom tags for filtering
 
 	// Dynamic scoring metadata (computed from Registry, not persisted)
-	ModelParamsB    float64 `json:"model_params_b,omitempty"`    // Model parameters in billions (from model name)
-	CapabilityScore float64 `json:"capability_score,omitempty"`  // Dynamic composite score from Scorer
-	AvgLatencyMs    float64 `json:"avg_latency_ms,omitempty"`    // Rolling average request latency
+	ModelParamsB    float64 `json:"model_params_b,omitempty"`   // Model parameters in billions (from model name)
+	CapabilityScore float64 `json:"capability_score,omitempty"` // Dynamic composite score from Scorer
+	AvgLatencyMs    float64 `json:"avg_latency_ms,omitempty"`   // Rolling average request latency
 
 	// Runtime metrics for dynamic scoring
 	Metrics ProviderMetrics `json:"metrics"`

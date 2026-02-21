@@ -105,7 +105,6 @@ type MessageBus interface {
 	PublishTaskForRole(ctx context.Context, projectID, role string, task *messages.TaskMessage) error
 }
 
-
 // UseNATSDispatch controls whether the dispatcher routes tasks exclusively to NATS
 // container agents instead of in-process workers. When true and the MessageBus is
 // configured, tasks are published to NATS and not executed locally.

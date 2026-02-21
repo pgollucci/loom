@@ -14,7 +14,7 @@ func TestIsAgentMessageEvent(t *testing.T) {
 		{"agent.message.broadcast", true},
 		{"agent.message.request", true},
 		{"agent.message.x", true},
-		{"agent.message.", false},  // Exactly 14 chars, no chars after prefix
+		{"agent.message.", false}, // Exactly 14 chars, no chars after prefix
 		{"agent.messages", false},
 		{"agent.messag", false},
 		{"bead.created", false},

@@ -92,16 +92,16 @@ func TestNewReviewCompleted(t *testing.T) {
 
 func TestAgentCommunicationMessageFields(t *testing.T) {
 	msg := AgentCommunicationMessage{
-		MessageID:       "msg-1",
-		Type:            "agent_message",
-		FromAgentID:     "agent-a",
-		ToAgentID:       "agent-b",
-		Subject:         "help",
-		Body:            "need review",
-		Priority:        "high",
+		MessageID:        "msg-1",
+		Type:             "agent_message",
+		FromAgentID:      "agent-a",
+		ToAgentID:        "agent-b",
+		Subject:          "help",
+		Body:             "need review",
+		Priority:         "high",
 		RequiresResponse: true,
-		SourceContainer: "container-1",
-		Timestamp:       time.Now(),
+		SourceContainer:  "container-1",
+		Timestamp:        time.Now(),
 	}
 
 	if msg.MessageID != "msg-1" {

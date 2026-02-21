@@ -95,14 +95,14 @@ func NewNatsMessageBus(cfg Config) (*NatsMessageBus, error) {
 // subscribe to the same subjects—required for results/events fan-out.
 func (mb *NatsMessageBus) ensureStream() error {
 	streamConfig := &nats.StreamConfig{
-		Name:        mb.streamName,
-		Subjects:    []string{"loom.>"},
-		Retention:   nats.LimitsPolicy,
-		MaxAge:      24 * time.Hour,
-		MaxBytes:    1024 * 1024 * 1024, // 1GB
-		Storage:     nats.FileStorage,
-		Replicas:    1,
-		Discard:     nats.DiscardOld,
+		Name:      mb.streamName,
+		Subjects:  []string{"loom.>"},
+		Retention: nats.LimitsPolicy,
+		MaxAge:    24 * time.Hour,
+		MaxBytes:  1024 * 1024 * 1024, // 1GB
+		Storage:   nats.FileStorage,
+		Replicas:  1,
+		Discard:   nats.DiscardOld,
 	}
 
 	info, err := mb.js.StreamInfo(mb.streamName)
@@ -161,7 +161,7 @@ func (mb *NatsMessageBus) PublishEvent(ctx context.Context, eventType string, ev
 
 // PublishAgentMessage publishes an agent-to-agent communication message
 func (mb *NatsMessageBus) PublishAgentMessage(ctx context.Context, msg *messages.AgentCommunicationMessage) error {
-	subject := "loom.agent.messages"
+	var subject string
 	if msg.ToAgentID != "" {
 		subject = fmt.Sprintf("loom.agent.messages.%s", msg.ToAgentID)
 	} else {

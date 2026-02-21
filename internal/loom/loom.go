@@ -32,20 +32,20 @@ import (
 	"github.com/jordanhubbard/loom/internal/memory"
 	"github.com/jordanhubbard/loom/internal/messagebus"
 	"github.com/jordanhubbard/loom/internal/metrics"
-	"github.com/jordanhubbard/loom/internal/orchestrator"
-	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/modelcatalog"
 	internalmodels "github.com/jordanhubbard/loom/internal/models"
 	"github.com/jordanhubbard/loom/internal/motivation"
 	"github.com/jordanhubbard/loom/internal/notifications"
 	"github.com/jordanhubbard/loom/internal/observability"
 	"github.com/jordanhubbard/loom/internal/openclaw"
+	"github.com/jordanhubbard/loom/internal/orchestrator"
 	"github.com/jordanhubbard/loom/internal/orgchart"
 	"github.com/jordanhubbard/loom/internal/patterns"
 	"github.com/jordanhubbard/loom/internal/persona"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/routing"
+	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/temporal"
 	temporalactivities "github.com/jordanhubbard/loom/internal/temporal/activities"
 	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
@@ -66,50 +66,50 @@ type projectReadinessState struct {
 
 // Loom is the main orchestrator
 type Loom struct {
-	config              *config.Config
-	agentManager        *agent.WorkerManager
-	actionRouter        *actions.Router
-	projectManager      *project.Manager
-	personaManager      *persona.Manager
-	beadsManager        *beads.Manager
-	decisionManager     *decision.Manager
-	fileLockManager     *FileLockManager
-	orgChartManager     *orgchart.Manager
-	providerRegistry    *provider.Registry
-	database            *database.Database
-	dispatcher          *dispatch.Dispatcher
-	eventBus            *eventbus.EventBus
-	temporalManager     *temporal.Manager
-	modelCatalog        *modelcatalog.Catalog
-	gitopsManager       *gitops.Manager
-	shellExecutor       *executor.ShellExecutor
-	logManager          *logging.Manager
-	activityManager     *activity.Manager
-	notificationManager *notifications.Manager
-	commentsManager     *comments.Manager
-	motivationRegistry  *motivation.Registry
-	motivationEngine    *motivation.Engine
-	idleDetector        *motivation.IdleDetector
-	workflowEngine      *workflow.Engine
-	patternManager      *patterns.Manager
-	metrics             *metrics.Metrics
-	keyManager          *keymanager.KeyManager
-	doltCoordinator     *beads.DoltCoordinator
-	openclawClient      *openclaw.Client
-	openclawBridge      *openclaw.Bridge
+	config                *config.Config
+	agentManager          *agent.WorkerManager
+	actionRouter          *actions.Router
+	projectManager        *project.Manager
+	personaManager        *persona.Manager
+	beadsManager          *beads.Manager
+	decisionManager       *decision.Manager
+	fileLockManager       *FileLockManager
+	orgChartManager       *orgchart.Manager
+	providerRegistry      *provider.Registry
+	database              *database.Database
+	dispatcher            *dispatch.Dispatcher
+	eventBus              *eventbus.EventBus
+	temporalManager       *temporal.Manager
+	modelCatalog          *modelcatalog.Catalog
+	gitopsManager         *gitops.Manager
+	shellExecutor         *executor.ShellExecutor
+	logManager            *logging.Manager
+	activityManager       *activity.Manager
+	notificationManager   *notifications.Manager
+	commentsManager       *comments.Manager
+	motivationRegistry    *motivation.Registry
+	motivationEngine      *motivation.Engine
+	idleDetector          *motivation.IdleDetector
+	workflowEngine        *workflow.Engine
+	patternManager        *patterns.Manager
+	metrics               *metrics.Metrics
+	keyManager            *keymanager.KeyManager
+	doltCoordinator       *beads.DoltCoordinator
+	openclawClient        *openclaw.Client
+	openclawBridge        *openclaw.Bridge
 	containerOrchestrator *containers.Orchestrator
-	connectorManager    *connectors.Manager
-	memoryManager       *memory.MemoryManager
-	messageBus          interface{}
-	bridge              *messagebus.BridgedMessageBus
-	pdaOrchestrator     *orchestrator.PDAOrchestrator
-	swarmManager        *swarm.Manager
-	swarmFederation     *swarm.Federation
-	readinessMu         sync.Mutex
-	readinessCache      map[string]projectReadinessState
-	readinessFailures   map[string]time.Time
-	shutdownOnce        sync.Once
-	startedAt           time.Time
+	connectorManager      *connectors.Manager
+	memoryManager         *memory.MemoryManager
+	messageBus            interface{}
+	bridge                *messagebus.BridgedMessageBus
+	pdaOrchestrator       *orchestrator.PDAOrchestrator
+	swarmManager          *swarm.Manager
+	swarmFederation       *swarm.Federation
+	readinessMu           sync.Mutex
+	readinessCache        map[string]projectReadinessState
+	readinessFailures     map[string]time.Time
+	shutdownOnce          sync.Once
+	startedAt             time.Time
 }
 
 // New creates a new Loom instance
@@ -317,7 +317,7 @@ func New(cfg *config.Config) (*Loom, error) {
 	// Initialize container orchestrator for per-project containers
 	// Control plane URL for project agents to communicate back
 	// Use container name "loom" as hostname (Docker network DNS resolution)
-	controlPlaneURL := fmt.Sprintf("http://loom:8081") // Port 8081 is the internal port
+	controlPlaneURL := "http://loom:8081" // Port 8081 is the internal port
 	if host := os.Getenv("CONTROL_PLANE_HOST"); host != "" {
 		controlPlaneURL = fmt.Sprintf("http://%s:8081", host)
 	}
@@ -339,31 +339,31 @@ func New(cfg *config.Config) (*Loom, error) {
 	beadsMgr.SetBackend(cfg.Beads.Backend)
 
 	arb := &Loom{
-		config:              cfg,
-		startedAt:           time.Now().UTC(),
-		agentManager:        agentMgr,
-		projectManager:      project.NewManager(),
-		personaManager:      persona.NewManager(personaPath),
-		beadsManager:        beadsMgr,
-		decisionManager:     decision.NewManager(),
-		fileLockManager:     NewFileLockManager(cfg.Agents.FileLockTimeout),
-		orgChartManager:     orgchart.NewManager(),
-		providerRegistry:    providerRegistry,
-		database:            db,
-		eventBus:            eb,
-		temporalManager:     temporalMgr,
-		modelCatalog:        modelCatalog,
-		gitopsManager:       gitopsMgr,
-		shellExecutor:       shellExec,
-		logManager:          logMgr,
-		activityManager:     activityMgr,
-		notificationManager: notificationMgr,
-		commentsManager:     commentsMgr,
-		motivationRegistry:  motivationRegistry,
-		idleDetector:        idleDetector,
-		workflowEngine:      workflowEngine,
-		patternManager:      patternMgr,
-		metrics:             metrics.NewMetrics(),
+		config:                cfg,
+		startedAt:             time.Now().UTC(),
+		agentManager:          agentMgr,
+		projectManager:        project.NewManager(),
+		personaManager:        persona.NewManager(personaPath),
+		beadsManager:          beadsMgr,
+		decisionManager:       decision.NewManager(),
+		fileLockManager:       NewFileLockManager(cfg.Agents.FileLockTimeout),
+		orgChartManager:       orgchart.NewManager(),
+		providerRegistry:      providerRegistry,
+		database:              db,
+		eventBus:              eb,
+		temporalManager:       temporalMgr,
+		modelCatalog:          modelCatalog,
+		gitopsManager:         gitopsMgr,
+		shellExecutor:         shellExec,
+		logManager:            logMgr,
+		activityManager:       activityMgr,
+		notificationManager:   notificationMgr,
+		commentsManager:       commentsMgr,
+		motivationRegistry:    motivationRegistry,
+		idleDetector:          idleDetector,
+		workflowEngine:        workflowEngine,
+		patternManager:        patternMgr,
+		metrics:               metrics.NewMetrics(),
 		doltCoordinator:       doltCoord,
 		openclawClient:        ocClient,
 		openclawBridge:        ocBridge,
@@ -596,7 +596,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 				GitCredentialID: p.GitCredentialID,
 				IsPerpetual:     p.IsPerpetual,
-					UseWorktrees:    p.UseWorktrees,
+				UseWorktrees:    p.UseWorktrees,
 				IsSticky:        p.IsSticky,
 				UseContainer:    p.UseContainer,
 				Context:         p.Context,
@@ -627,7 +627,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				GitAuthMethod:   normalizeGitAuthMethod(p.GitRepo, models.GitAuthMethod(p.GitAuthMethod)),
 				GitStrategy:     normalizeGitStrategy(models.GitStrategy(p.GitStrategy)),
 				GitCredentialID: p.GitCredentialID,
-					UseWorktrees:    p.UseWorktrees,
+				UseWorktrees:    p.UseWorktrees,
 				IsPerpetual:     p.IsPerpetual,
 				IsSticky:        p.IsSticky,
 				UseContainer:    p.UseContainer,

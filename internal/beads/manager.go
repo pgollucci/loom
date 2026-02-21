@@ -23,7 +23,7 @@ import (
 type Manager struct {
 	bdPath            string
 	beadsPath         string
-	backend           string            // "sqlite", "dolt", or "yaml"
+	backend           string // "sqlite", "dolt", or "yaml"
 	mu                sync.RWMutex
 	beads             map[string]*models.Bead
 	beadFiles         map[string]string

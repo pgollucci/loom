@@ -54,7 +54,7 @@ func isAlterColumnExistsError(err error) bool {
 	// SQLite: "duplicate column name"
 	// PostgreSQL: "column \"...\" of relation \"...\" already exists"
 	return (len(msg) >= 9 && msg[:9] == "duplicate") ||
-	       strings.Contains(msg, "already exists")
+		strings.Contains(msg, "already exists")
 }
 
 // CreateLesson inserts a new lesson record.

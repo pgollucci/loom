@@ -1120,11 +1120,7 @@ func TestRunGitCommandWithOutput_InRealRepo(t *testing.T) {
 	}
 
 	// Command that fails
-	_, err = mgr.runGitCommandWithOutput(ctx, repoDir, "log", "--oneline")
-	if err == nil {
-		// In an empty repo, git log might fail (no commits)
-		// This is expected behavior
-	}
+	_, _ = mgr.runGitCommandWithOutput(ctx, repoDir, "log", "--oneline")
 }
 
 // TestStatus_InRealRepo tests Status with a real git repo.

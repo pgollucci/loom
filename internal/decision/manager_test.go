@@ -58,15 +58,15 @@ func withPriority(p models.BeadPriority) func(*decisionOpts) {
 	return func(o *decisionOpts) { o.priority = p }
 }
 
-func withProjectID(id string) func(*decisionOpts) {
+func withProjectID(id string) func(*decisionOpts) { //nolint:unused // test helper for future use
 	return func(o *decisionOpts) { o.projectID = id }
 }
 
-func withRequesterID(id string) func(*decisionOpts) {
+func withRequesterID(id string) func(*decisionOpts) { //nolint:unused // test helper for future use
 	return func(o *decisionOpts) { o.requesterID = id }
 }
 
-func withQuestion(q string) func(*decisionOpts) {
+func withQuestion(q string) func(*decisionOpts) { //nolint:unused // test helper for future use
 	return func(o *decisionOpts) { o.question = q }
 }
 
@@ -839,7 +839,7 @@ func TestGetBlockedBeads(t *testing.T) {
 	t.Run("decision with no blocks", func(t *testing.T) {
 		m, d := createTestDecision(t)
 		blocks := m.GetBlockedBeads(d.ID)
-		if blocks != nil && len(blocks) != 0 {
+		if len(blocks) != 0 {
 			t.Errorf("GetBlockedBeads() = %v, want nil or empty", blocks)
 		}
 	})

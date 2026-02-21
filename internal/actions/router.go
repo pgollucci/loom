@@ -709,7 +709,7 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 				Message: fmt.Sprintf("install failed (exit %d): %s", execRes.ExitCode, execRes.Stderr)}
 		}
 		return Result{ActionType: action.Type, Status: "executed",
-			Message: fmt.Sprintf("installed packages: %s", strings.Join(action.Packages, ", ")),
+			Message:  fmt.Sprintf("installed packages: %s", strings.Join(action.Packages, ", ")),
 			Metadata: map[string]interface{}{"stdout": execRes.Stdout, "duration_ms": execRes.DurationMs}}
 
 	case ActionRunCommand:

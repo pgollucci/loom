@@ -19,12 +19,12 @@ import (
 
 func TestExportMetadataStructure(t *testing.T) {
 	// Create test app
-app, cleanup := createTestLoom(t)
-defer cleanup()
-db := app.GetDatabase()
-if db == nil {
-	t.Fatal("Database is not initialized")
-}
+	app, cleanup := createTestLoom(t)
+	defer cleanup()
+	db := app.GetDatabase()
+	if db == nil {
+		t.Fatal("Database is not initialized")
+	}
 
 	// Create server
 	cfg := &config.Config{
@@ -109,10 +109,7 @@ func TestExportWithFilters(t *testing.T) {
 	if exportData.Core.Providers == nil {
 		t.Error("Expected Core data to be included")
 	}
-	// Workflow should not be included when only 'core' is specified
-	if len(exportData.Workflow.Workflows) > 0 {
-		// This might be OK if there's data, just checking structure
-	}
+	_ = exportData.Workflow.Workflows // workflow presence is valid; just checking structure
 }
 
 func TestImportValidation(t *testing.T) {
@@ -168,9 +165,9 @@ func TestImportMergeStrategy(t *testing.T) {
 
 	// Insert test data
 	db := app.GetDatabase()
-if db == nil {
-	t.Fatal("Database is not initialized")
-}
+	if db == nil {
+		t.Fatal("Database is not initialized")
+	}
 	_, err := db.DB().Exec(`INSERT INTO config_kv (key, value, updated_at) VALUES ($1, $2, $3)
 		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
 		"test_key", "original_value", time.Now().Format(time.RFC3339))

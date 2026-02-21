@@ -20,10 +20,10 @@ func TestPipeline_AutoFileToRoute(t *testing.T) {
 	router := dispatch.NewAutoBugRouter()
 
 	tests := []struct {
-		name         string
-		bead         *models.Bead
-		wantRoute    bool
-		wantPersona  string
+		name        string
+		bead        *models.Bead
+		wantRoute   bool
+		wantPersona string
 	}{
 		{
 			name: "frontend JS error routes to web-designer",

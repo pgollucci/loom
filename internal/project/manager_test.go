@@ -368,7 +368,6 @@ func TestUpdateProject_StatusAndGitStrategy(t *testing.T) {
 
 func TestUpdateProject_UpdatesTimestamp(t *testing.T) {
 	manager, project := createTestProject(t, "Timestamp Test")
-	originalUpdatedAt := project.UpdatedAt
 
 	updates := map[string]interface{}{
 		"name": "Changed",
@@ -380,10 +379,8 @@ func TestUpdateProject_UpdatesTimestamp(t *testing.T) {
 	}
 
 	updated, _ := manager.GetProject(project.ID)
-	if !updated.UpdatedAt.After(originalUpdatedAt) && updated.UpdatedAt != originalUpdatedAt {
-		// UpdatedAt should be set to time.Now() which is >= original
-		// (In fast tests they could be equal, so we just check it was set)
-	}
+	// UpdatedAt should be set to time.Now() which is >= original.
+	// In fast tests they could be equal, so just check non-zero below.
 	if updated.UpdatedAt.IsZero() {
 		t.Error("Expected UpdatedAt to be set")
 	}

@@ -33,12 +33,12 @@ type Member struct {
 
 // Manager tracks all connected services (agents, other looms, external tools).
 type Manager struct {
-	bus        SwarmBus
-	members    map[string]*Member // instanceID -> member
-	mu         sync.RWMutex
-	selfID     string
-	selfType   string
-	cancel     context.CancelFunc
+	bus      SwarmBus
+	members  map[string]*Member // instanceID -> member
+	mu       sync.RWMutex
+	selfID   string
+	selfType string
+	cancel   context.CancelFunc
 
 	heartbeatInterval time.Duration
 	staleThreshold    time.Duration

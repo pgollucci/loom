@@ -2,9 +2,10 @@ package api
 
 import (
 	"context"
-	"github.com/jordanhubbard/loom/pkg/models"
 	"net/http"
 	"strings"
+
+	"github.com/jordanhubbard/loom/pkg/models"
 )
 
 // handlePersonas handles GET /api/v1/personas
