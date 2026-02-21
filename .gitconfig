@@ -1,2 +1,1 @@
-[core]
-    sshCommand = ssh -o BatchMode=yes -o StrictHostKeyChecking=no
+[core]\n    askpass = /bin/true\n
