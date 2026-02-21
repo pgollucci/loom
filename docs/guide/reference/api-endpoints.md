@@ -43,7 +43,7 @@ All endpoints are prefixed with `/api/v1/`.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/providers` | List providers |
+| GET | `/providers` | List providers (typically just TokenHub) |
 | POST | `/providers` | Register a provider |
 | GET | `/providers/{id}` | Get provider details |
 | PUT | `/providers/{id}` | Update a provider |

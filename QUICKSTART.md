@@ -5,7 +5,7 @@ Get Loom running and your first agents working in under 10 minutes.
 ## Prerequisites
 
 - Docker and Docker Compose
-- A GPU with vLLM **or** an API key for a cloud LLM provider
+- A running [TokenHub](https://github.com/jordanhubbard/tokenhub) instance with at least one LLM provider configured
 
 ## 1. Start Loom
 
@@ -21,63 +21,34 @@ Wait about 30 seconds for everything to initialize, then open:
 - **Loom UI**: http://localhost:8080
 - **Temporal UI**: http://localhost:8088
 
-## 2. Set Up a Provider
+## 2. Connect to TokenHub
 
-Loom needs at least one LLM provider to power its agents. You have two options:
+I don't manage LLM providers directly. I delegate all model routing, failover, and provider management to [TokenHub](https://github.com/jordanhubbard/tokenhub) -- an intelligent LLM proxy that speaks the OpenAI-compatible API.
 
-### Option A: Run Your Own vLLM Server (GPU Required)
+You configure your physical providers (Anthropic, OpenAI, local vLLM servers, etc.) in TokenHub during its onboarding. Then you point me at TokenHub and I treat it as my sole provider.
 
-On any machine with an NVIDIA GPU (24GB+ VRAM recommended):
+### Register TokenHub
 
-```bash
-docker run -it --gpus all -p 8000:8000 \
-    --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
-    -v ~/.cache/huggingface:/root/.cache/huggingface \
-    nvcr.io/nvidia/vllm:25.12.post1-py3 \
-    --model Qwen/Qwen2.5-Coder-32B-Instruct \
-    --max-model-len 32768 \
-    --tensor-parallel-size 1
-```
-
-Wait for the model to download and load (first run takes a while). Once you see
-`Uvicorn running on http://0.0.0.0:8000`, register it with Loom:
+Run the bootstrap script, or register manually:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/providers \
     -H 'Content-Type: application/json' \
     -d '{
-        "id": "my-gpu",
-        "name": "My vLLM Server",
+        "id": "tokenhub",
+        "name": "TokenHub",
         "type": "openai",
-        "endpoint": "http://<your-gpu-host>:8000/v1",
-        "model": "Qwen/Qwen2.5-Coder-32B-Instruct"
+        "endpoint": "http://localhost:8090/v1",
+        "model": "anthropic/claude-sonnet-4-20250514",
+        "api_key": "your-tokenhub-api-key"
     }'
 ```
 
-Replace `<your-gpu-host>` with the hostname or IP of the machine running vLLM.
-If it's the same machine as Loom, use `host.docker.internal` (macOS/Windows) or
-the machine's LAN IP (Linux).
+Replace the endpoint, model, and API key with your TokenHub instance's values. For repeatable setup, see `bootstrap.local.example` or the authoritative sample in the [TokenHub repo](https://github.com/jordanhubbard/tokenhub/blob/main/bootstrap.local.example).
 
-### Option B: Use a Cloud Provider (API Key)
+### Verify Connectivity
 
-Register any OpenAI-compatible endpoint:
-
-```bash
-curl -X POST http://localhost:8080/api/v1/providers \
-    -H 'Content-Type: application/json' \
-    -d '{
-        "id": "cloud-llm",
-        "name": "My Cloud Provider",
-        "type": "openai",
-        "endpoint": "https://api.example.com/v1",
-        "model": "model-name",
-        "api_key": "your-api-key-here"
-    }'
-```
-
-### Verify the Provider
-
-Within 30 seconds, the heartbeat will check your provider. Verify it's healthy:
+Within 30 seconds, my heartbeat will check TokenHub. Verify it's healthy:
 
 ```bash
 curl -s http://localhost:8080/api/v1/providers | jq '.[].status'
@@ -124,7 +95,7 @@ Loom will clone the repository on the next dispatch cycle.
 Open http://localhost:8080 and click **CEO Dashboard**. This is your command center.
 
 The CEO Dashboard shows:
-- Provider health and agent status
+- Agent status and system health
 - Open beads across all projects
 - The **Ask Loom** prompt for directing agents
 

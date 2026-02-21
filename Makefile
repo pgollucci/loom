@@ -73,7 +73,7 @@ restart: build
 	docker compose up -d --build
 	@$(MAKE) -s bootstrap
 
-# Run bootstrap.local if present (registers local providers)
+# Run bootstrap.local if present (configures TokenHub + registers provider)
 bootstrap:
 	@if [ -f bootstrap.local ]; then \
 		echo "Waiting for loom to be healthy..."; \

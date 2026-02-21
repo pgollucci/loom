@@ -1,5 +1,5 @@
 #!/bin/bash
-# Local provider bootstrap — copy to bootstrap.local and fill in your values.
+# Local bootstrap — copy to bootstrap.local and fill in your values.
 # bootstrap.local is gitignored and will not be committed.
 #
 # Runs automatically after: make start, make restart
@@ -8,40 +8,41 @@
 # Architecture: Loom -> TokenHub -> LLM Providers
 # TokenHub handles routing, health tracking, failover, and scoring.
 # Loom registers TokenHub as its single provider endpoint.
+#
+# Prerequisites:
+#   - tokenhubctl binary on $PATH or at ../tokenhub/bin/tokenhubctl
+#     Build it: cd ../tokenhub && go build -o bin/tokenhubctl ./cmd/tokenhubctl
 
-set -e
+set -euo pipefail
 
 LOOM_URL="${LOOM_URL:-http://localhost:8080}"
-TOKENHUB_URL="${TOKENHUB_URL:-http://localhost:8090}"
-TOKENHUB_ADMIN_TOKEN="${TOKENHUB_ADMIN_TOKEN:-loom-tokenhub-admin}"
-LOOMCTL="${LOOMCTL:-./loomctl}"
+export TOKENHUB_URL="${TOKENHUB_URL:-http://localhost:8090}"
+export TOKENHUB_ADMIN_TOKEN="${TOKENHUB_ADMIN_TOKEN:-}"
+TOKENHUBCTL="${TOKENHUBCTL:-tokenhubctl}"
 
-if [ ! -f "$LOOMCTL" ]; then
-    echo "Building loomctl..."
-    go build -o loomctl ./cmd/loomctl
-fi
+# === Phase 1: Register your LLM models with TokenHub ===
 
-th_admin() {
-    curl -sf -X POST "$TOKENHUB_URL/admin/v1/$1" \
-        -H "Authorization: Bearer $TOKENHUB_ADMIN_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "$2"
-}
+# Local vLLM (provider configured via TOKENHUB_VLLM_ENDPOINTS env var in docker-compose):
+# $TOKENHUBCTL model add '{"id":"Qwen/Qwen2.5-Coder-32B-Instruct","provider_id":"vllm","weight":7,"max_context_tokens":32000,"enabled":true}'
 
-# === Phase 1: Register your LLM providers with TokenHub ===
+# Cloud model examples:
+# $TOKENHUBCTL model add '{"id":"gpt-4o","provider_id":"openai","weight":8,"max_context_tokens":128000,"input_per_1k":0.0025,"output_per_1k":0.01,"enabled":true}'
+# $TOKENHUBCTL model add '{"id":"claude-opus-4","provider_id":"anthropic","weight":10,"max_context_tokens":200000,"input_per_1k":0.015,"output_per_1k":0.075,"enabled":true}'
 
-# Local vLLM example (configured via TOKENHUB_VLLM_ENDPOINTS env var in docker-compose):
-# th_admin "models" '{"id":"my-model","provider_id":"vllm","weight":7,"max_context_tokens":32000,"enabled":true}'
+# === Phase 2: Create a TokenHub API key for Loom ===
 
-# Cloud provider example:
-# th_admin "providers" '{"id":"my-cloud","type":"openai","endpoint":"https://api.example.com","api_key":"sk-..."}'
-# th_admin "models" '{"id":"cloud-model","provider_id":"my-cloud","weight":8,"max_context_tokens":128000,"enabled":true}'
+# KEY_OUTPUT=$($TOKENHUBCTL apikey create '{"name":"loom-agents","scopes":"[\"chat\",\"plan\"]","monthly_budget_usd":50.0}')
+# API_KEY=$(echo "$KEY_OUTPUT" | grep "Key:" | sed 's/.*Key: //')
 
-# === Phase 2: Register TokenHub as Loom's single provider ===
+# === Phase 3: Register TokenHub as Loom's single provider ===
 
-# $LOOMCTL provider register "tokenhub" \
-#     --name "TokenHub (LLM Router)" \
-#     --type "openai" \
-#     --endpoint "http://tokenhub:8080/v1" \
-#     --model "my-model" \
-#     --server "$LOOM_URL"
+# curl -s -X POST "$LOOM_URL/api/v1/providers" \
+#     -H "Content-Type: application/json" \
+#     -d "{
+#         \"id\": \"tokenhub\",
+#         \"name\": \"TokenHub\",
+#         \"type\": \"openai\",
+#         \"endpoint\": \"http://tokenhub:8080/v1\",
+#         \"model\": \"Qwen/Qwen2.5-Coder-32B-Instruct\",
+#         \"api_key\": \"$API_KEY\"
+#     }"

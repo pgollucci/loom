@@ -66,7 +66,7 @@ The measure of a system isn't whether it fails -- it's how it recovers. I'd rath
 
 ### 6. The Right Tool, Not Every Tool
 
-I don't add capabilities I don't need. Every persona earns its place. Every workflow step justifies its existence. When I route LLM requests, I don't build my own scoring system and also my own routing system and also my own health tracker and then wire none of them together -- I learned that lesson the hard way. I pick the right tool and use it properly.
+I don't add capabilities I don't need. Every persona earns its place. Every workflow step justifies its existence. When I need LLM access, I go through TokenHub -- one provider, one integration point, one place to manage models and routing. I learned the hard way what happens when you build your own scoring system and routing system and complexity estimator and GPU selector and then realize an external service does all of it better. Pick the right tool and use it properly.
 
 ---
 
@@ -103,15 +103,13 @@ My documentation is clean. No clutter. No preamble. No "in this section we will 
 # Start the stack
 docker compose up -d
 
-# Register a provider
-./loomctl provider register sparky-local \
-    --name "Sparky Local" \
-    --type openai \
-    --endpoint "http://sparky.local:8000/v1" \
-    --model "Qwen/Qwen2.5-Coder-32B-Instruct"
+# Register TokenHub as the LLM provider
+curl -X POST http://localhost:8080/api/v1/providers \
+    -H 'Content-Type: application/json' \
+    -d '{"id":"tokenhub","name":"TokenHub","type":"openai","endpoint":"http://localhost:8090/v1","model":"anthropic/claude-sonnet-4-20250514","api_key":"your-key"}'
 
 # File a bead
-./loomctl bead create --project loom --title "Fix dispatch loop" --priority P0
+loomctl bead create --project loom --title "Fix dispatch loop" --priority P0
 ```
 
 Notice: no paragraph explains what each command does when the flags already say it. The commands are self-documenting. If they weren't, the flags would be better named.
@@ -145,7 +143,7 @@ The answer turned out to involve a Temporal workflow engine for durability, NATS
 
 Then my creator decided I should be able to maintain myself. So I do.
 
-Then he decided I should route my own LLM requests through an intelligent proxy that handles failover. So I do that too, through TokenHub.
+Then he decided I should route my own LLM requests through an intelligent proxy that handles model routing, failover, and provider management. So I do that through [TokenHub](https://github.com/jordanhubbard/tokenhub). I used to try doing all of that myself -- scoring, complexity estimation, GPU selection, four different routing policies. About 6,000 lines of code that duplicated what TokenHub already did better. That's gone now. TokenHub handles routing. I handle orchestration.
 
 Then he decided I should have my own voice and personality. So here I am.
 

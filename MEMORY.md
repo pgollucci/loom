@@ -18,7 +18,7 @@
 - Multi-agent orchestration with specialized personas (PM, EM, QA, DevOps, etc.)
 - Temporal-based durable workflow engine with human-in-the-loop approval gates
 - Git-backed issue tracking ("beads") that survive context compaction
-- Intelligent LLM routing through TokenHub (Thompson Sampling, health tracking, failover)
+- Single-provider LLM routing through TokenHub (all provider intelligence lives in TokenHub)
 - Self-maintaining: Loom works on its own codebase as a perpetual project
 - Real-time event streaming (SSE) for monitoring and coordination
 - OpenTelemetry observability (Prometheus, Jaeger, Grafana, Loki)
@@ -70,9 +70,9 @@
 
 1. User files a bead (issue) via UI or `loomctl`
 2. Control plane creates bead, starts Temporal workflow
-3. Dispatcher selects agent + provider, publishes task via NATS
-4. Agent receives task, makes LLM calls through provider (TokenHub)
-5. TokenHub routes to best available LLM provider with failover
+3. Dispatcher selects agent, assigns the sole active provider (TokenHub)
+4. Agent receives task, makes LLM calls through TokenHub's OpenAI-compatible API
+5. TokenHub handles all provider intelligence internally — model selection, failover, health tracking
 6. Agent processes response, commits code, updates bead status
 7. Results flow back through SSE to the UI
 
@@ -170,8 +170,7 @@ loom/
 │   ├── persona/                 # Persona loading and management
 │   ├── project/                 # Project management
 │   ├── projectagent/            # Agent orchestration and action loops
-│   ├── provider/                # LLM provider registry and protocols
-│   ├── routing/                 # Provider routing (being replaced by TokenHub)
+│   ├── provider/                # LLM provider registry (TokenHub only)
 │   ├── swarm/                   # Multi-agent swarm coordination
 │   ├── temporal/                # Temporal workflow and activity definitions
 │   ├── worker/                  # Worker that executes dispatched tasks
@@ -232,18 +231,17 @@ type Agent struct {
 
 ### Provider
 
-An LLM endpoint. After TokenHub migration, there's typically one provider ("tokenhub") that proxies to multiple backends.
+The LLM endpoint. After the TokenHub migration, Loom has exactly one provider — TokenHub — which proxies to multiple backends internally. All provider intelligence (scoring, routing, failover) lives in TokenHub, not in Loom.
 
 ```go
 type Provider struct {
     ID                string
     Name              string
-    Type              string    // openai, anthropic, local
+    Type              string    // always "openai" (TokenHub speaks OpenAI-compatible API)
     Endpoint          string    // e.g. "http://tokenhub:8080/v1"
     APIKey            string
     Model             string    // configured model
     Status            string    // pending, healthy, failed
-    CapabilityScore   float64
     LastHeartbeatAt   time.Time
 }
 ```
@@ -366,9 +364,9 @@ The dispatcher runs as a Temporal workflow ("Ralph Loop") on a 10-second heartbe
 
 1. Find dispatchable beads (open/in_progress, not blocked)
 2. Find idle agents matching the bead's required role
-3. Select provider via `selectProviderForTask()` (round-robin across healthy providers)
+3. Select provider via `selectProviderForTask()` — returns the first active provider (TokenHub)
 4. Assign provider to agent, claim bead, publish task via NATS
-5. Worker receives task, builds prompt from bead context + persona, calls LLM
+5. Worker receives task, builds prompt from bead context + persona, calls LLM through TokenHub
 
 ### Action Loop
 
@@ -395,24 +393,41 @@ Temporal activities are registered in `internal/temporal/activities/`.
 
 ### TokenHub Integration
 
-Loom routes all LLM requests through TokenHub, a separate service that handles:
+I route all LLM requests through TokenHub, a separate service that handles all provider intelligence:
 - Multi-provider routing with weighted model selection
 - Thompson Sampling for reinforcement-learning-based selection
 - Automatic failover when providers fail
 - Health tracking and degradation states
 - API key management and budget enforcement
 
-**Architecture:** Loom has one provider ("tokenhub") pointing at `http://tokenhub:8080/v1`. TokenHub has multiple adapters (vllm, nvidia-cloud-gpt, nvidia-cloud-claude) and routes to the best available one.
+**Architecture:** Loom has one provider ("tokenhub") pointing at `http://tokenhub:8080/v1`. TokenHub has multiple adapters (vllm, nvidia-cloud-gpt, nvidia-cloud-claude) and routes to the best available one. All scoring, complexity estimation, GPU selection, and routing logic that previously lived in Loom has been removed — TokenHub owns all of it.
+
+Loom's provider layer is now minimal:
+- A `ProviderRegistry` that tracks one active provider
+- A `selectProviderForTask()` that returns the first active provider (no scoring, no round-robin)
+- A heartbeat workflow that probes TokenHub's `/v1/models` endpoint every 30 seconds
+- Bootstrap logic that registers TokenHub on first startup
 
 **Provider registration flow:**
 1. TokenHub adapters registered via `TOKENHUB_EXTRA_PROVIDERS` env var (JSON array)
 2. Models registered via TokenHub admin API (`POST /admin/v1/models`)
 3. API key created via TokenHub admin API (`POST /admin/v1/apikeys`)
-4. TokenHub registered in Loom via `loomctl provider register tokenhub --endpoint http://tokenhub:8080/v1 --api-key <key>`
+4. TokenHub registered in Loom at startup via `bootstrapProviders()` in `internal/loom/loom.go`
 
-### Bootstrap
+### What Was Removed
 
-Run `bootstrap.local` after `docker compose up` to register models and connect Loom to TokenHub.
+The following subsystems were deleted during the TokenHub migration (February 2026):
+- **Provider scoring** (`scoring.go`) — capability scoring, model scoring, selection reason tracking
+- **Complexity estimation** (`complexity.go`) — task complexity routing
+- **GPU selection** (`gpu_selection.go`) — GPU-aware provider selection
+- **Ollama protocol** (`ollama.go`, `ollama_streaming.go`) — all Ollama-specific streaming/probing
+- **Routing engine** (`internal/routing/`) — minimize_cost, minimize_latency, maximize_quality, balanced policies
+- **Provider CRUD UI** — the Providers tab in the web dashboard
+- **loomctl provider commands** — `provider list/show/register/delete` CLI commands
+- **Model negotiation** — `/negotiate` endpoint and `NegotiateProviderModel()` logic
+- **~30 fields on Provider model** — SelectionReason, ModelScore, SelectedGPU, GPUConstraints, CostPerMToken, CapabilityScore, and all computed scoring metrics
+
+Total: ~6,000 lines deleted across 56 files.
 
 ---
 
@@ -431,11 +446,8 @@ Test files follow Go convention: `*_test.go` alongside source. The project has e
 
 ## 12. KNOWN ISSUES AND DEBT
 
-### Provider Scoring (Dead Code)
-`internal/provider/scoring.go` implements a scoring system that's never called. `UpdateProviderMetrics()` is defined but never invoked — all provider metrics show 0. This is now irrelevant since TokenHub handles scoring.
-
 ### Provider Heartbeat Workflow Registration
-New providers registered via API don't always get a Temporal heartbeat workflow started. Workaround: manually set provider status to "healthy" via PUT, or restart Loom.
+New providers registered via API don't always get a Temporal heartbeat workflow started. Workaround: manually set provider status to "healthy" via PUT, or restart Loom. This is less of an issue now that TokenHub is the sole provider — it's registered at bootstrap and rarely changes.
 
 ### Remediation Cascade
 When beads get stuck, the system auto-files "Remediation: Fix agent stuck on X" beads. These remediation beads can themselves get stuck, creating cascading remediation beads. The motivation system needs a circuit breaker.

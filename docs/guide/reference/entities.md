@@ -188,31 +188,29 @@ updated_at: "2026-01-20T09:30:00Z"
 
 ## Provider
 
-An external LLM service that executes agent work.
+An LLM service endpoint. In practice, this is TokenHub -- I delegate all model routing and provider management to it.
 
 ### Model Definition
 
 **Database Table**: `providers`  
-**Registration**: UI, API, or `config.yaml`
+**Registration**: API or `bootstrap.local`
 
 **Fields**:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Unique provider identifier |
+| `id` | string | Unique provider identifier (typically `tokenhub`) |
 | `name` | string | Display name |
-| `type` | string | `local`, `ollama`, `openai`, `anthropic`, `vllm`, `custom` |
+| `type` | string | Always `openai` (TokenHub speaks OpenAI-compatible API) |
 | `endpoint` | string | Base URL for API calls |
-| `model` | string | Model ID (e.g., `nvidia/Nemotron`) |
-| `configured_model` | string | Initially configured model |
+| `model` | string | Default model ID |
 | `selected_model` | string | Currently active model |
-| `status` | string | `pending`, `active`, `error` |
+| `status` | string | `pending`, `active`, `healthy`, `error`, `failed` |
 | `requires_key` | bool | Whether API key needed |
 | `key_id` | string | Reference to encrypted key in keymanager |
 | `last_heartbeat_at` | timestamp | Last health check time |
 | `last_heartbeat_latency_ms` | int | Response time of last check |
 | `last_heartbeat_error` | string | Last error message |
-| `description` | string | Notes about provider |
 | `created_at` | timestamp | Registration time |
 | `updated_at` | timestamp | Last update time |
 
@@ -236,24 +234,24 @@ An external LLM service that executes agent work.
 - **Periodic**: Every 30 seconds via Temporal heartbeat
 - **Check**: GET `/v1/models` endpoint
 - **Activation**: Automatic when first successful check
-- **Agent Resume**: Agents resume automatically when provider becomes active
+- **Agent Resume**: Agents resume automatically when TokenHub becomes active
 
 ### Example
 
 ```json
 {
-  "id": "puck",
-  "name": "Puck vLLM",
-  "type": "local",
-  "endpoint": "http://puck.local:8000",
-  "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
-  "status": "active",
-  "requires_key": false,
-  "last_heartbeat_at": "2026-01-20T08:30:00Z",
+  "id": "tokenhub",
+  "name": "TokenHub",
+  "type": "openai",
+  "endpoint": "http://localhost:8090/v1",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "status": "healthy",
+  "requires_key": true,
+  "last_heartbeat_at": "2026-02-21T08:30:00Z",
   "last_heartbeat_latency_ms": 45,
   "last_heartbeat_error": "",
-  "created_at": "2026-01-20T08:00:00Z",
-  "updated_at": "2026-01-20T08:30:00Z"
+  "created_at": "2026-02-21T08:00:00Z",
+  "updated_at": "2026-02-21T08:30:00Z"
 }
 ```
 

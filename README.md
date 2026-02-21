@@ -33,7 +33,7 @@ This is the craft of software, elevated by the ancient wisdom of the loom.
 
 ## Quick Start
 
-New to Loom? See **[QUICKSTART.md](QUICKSTART.md)** to get running in 10 minutes: start the server, connect a GPU or cloud provider, add your first project, and file beads from the CEO dashboard.
+New to Loom? See **[QUICKSTART.md](QUICKSTART.md)** to get running in 10 minutes: start the server, connect to TokenHub, add your first project, and file beads from the CEO dashboard.
 
 ### UI Ports
 
@@ -78,6 +78,7 @@ Loom is a lightweight AI coding agent orchestration system that manages workflow
   - Role-based bead matching
   - Workflow-based task progression
   - Priority and tag-based filtering
+  - LLM routing delegated to [TokenHub](https://github.com/jordanhubbard/tokenhub)
 
 ## Documentation
 
@@ -88,7 +89,7 @@ Full documentation is available at **[jordanhubbard.github.io/loom](https://jord
 | Guide | Audience | Content |
 |---|---|---|
 | [User Guide](docs/guide/user/index.md) | End users | Dashboard, projects, beads, agents, workflows, decisions |
-| [Admin Guide](docs/guide/admin/index.md) | Operators | Configuration, providers, deployment, security, observability |
+| [Admin Guide](docs/guide/admin/index.md) | Operators | Configuration, TokenHub integration, deployment, security, observability |
 | [Developer Guide](docs/guide/developer/index.md) | Contributors | Architecture, API, microservices, agent actions, plugins |
 | [Reference](docs/guide/reference/api-endpoints.md) | All | API endpoints, entities, config options |
 
@@ -107,13 +108,13 @@ make docs-serve   # http://localhost:8000
 - 🔏 **API Auth & RBAC**: JWT bearer tokens, API keys, and role-based permissions
 - 📡 **Real-time Events**: Server-Sent Events (SSE) for live status updates
 - 🔔 **Activity Feed & Notifications**: Team activity tracking with intelligent user notifications
-- 🎯 **Smart Routing**: Intelligent task assignment and agent coordination
+- 🎯 **Smart Routing**: Intelligent task assignment and agent coordination; LLM routing via TokenHub
 - 🔒 **Secure**: Encrypted secret storage and secure credential management
 - 📈 **Analytics & Cost Tracking**: Real-time usage monitoring, cost tracking, and spending alerts
 - 🔍 **Usage Pattern Analysis**: Multi-dimensional pattern clustering, anomaly detection, and cost optimization recommendations
 - 🔁 **Multi-Turn Action Loop**: Agents iterate with LLM feedback — read, write, search, and close beads autonomously
 - 💬 **Pair-Programming Mode**: Interactive real-time chat with agents scoped to specific beads
-- ⚡ **Auto-Provider Assignment**: Zero-config — agents automatically use available providers from the shared pool
+- ⚡ **TokenHub Integration**: Single LLM provider — all model routing, failover, and provider management delegated to [TokenHub](https://github.com/jordanhubbard/tokenhub)
 - 📊 **OpenTelemetry Observability**: Full-stack observability with distributed tracing, metrics, and visualization
   - Jaeger for distributed tracing with span-level detail
   - Prometheus for metrics collection and alerting
@@ -153,6 +154,7 @@ flowchart LR
     NATS --> A2[Agent: Reviewer]
     NATS --> A3[Agent: QA]
     CP --> PG[(PostgreSQL)]
+    CP --> TH[TokenHub]
     CS --> Prom[Prometheus]
     CS --> Jaeger[Jaeger]
     CS --> Graf[Grafana]
@@ -160,6 +162,7 @@ flowchart LR
 
 - **Control Plane** -- HTTP API, dispatcher, workflow engine
 - **Agents** -- Autonomous workers subscribing to NATS topics
+- **TokenHub** -- LLM proxy handling model routing, failover, and provider management
 - **Connectors Service** -- External integrations via gRPC
 - **Temporal** -- Durable workflow orchestration
 - **NATS JetStream** -- Inter-service messaging

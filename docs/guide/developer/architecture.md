@@ -1,6 +1,6 @@
 # Loom Architecture Guide
 
-**Last Updated**: February 8, 2026 (Multi-turn action loop, pair-programming, Dolt support, auto-provider assignment)
+**Last Updated**: February 21, 2026 (TokenHub-only architecture, removed provider routing/scoring/complexity)
 
 This document describes the architecture of Loom, the Agent Orchestration System for managing distributed AI workflows.
 
@@ -14,7 +14,7 @@ Loom is a comprehensive agent orchestration platform that:
 - Persists all state to a SQLite database
 - Provides a real-time web UI for monitoring and control
 - **v1.0**: Multi-user authentication with role-based access control
-- **v1.0**: Intelligent provider routing with cost and latency optimization
+- **v1.0**: TokenHub integration as sole LLM provider
 - **v1.0**: Server-sent events for real-time streaming responses
 - **NEW (v1.1)**: Analytics dashboard with real-time usage monitoring
 - **NEW (v1.1)**: Per-user and per-provider cost tracking
@@ -31,6 +31,7 @@ Loom is a comprehensive agent orchestration platform that:
 - **NEW (v1.5)**: Pair-programming mode for interactive human-agent chat
 - **NEW (v1.5)**: Auto-provider assignment (zero-config agent setup)
 - **NEW (v1.5)**: Dolt database support with federation and SQL server
+- **NEW (v2.0)**: TokenHub-only architecture -- removed ~6,000 lines of provider routing, scoring, complexity estimation, and GPU selection
 
 ## Core Components
 
@@ -81,65 +82,38 @@ Loom is a comprehensive agent orchestration platform that:
 
 ### 3. Provider System
 
-**Purpose**: Interface with external LLM providers with intelligent routing and cost optimization
+**Purpose**: Connect to TokenHub for all LLM operations
 
 **Key Files**:
-- `pkg/provider/provider.go`
+- `internal/provider/registry.go`
 - `internal/models/provider.go`
-- `internal/routing/router.go` (NEW v1.0)
-- `internal/loom/loom.go` (provider management)
 
 **Concepts**:
-- **Provider**: An external LLM service (local or cloud)
-- **Endpoint**: Network address for provider communication
-- **Model**: LLM served by the provider (e.g., Nemotron, GPT-4)
-- **Status**: `pending`, `active`, `error`
-- **Cost Metadata** (NEW v1.0): Cost per million tokens for optimization
-- **Capabilities** (NEW v1.0): Context window, function calling, vision support
-- **Routing Policy** (NEW v1.0): Selection strategy (cost, latency, quality, balanced)
+- **Provider**: A registered LLM service endpoint (in practice, TokenHub)
+- **Endpoint**: Network address for TokenHub's OpenAI-compatible API
+- **Model**: LLM model requested via TokenHub (e.g., `anthropic/claude-sonnet-4-20250514`)
+- **Status**: `pending`, `active`, `healthy`, `error`, `failed`
+
+**Architecture**:
+I delegate all LLM provider management to TokenHub. Physical providers (Anthropic, OpenAI, vLLM, etc.) are configured in TokenHub during its onboarding. I just register TokenHub as my sole provider and forward all requests through it.
 
 **Workflow**:
-1. Providers are registered via UI with endpoint, model, and cost info
-2. Immediate health check validates provider availability
+1. TokenHub is registered via API or `bootstrap.local` with endpoint and API key
+2. Immediate health check validates connectivity
 3. Provider heartbeat workflow monitors health (30s interval)
 4. On status change, agents resume or pause accordingly
-5. **Router selects optimal provider** based on policy and requirements (NEW v1.0)
-6. Automatic failover if selected provider fails
+5. Dispatcher assigns the sole active provider to all work
 
-**Database**: `providers` table with endpoint, status, cost, capabilities, and heartbeat tracking
+**What Was Removed (v2.0)**:
+- `internal/routing/` -- Four routing policies (minimize_cost, minimize_latency, maximize_quality, balanced)
+- Provider scoring, complexity estimation, GPU selection (~6,000 lines)
+- Ollama protocol support
+- `/api/v1/routing/select` and `/api/v1/routing/policies` endpoints
+- `/api/v1/providers/{id}/negotiate` endpoint
+- `loomctl provider` commands
+- Provider management UI (health ring, analytics charts, SSE handlers)
 
-### 3.1 Provider Routing System (NEW v1.0)
-
-**Purpose**: Intelligently select providers based on cost, latency, quality, and capabilities
-
-**Key Files**:
-- `internal/routing/router.go`
-- `internal/routing/router_test.go`
-- `internal/api/handlers_routing.go`
-
-**Routing Policies**:
-1. **minimize_cost**: Select cheapest provider (30%+ savings)
-2. **minimize_latency**: Select fastest provider (<1ms routing)
-3. **maximize_quality**: Select provider with best capabilities
-4. **balanced** (default): Balance cost (30%), latency (30%), quality (40%)
-
-**Provider Requirements**:
-- `MaxCostPerMToken`: Maximum acceptable cost
-- `MaxLatencyMs`: Maximum acceptable latency
-- `MinContextWindow`: Minimum context window size
-- `RequiresFunction`: Must support function calling
-- `RequiresVision`: Must support vision/multimodal
-- `RequiredTags`: Custom capability tags
-
-**Automatic Failover**:
-- Health criteria: status, heartbeat recency, success rate
-- Circuit breaker pattern prevents cascading failures
-- Transparent failover to backup providers
-- Excluded providers list for retry logic
-
-**API Endpoints**:
-- `POST /api/v1/routing/select` - Select provider with policy
-- `GET /api/v1/routing/policies` - List available policies
+**Database**: `providers` table with endpoint, status, and heartbeat tracking
 
 ### 3.2 Authentication & Authorization System (NEW v1.0)
 
@@ -354,7 +328,6 @@ Format: `<resource>:<action>` (e.g., `agents:read`, `beads:write`)
 **Sections**:
 - **Project Viewer**: Browse projects, agents, and beads
 - **Kanban Board**: Visualize work by status
-- **Providers**: Register and manage LLM providers
 - **Agents**: View agent assignments and status
 - **Decisions**: Approve/deny escalations
 - **Personas**: Define agent roles
@@ -739,15 +712,15 @@ See [docs/usage-pattern-analysis.md](usage-pattern-analysis.md) for complete ref
 
 ### 18. Auto-Provider Assignment (NEW v1.5)
 
-**Purpose**: Agents automatically receive providers from the shared pool, eliminating manual per-agent configuration.
+**Purpose**: Agents automatically receive the sole TokenHub provider, eliminating manual per-agent configuration.
 
 **Key Changes**:
 - Agents no longer require explicit `provider_id` configuration
-- Dispatcher auto-assigns first healthy provider from `ListActive()` pool
-- Paused agents automatically promoted to idle when providers become available
+- Dispatcher auto-assigns the first healthy provider (TokenHub) from `ListActive()` pool
+- Paused agents automatically promoted to idle when TokenHub becomes available
 - Default readiness mode changed from `"block"` to `"warn"` — dispatch proceeds even if git remote checks fail
 
-**Impact**: Zero-configuration agent setup. Register providers globally, and all agents can use them.
+**Impact**: Zero-configuration agent setup. Register TokenHub once, and all agents use it.
 
 ## Data Flow
 
@@ -756,13 +729,13 @@ See [docs/usage-pattern-analysis.md](usage-pattern-analysis.md) for complete ref
 ```
 Beads Load (Startup)
     ↓
-Provider Registration (UI/API)
+TokenHub Registration (API / bootstrap.local)
     ↓
 Provider Heartbeat (Temporal, 30s)
     ↓
 Provider Health Check (Immediate on registration)
     ↓
-Agent Resume (When provider healthy)
+Agent Resume (When TokenHub healthy)
     ↓
 Dispatcher (Temporal, 5s)
     ↓
@@ -770,7 +743,7 @@ Get Ready Beads (No blocking dependencies)
     ↓
 Route to Agent (Best agent for bead type)
     ↓
-Agent Execution (Via Provider)
+Agent Execution (Via TokenHub)
     ↓
 Bead Complete / Update Dependencies
     ↓
@@ -854,13 +827,8 @@ projects:
     branch: main
     beads_path: .beads
 
-# Providers (can also be registered via UI)
-providers:
-  - id: local-vllm
-    name: Local vLLM
-    type: vllm
-    endpoint: http://localhost:8000
-    model: nvidia/Nemotron
+# Providers (registered via API or bootstrap.local, not config.yaml)
+# TokenHub is the sole provider — physical LLM providers are managed in TokenHub
 ```
 
 ## Deployment
@@ -897,7 +865,7 @@ make distclean  # Wipes database and Temporal state
 
 ## High-Level Architecture Diagram
 
-**Last Updated**: February 8, 2026 (Added action loop, pair mode, auto-provider, Dolt)
+**Last Updated**: February 21, 2026 (TokenHub-only architecture)
 
 ### System Component Diagram
 
@@ -945,10 +913,8 @@ graph TB
         KEYS[(Project SSH Keys<br/>/app/data/projects)]
     end
 
-    subgraph "LLM Providers"
-        PROV1[vLLM Provider]
-        PROV2[Ollama Provider]
-        PROV3[OpenAI API]
+    subgraph "LLM Provider"
+        TH[TokenHub<br/>OpenAI-compatible proxy]
     end
 
     UI --> API
@@ -994,9 +960,7 @@ graph TB
     PRM --> HBW
     
     AGW -.requests completion.-> PRM
-    PRM -.routes to.-> PROV1
-    PRM -.routes to.-> PROV2
-    PRM -.routes to.-> PROV3
+    PRM -.routes to.-> TH
     
     EB -.publishes.-> SSE
     AM --> EB
@@ -1017,9 +981,7 @@ graph TB
     style TP fill:#fff4e1
     style GIT fill:#fff4e1
     style KEYS fill:#fff4e1
-    style PROV1 fill:#e8f5e9
-    style PROV2 fill:#e8f5e9
-    style PROV3 fill:#e8f5e9
+    style TH fill:#e8f5e9
 ```
 
 ### Data Flow: Bead Processing
@@ -1122,7 +1084,7 @@ graph TD
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Web UI (Port 8080)                     │
-│  Projects | Providers | Agents | Beads | Decisions | REPL  │
+│  Projects | Agents | Beads | Decisions | REPL              │
 └────────────────┬──────────────────────────────────────────┘
                  │
 ┌────────────────▼──────────────────────────────────────────┐
@@ -1150,13 +1112,13 @@ graph TD
             │
       ┌─────▼──────────────────────┐
       │  Provider Heartbeat        │
-      │  - Check health (30s)      │
+      │  - Check TokenHub (30s)    │
       │  - Update status           │
       └─────────┬──────────────────┘
                 │
          ┌──────▼──────────┐
-         │  LLM Providers  │
-         │  (vLLM, Ollama) │
+         │    TokenHub     │
+         │  (LLM Proxy)   │
          └─────────────────┘
 ```
 
@@ -1227,10 +1189,8 @@ graph TB
     Loom --> Beads
     Loom --> Source
 
-    subgraph Providers["LLM Providers"]
-        OpenAI["OpenAI API"]
-        Local["Local vLLM / Ollama"]
-        Anthropic["Anthropic API"]
+    subgraph Providers["LLM Provider"]
+        TokenHub["TokenHub<br/>Intelligent LLM Proxy"]
     end
 
     Loom -->|"HTTP/HTTPS"| Providers
@@ -1349,32 +1309,19 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Register[Register Provider<br/>POST /api/v1/providers] --> HealthCheck[Immediate health check<br/>send test completion]
+    Register[Register TokenHub<br/>POST /api/v1/providers] --> HealthCheck[Immediate health check<br/>send test completion]
     HealthCheck --> Healthy{Responds<br/>correctly?}
     Healthy -->|Yes| Active[Status: active]
     Healthy -->|No| Error[Status: error]
 
-    Active --> Negotiate[Model negotiation<br/>GET /providers/{id}/models]
-    Negotiate --> SelectBest[Select best model<br/>by capability score]
-    SelectBest --> Ready([Provider ready<br/>for agent use])
+    Active --> Ready([TokenHub ready<br/>for agent use])
 
     Ready --> Heartbeat[Heartbeat loop<br/>every 30s via Temporal]
     Heartbeat --> StillHealthy{Still<br/>healthy?}
-    StillHealthy -->|Yes| UpdateMetrics[Update latency,<br/>success rate, tokens]
+    StillHealthy -->|Yes| UpdateMetrics[Update latency,<br/>success count]
     UpdateMetrics --> Heartbeat
     StillHealthy -->|No| Degrade[Status: error<br/>pause agents]
-    Degrade --> Failover{Backup<br/>provider?}
-    Failover -->|Yes| Route[Route to backup<br/>via routing policy]
-    Failover -->|No| AlertAdmin[Alert admin<br/>agents paused]
-
-    subgraph Routing["Routing Policies"]
-        Cost["minimize_cost"]
-        Latency["minimize_latency"]
-        Quality["maximize_quality"]
-        Balanced["balanced<br/>30% cost, 30% latency, 40% quality"]
-    end
-
-    Route --> Routing
+    Degrade --> AlertAdmin[Alert admin<br/>agents paused]
 ```
 
 ### User Journey: From PRD to Working Project
@@ -1389,7 +1336,7 @@ sequenceDiagram
     participant Git as GitHub
 
     Note over Admin: One-time setup
-    Admin->>UI: Register LLM provider
+    Admin->>UI: Register TokenHub as LLM provider
     Admin->>UI: Bootstrap project with PRD
 
     UI->>API: POST /projects/bootstrap
@@ -1431,7 +1378,7 @@ Loom can be extended via:
 1. **Custom Personas**: Add new agent roles in `personas/`
 2. **Custom Beads**: Define work items in project `.beads/` directories
 3. **Temporal Workflows**: Add workflows in `internal/temporal/workflows/`
-4. **Custom Providers**: Register new LLM endpoints
+4. **TokenHub Configuration**: Manage physical providers and models via `tokenhubctl`
 5. **Temporal DSL**: Use DSL in agent instructions for workflows
 6. **Custom Motivations**: Register custom triggers via API or DSL
 7. **External Webhooks**: Configure GitHub or custom webhook triggers

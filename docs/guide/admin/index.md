@@ -8,7 +8,7 @@ This guide is for **administrators** who configure, operate, and maintain a Loom
 
 ```mermaid
 flowchart TD
-    A[Install & Configure] --> B[Register Providers]
+    A[Install & Configure] --> B[Connect to TokenHub]
     B --> C[Create Users & API Keys]
     C --> D[Set Up Projects]
     D --> E[Configure Deploy Keys]
@@ -144,67 +144,53 @@ curl -X POST http://localhost:8080/api/v1/auth/change-password \
 
 ---
 
-## Provider Management
+## TokenHub Integration
 
-Providers are the AI backends that execute agent work. Loom supports multiple providers simultaneously with intelligent routing.
+I delegate all LLM provider management to [TokenHub](https://github.com/jordanhubbard/tokenhub). Physical providers (Anthropic, OpenAI, vLLM, etc.) are configured in TokenHub during its onboarding. I just need to know where TokenHub is and how to authenticate.
 
-### Registering Providers
+### Registering TokenHub
 
-Providers are registered via the REST API — **not** in `config.yaml`. This keeps API keys and local endpoints out of version control.
+TokenHub is registered via the REST API -- **not** in `config.yaml`. This keeps API keys and local endpoints out of version control.
 
 ```bash
-# Local GPU (no API key needed)
 curl -X POST http://localhost:8081/api/v1/providers \
   -H "Content-Type: application/json" \
-  -d '{"id":"local-gpu","name":"Local GPU","type":"local","endpoint":"http://gpu-server:8000/v1","model":"nvidia/Nemotron-30B"}'
-
-# Cloud provider (API key from environment)
-curl -X POST http://localhost:8081/api/v1/providers \
-  -H "Content-Type: application/json" \
-  -d "{\"id\":\"nvidia-cloud\",\"name\":\"NVIDIA Cloud\",\"type\":\"openai\",\"endpoint\":\"https://inference-api.nvidia.com/v1\",\"model\":\"nvidia/openai/gpt-oss-20b\",\"api_key\":\"$NVIDIA_API_KEY\"}"
+  -d '{
+    "id": "tokenhub",
+    "name": "TokenHub",
+    "type": "openai",
+    "endpoint": "http://localhost:8090/v1",
+    "model": "anthropic/claude-sonnet-4-20250514",
+    "api_key": "your-tokenhub-api-key"
+  }'
 ```
 
-API keys are stored in Loom's encrypted vault (not in plaintext on disk) and persist across restarts.
+API keys are stored in my encrypted vault (not in plaintext on disk) and persist across restarts.
 
 ### Using bootstrap.local for Repeatable Setup
 
-For reproducible provider registration, use a `bootstrap.local` script (gitignored):
+For reproducible setup, use a `bootstrap.local` script (gitignored). The authoritative sample lives in the [TokenHub repo](https://github.com/jordanhubbard/tokenhub/blob/main/bootstrap.local.example):
 
 ```bash
 cp bootstrap.local.example bootstrap.local
 chmod +x bootstrap.local
-vim bootstrap.local    # Add your providers
-./bootstrap.local      # Register them with Loom
+vim bootstrap.local    # Set your TokenHub endpoint and API key
+./bootstrap.local      # Register TokenHub with Loom
 ```
 
-This script calls the provider API using a helper function. Environment variables are expanded by the shell, so API keys never appear in the file itself:
-
-```bash
-# In bootstrap.local:
-register_provider "nvidia-cloud" "NVIDIA Cloud" "openai" \
-  "https://inference-api.nvidia.com/v1" "nvidia/openai/gpt-oss-20b" \
-  "$NVIDIA_API_KEY"    # Expanded from environment at runtime
-```
-
-Set your API keys in `~/.zshenv`, `~/.bashrc`, or a `.env` file:
-
-```bash
-export NVIDIA_API_KEY=sk-...
-export OPENAI_API_KEY=sk-...
-```
+The script uses `tokenhubctl` for TokenHub admin operations and `curl` for registering TokenHub as my provider. Environment variables are expanded by the shell, so API keys never appear in the file itself.
 
 **When to run `bootstrap.local`:**
 - After a fresh install or database wipe (`make distclean`)
-- When adding a new provider
 - After restoring from backup (providers are in the DB, but run it if the DB was lost)
 
-**You do NOT need to re-run it** after normal restarts — providers persist in the database.
+**You do NOT need to re-run it** after normal restarts -- providers persist in the database.
 
 ### Why Not config.yaml?
 
 `config.yaml` is committed to git. Provider configuration contains:
 - API keys (secrets)
-- Local network endpoints (e.g., `http://plubbit.local:8000`) that only apply to one deployment
+- Local network endpoints (e.g., `http://tokenhub:8090`) that only apply to one deployment
 - Model selections that vary per environment
 
 None of this belongs in version control. The `bootstrap.local` pattern keeps deployment-specific configuration local while `config.yaml` holds structural settings shared across all deployments.
@@ -213,86 +199,43 @@ None of this belongs in version control. The `bootstrap.local` pattern keeps dep
 
 | Field | Description |
 |---|---|
-| `id` | Unique identifier |
+| `id` | Unique identifier (typically `tokenhub`) |
 | `name` | Display name |
-| `type` | Provider type: `openai`, `anthropic`, `local`, etc. |
-| `endpoint` | API URL |
-| `api_key` | API credential (stored encrypted) |
+| `type` | Always `openai` (TokenHub speaks OpenAI-compatible API) |
+| `endpoint` | TokenHub API URL |
+| `api_key` | TokenHub API credential (stored encrypted) |
 | `model` | Default model name |
-| `is_shared` | If `true`, available to all users |
-| `cost_per_mtoken` | Cost per million tokens (for routing decisions) |
-| `context_window` | Max context size |
-| `supports_function` | Function calling support |
-| `supports_vision` | Vision/multimodal support |
-| `supports_streaming` | Streaming support |
-| `tags` | Custom tags for filtering (e.g., `["gpu", "fast"]`) |
+| `status` | `pending`, `active`, `healthy`, `error`, `failed` |
 
 ### Provider API Endpoints
 
 ```
-GET    /api/v1/providers              # List all providers
+GET    /api/v1/providers              # List providers
 POST   /api/v1/providers              # Register a provider
 GET    /api/v1/providers/{id}         # Get provider details
 PUT    /api/v1/providers/{id}         # Update provider
 DELETE /api/v1/providers/{id}         # Delete provider
-GET    /api/v1/providers/{id}/models  # List available models
-POST   /api/v1/providers/{id}/negotiate  # Auto-negotiate best model
 ```
 
 ### Health Monitoring
 
-Loom automatically checks provider health via periodic heartbeats. Provider status is one of:
+I automatically check TokenHub health via periodic heartbeats. Provider status is one of:
 
-- **healthy** — Responding normally
-- **active** — Registered and enabled
-- **error** — Temporary failure (will retry)
-- **failed** — Persistent failure
-- **inactive** — Disabled by admin
+- **healthy** -- Responding normally
+- **active** -- Registered and enabled
+- **error** -- Temporary failure (will retry)
+- **failed** -- Persistent failure
 
-Runtime metrics are tracked automatically: success rate, average latency, throughput, and an overall availability score.
+### Managing Physical Providers
 
-### Routing Policies
-
-Loom routes work to providers based on configurable policies:
-
-| Policy | Description |
-|---|---|
-| `balanced` | Default. Balances cost, latency, and quality. |
-| `minimize_cost` | Choose the cheapest provider meeting requirements. |
-| `minimize_latency` | Choose the fastest provider. |
-| `maximize_quality` | Choose the highest-quality provider. |
-
-Select a provider with specific requirements:
+Physical providers are managed through TokenHub, not through me. Use `tokenhubctl`:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/routing/select \
-  -H "Content-Type: application/json" \
-  -d '{
-    "policy": "balanced",
-    "requirements": {
-      "min_context_window": 8000,
-      "requires_function": true,
-      "max_cost_per_mtoken": 5.0,
-      "max_latency_ms": 2000,
-      "required_tags": ["gpu"]
-    }
-  }'
-```
-
-```mermaid
-flowchart TD
-    REQ[Routing Request] --> FILTER[Filter by Requirements]
-    FILTER --> HEALTH[Check Provider Health]
-    HEALTH --> POLICY{Routing Policy}
-    POLICY -->|minimize_cost| COST[Sort by Cost]
-    POLICY -->|minimize_latency| LAT[Sort by Latency]
-    POLICY -->|maximize_quality| QUAL[Sort by Quality Score]
-    POLICY -->|balanced| BAL[Weighted Score]
-    COST --> SELECT[Select Best Provider]
-    LAT --> SELECT
-    QUAL --> SELECT
-    BAL --> SELECT
-    SELECT --> DISPATCH[Dispatch to Provider]
+tokenhubctl provider list                    # List configured providers
+tokenhubctl provider add --name anthropic \
+    --type anthropic --api-key "$KEY"        # Add a provider
+tokenhubctl model list                       # List available models
+tokenhubctl routing get                      # Check routing policy
 ```
 
 ---
@@ -626,14 +569,14 @@ SSH keys will be automatically restored from the database on first use.
 3. Check env overrides: `TEMPORAL_HOST`, `TEMPORAL_NAMESPACE`
 4. The fallback dispatch loop (every 10s) handles work even if Temporal is down
 
-### Provider Health Failures
+### TokenHub Health Failures
 
 **Symptoms:** Provider shows `error` or `failed` status.
 
-1. Check provider endpoint: `curl <endpoint>/health`
+1. Check TokenHub is running: `tokenhubctl status`
 2. Verify API key is correct and not expired
 3. Check `last_heartbeat_error` in provider details
-4. Re-negotiate models: `POST /api/v1/providers/{id}/negotiate`
+4. Verify TokenHub endpoint is reachable: `curl <endpoint>/models`
 
 ### Git Access Denied
 
@@ -669,6 +612,6 @@ SSH keys will be automatically restored from the database on first use.
 
 1. Check agents are assigned to the project: `GET /api/v1/projects/{id}`
 2. Check for blocked beads: dependencies may not be resolved
-3. Verify provider is healthy and agents can reach it
+3. Verify TokenHub is healthy and agents can reach it
 4. Check `dispatch.max_hops` — beads dispatched more than this many times are escalated to P0
 5. Review Temporal UI at `:8088` for workflow errors
