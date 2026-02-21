@@ -39,7 +39,6 @@ All output is structured JSON by default (pipe through jq for human-readable for
 	rootCmd.AddCommand(newWorkflowCommand())
 	rootCmd.AddCommand(newAgentCommand())
 	rootCmd.AddCommand(newProjectCommand())
-	rootCmd.AddCommand(newProviderCommand())
 	rootCmd.AddCommand(newLogCommand())
 	rootCmd.AddCommand(newStatusCommand())
 	rootCmd.AddCommand(newMetricsCommand())
@@ -535,116 +534,6 @@ func newBeadDeleteCommand() *cobra.Command {
 	}
 }
 
-// --- Provider commands ---
-
-func newProviderCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "provider",
-		Short: "Manage LLM providers",
-	}
-	cmd.AddCommand(newProviderListCommand())
-	cmd.AddCommand(newProviderShowCommand())
-	cmd.AddCommand(newProviderRegisterCommand())
-	cmd.AddCommand(newProviderDeleteCommand())
-	return cmd
-}
-
-func newProviderListCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "list",
-		Short: "List all registered providers",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := newClient()
-			data, err := client.get("/api/v1/providers", nil)
-			if err != nil {
-				return err
-			}
-			outputJSON(data)
-			return nil
-		},
-	}
-}
-
-func newProviderShowCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "show <provider-id>",
-		Short: "Show provider details",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := newClient()
-			data, err := client.get(fmt.Sprintf("/api/v1/providers/%s", args[0]), nil)
-			if err != nil {
-				return err
-			}
-			outputJSON(data)
-			return nil
-		},
-	}
-}
-
-func newProviderRegisterCommand() *cobra.Command {
-	var (
-		name     string
-		pType    string
-		endpoint string
-		model    string
-		apiKey   string
-	)
-	cmd := &cobra.Command{
-		Use:   "register <provider-id>",
-		Short: "Register or update a provider",
-		Args:  cobra.ExactArgs(1),
-		Example: `  loomctl provider register sparky-local \
-    --name="Sparky Local" --type=openai \
-    --endpoint="http://sparky.local:8000/v1" \
-    --model="Qwen/Qwen2.5-Coder-32B-Instruct"`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := newClient()
-			body := map[string]interface{}{
-				"name":     name,
-				"type":     pType,
-				"endpoint": endpoint,
-				"model":    model,
-			}
-			if apiKey != "" {
-				body["api_key"] = apiKey
-			}
-			data, err := client.put(fmt.Sprintf("/api/v1/providers/%s", args[0]), body)
-			if err != nil {
-				return err
-			}
-			outputJSON(data)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&name, "name", "", "Provider display name (required)")
-	cmd.Flags().StringVar(&pType, "type", "openai", "Provider type (openai, anthropic, local)")
-	cmd.Flags().StringVar(&endpoint, "endpoint", "", "API endpoint URL (required)")
-	cmd.Flags().StringVar(&model, "model", "", "Model ID (required)")
-	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key (optional)")
-	cmd.MarkFlagRequired("name")
-	cmd.MarkFlagRequired("endpoint")
-	cmd.MarkFlagRequired("model")
-	return cmd
-}
-
-func newProviderDeleteCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete <provider-id>",
-		Short: "Delete a provider",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client := newClient()
-			data, err := client.delete(fmt.Sprintf("/api/v1/providers/%s", args[0]))
-			if err != nil {
-				return err
-			}
-			outputJSON(data)
-			return nil
-		},
-	}
-}
-
 // --- Log commands ---
 
 func newLogCommand() *cobra.Command {
@@ -770,7 +659,7 @@ func newStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show system status overview",
-		Long:  "Aggregates health, providers, agents, and bead counts into one JSON object",
+		Long:  "Aggregates health, agents, and bead counts into one JSON object",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := newClient()
 			result := map[string]interface{}{}
@@ -780,28 +669,6 @@ func newStatusCommand() *cobra.Command {
 				var v interface{}
 				if json.Unmarshal(data, &v) == nil {
 					result["health"] = v
-				}
-			}
-
-			// Providers
-			if data, err := client.get("/api/v1/providers", nil); err == nil {
-				var providers []interface{}
-				if json.Unmarshal(data, &providers) == nil {
-					healthy, failed, total := 0, 0, len(providers)
-					for _, p := range providers {
-						pm, _ := p.(map[string]interface{})
-						if pm["status"] == "healthy" {
-							healthy++
-						} else if pm["status"] == "failed" {
-							failed++
-						}
-					}
-					result["providers"] = map[string]interface{}{
-						"total":   total,
-						"healthy": healthy,
-						"failed":  failed,
-						"list":    providers,
-					}
 				}
 			}
 

@@ -100,12 +100,10 @@ func (a *ProviderActivities) ProviderHeartbeatActivity(ctx context.Context, inpu
 		a.persistHeartbeat(result)
 		return result, nil
 	}
-	selected, reason, score := a.selectModel(record, available)
+	selected, _, _ := a.selectModel(record, available)
 	if selected != "" {
 		record.SelectedModel = selected
 		record.Model = selected
-		record.SelectionReason = reason
-		record.ModelScore = score
 	}
 	// Capture context window from model metadata (vLLM provides max_model_len)
 	for _, m := range models {
@@ -220,18 +218,6 @@ func (a *ProviderActivities) syncRegistry(record *internalmodels.Provider) {
 		apiKey, _ = a.keys.GetKey(record.KeyID)
 	}
 
-	// Parse model name to get parameters for dynamic scoring
-	var modelParamsB float64
-	if selected != "" {
-		parsed := modelcatalog.ParseModelName(selected)
-		// Use active params if available (MoE models), otherwise total params
-		if parsed.ActiveParamsB > 0 {
-			modelParamsB = parsed.ActiveParamsB
-		} else {
-			modelParamsB = parsed.TotalParamsB
-		}
-	}
-
 	cfg := &provider.ProviderConfig{
 		ID:                     record.ID,
 		Name:                   record.Name,
@@ -241,31 +227,14 @@ func (a *ProviderActivities) syncRegistry(record *internalmodels.Provider) {
 		Model:                  selected,
 		ConfiguredModel:        record.ConfiguredModel,
 		SelectedModel:          selected,
-		SelectedGPU:            record.SelectedGPU,
 		Status:                 record.Status,
 		LastHeartbeatAt:        record.LastHeartbeatAt,
 		LastHeartbeatLatencyMs: record.LastHeartbeatLatencyMs,
-		CapabilityScore:        record.Metrics.OverallScore,
 		ContextWindow:          record.ContextWindow,
-		ModelParamsB:           modelParamsB,
-		CostPerMToken:          record.CostPerMToken,
 	}
 
 	_ = a.registry.Upsert(cfg)
-
-	// Update dynamic scoring with model parameters and heartbeat latency
-	a.registry.UpdateProviderScore(record.ID, modelParamsB, record.CostPerMToken)
 	a.registry.UpdateHeartbeatLatency(record.ID, record.LastHeartbeatLatencyMs)
-
-	// Write-through: persist scoring data to database
-	if a.database != nil && a.registry.GetScorer() != nil {
-		if score, ok := a.registry.GetScorer().GetScore(record.ID); ok {
-			record.ModelParamsB = score.ModelParamsB
-			record.CapabilityScore = score.CompositeScore
-			record.AvgLatencyMs = score.AvgRequestLatencyMs
-			_ = a.database.UpsertProvider(record)
-		}
-	}
 }
 
 func (a *ProviderActivities) publishProviderUpdate(record *internalmodels.Provider) {
@@ -282,7 +251,6 @@ func (a *ProviderActivities) publishProviderUpdate(record *internalmodels.Provid
 			"error":       record.LastHeartbeatError,
 			"model":       record.SelectedModel,
 			"configured":  record.ConfiguredModel,
-			"score":       record.ModelScore,
 		},
 	})
 }
@@ -443,29 +411,24 @@ func buildProviderCandidates(raw string, preferredOpenAIType string) ([]provider
 
 	var candidates []providerCandidate
 
-	// If the URL has a path (e.g. /v1), use it as-is first — the user told us
-	// exactly where the API is. Don't probe random ports on cloud endpoints.
 	path := strings.TrimSuffix(u.Path, "/")
 	if path != "" {
 		full := fmt.Sprintf("%s://%s%s", scheme, u.Host, path)
 		candidates = append(candidates, providerCandidate{ProviderType: openAIType, Endpoint: full})
 	}
 
-	// For explicit ports or bare hostnames, also try OpenAI + Ollama combos.
 	port := u.Port()
 	var ports []string
 	if port != "" {
 		ports = []string{port}
 	} else if path == "" {
-		// Only scan default ports when no path was provided (bare hostname).
-		ports = []string{"8000", "11434"}
+		ports = []string{"8000"}
 	}
 
 	for _, p := range ports {
 		base := fmt.Sprintf("%s://%s:%s", scheme, hostname, p)
 		candidates = append(candidates,
 			providerCandidate{ProviderType: openAIType, Endpoint: base + "/v1"},
-			providerCandidate{ProviderType: "ollama", Endpoint: base},
 		)
 	}
 
@@ -488,65 +451,28 @@ func uniqueCandidates(in []providerCandidate) []providerCandidate {
 
 func probeModels(ctx context.Context, c providerCandidate) ([]provider.Model, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	switch c.ProviderType {
-	case "openai", "local", "custom", "anthropic":
-		url := strings.TrimSuffix(c.Endpoint, "/") + "/models"
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return nil, err
-		}
-		if c.APIKey != "" {
-			req.Header.Set("Authorization", "Bearer "+c.APIKey)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		b, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("openai /models unexpected status %d: %s", resp.StatusCode, string(b))
-		}
-		var modelsResp struct {
-			Data []provider.Model `json:"data"`
-		}
-		if err := json.Unmarshal(b, &modelsResp); err != nil {
-			return nil, err
-		}
-		return modelsResp.Data, nil
-	case "ollama":
-		url := strings.TrimSuffix(c.Endpoint, "/") + "/api/tags"
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		b, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("ollama /api/tags unexpected status %d: %s", resp.StatusCode, string(b))
-		}
-		var tagsResp struct {
-			Models []struct {
-				Name string `json:"name"`
-			} `json:"models"`
-		}
-		if err := json.Unmarshal(b, &tagsResp); err != nil {
-			return nil, err
-		}
-		models := make([]provider.Model, 0, len(tagsResp.Models))
-		for _, m := range tagsResp.Models {
-			name := strings.TrimSpace(m.Name)
-			if name == "" {
-				continue
-			}
-			models = append(models, provider.Model{ID: name, Object: "model"})
-		}
-		return models, nil
-	default:
-		return nil, fmt.Errorf("unknown provider type: %s", c.ProviderType)
+	url := strings.TrimSuffix(c.Endpoint, "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
 	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("/models unexpected status %d: %s", resp.StatusCode, string(b))
+	}
+	var modelsResp struct {
+		Data []provider.Model `json:"data"`
+	}
+	if err := json.Unmarshal(b, &modelsResp); err != nil {
+		return nil, err
+	}
+	return modelsResp.Data, nil
 }
