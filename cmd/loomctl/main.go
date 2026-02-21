@@ -17,11 +17,6 @@ import (
 const version = "2.0.0"
 
 var (
-	projectID    string
-	status       string
-	priority     string
-	beadType     string
-	assignedTo   string
 	serverURL    string
 	outputFormat string
 )
@@ -328,11 +323,11 @@ func newBeadCommand() *cobra.Command {
 
 func newBeadListCommand() *cobra.Command {
 	var (
-		projectID  string
-		status     string
-		beadType   string
-		assignedTo string
-		priority   int
+		projectID   string
+		status      string
+		beadType    string
+		assignedTo  string
+		priority    int
 		hasPriority bool
 	)
 	cmd := &cobra.Command{
@@ -347,9 +342,9 @@ func newBeadListCommand() *cobra.Command {
 			if projectID != "" {
 				params.Set("project_id", projectID)
 			}
-if status != "" {
-	params.Set("status", status)
-}
+			if status != "" {
+				params.Set("status", status)
+			}
 			if beadType != "" {
 				params.Set("type", beadType)
 			}
