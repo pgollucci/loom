@@ -343,9 +343,12 @@ func newBeadListCommand() *cobra.Command {
 			if projectID != "" {
 				params.Set("project_id", projectID)
 			}
-			if status != "" {
-				params.Set("status", status)
-			}
+if status != "" {
+	params.Set("status", status)
+}
+if priority != "" {
+	params.Set("priority", priority)
+}
 			if beadType != "" {
 				params.Set("type", beadType)
 			}
