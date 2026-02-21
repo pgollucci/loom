@@ -489,57 +489,6 @@ func TestCacheToCacheConfig(t *testing.T) {
 }
 
 // ============================================================
-// Routing policies handler tests
-// ============================================================
-
-func TestHandleGetRoutingPolicies_GET(t *testing.T) {
-	s := newTestServer()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/routing/policies", nil)
-	w := httptest.NewRecorder()
-	s.handleGetRoutingPolicies(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-	var policies []map[string]string
-	if err := json.Unmarshal(w.Body.Bytes(), &policies); err != nil {
-		t.Fatal(err)
-	}
-	if len(policies) != 4 {
-		t.Errorf("expected 4 policies, got %d", len(policies))
-	}
-}
-
-func TestHandleGetRoutingPolicies_MethodNotAllowed(t *testing.T) {
-	s := newTestServer()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/routing/policies", nil)
-	w := httptest.NewRecorder()
-	s.handleGetRoutingPolicies(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", w.Code)
-	}
-}
-
-func TestHandleSelectProvider_MethodNotAllowed(t *testing.T) {
-	s := newTestServer()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/routing/select", nil)
-	w := httptest.NewRecorder()
-	s.handleSelectProvider(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", w.Code)
-	}
-}
-
-func TestHandleSelectProvider_InvalidBody(t *testing.T) {
-	s := newTestServer()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/routing/select", strings.NewReader("bad"))
-	w := httptest.NewRecorder()
-	s.handleSelectProvider(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", w.Code)
-	}
-}
-
-// ============================================================
 // Middleware tests
 // ============================================================
 

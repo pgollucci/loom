@@ -248,8 +248,6 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Providers
 	mux.HandleFunc("/api/v1/providers", s.handleProviders)
 	mux.HandleFunc("/api/v1/providers/", s.handleProvider)
-	mux.HandleFunc("/api/v1/routing/select", s.handleSelectProvider)
-	mux.HandleFunc("/api/v1/routing/policies", s.handleGetRoutingPolicies)
 
 	// Models
 	mux.HandleFunc("/api/v1/models/recommended", s.handleRecommendedModels)
