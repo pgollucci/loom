@@ -1,0 +1,2 @@
+[core]
+    askpass = /bin/true
