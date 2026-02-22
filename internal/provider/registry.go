@@ -86,6 +86,15 @@ func (r *Registry) Upsert(config *ProviderConfig) error {
 		return fmt.Errorf("unsupported provider type: %s", config.Type)
 	}
 
+	// Update existing RegisteredProvider in-place so that workers holding
+	// a pointer to it see the new Config/Protocol immediately.  Replacing
+	// the struct would leave stale pointers in long-lived workers (bd-105).
+	if existing, ok := r.providers[config.ID]; ok {
+		existing.Config = config
+		existing.Protocol = protocol
+		return nil
+	}
+
 	r.providers[config.ID] = &RegisteredProvider{Config: config, Protocol: protocol}
 	return nil
 }
