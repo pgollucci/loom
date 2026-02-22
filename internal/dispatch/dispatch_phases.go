@@ -109,6 +109,15 @@ func beadSkipCheck(b *models.Bead, maxHops int) (skip bool, reason string) {
 		return true, "decision_type"
 	}
 
+	if b.Context != nil {
+		switch b.Context["terminal_reason"] {
+		case "parse_failures", "progress_stagnant", "inner_loop", "max_iterations":
+			return true, "terminal_" + b.Context["terminal_reason"]
+		case "completed":
+			return true, "terminal_completed"
+		}
+	}
+
 	// Skip beads that recently failed (cooldown)
 	if b.Context != nil && b.Context["last_failed_at"] != "" {
 		if lastFailed, err := time.Parse(time.RFC3339, b.Context["last_failed_at"]); err == nil {
@@ -399,8 +408,12 @@ func (d *Dispatcher) selectCandidate(
 				skippedReasons["dead_agent_cleared"]++
 			}
 		} else if skipAssigned {
-			// Assigned agent is busy — fall through to find an alternative idle agent
-			// instead of blocking the bead indefinitely.
+			if b.Status == models.BeadStatusInProgress {
+				skippedReasons["in_progress_agent_busy"]++
+				continue
+			}
+			// Assigned agent is busy but bead is open — fall through to find
+			// an alternative idle agent.
 		} else if matched != nil {
 			return candidateSelection{Bead: b, Agent: matched, SkippedReasons: skippedReasons}
 		}
@@ -496,8 +509,8 @@ func (d *Dispatcher) claimAndAssign(candidate *models.Bead, ag *models.Agent, se
 				candidate.ID, candidate.AssignedTo, ag.ID)
 			return fmt.Errorf("bead already in progress by %s", candidate.AssignedTo)
 		}
-		// Original agent is gone — re-claim for the new agent.
-		if err := d.beads.ClaimBead(candidate.ID, ag.ID); err != nil {
+		// Original agent is gone — forcibly reassign to the new agent.
+		if err := d.beads.ReassignBead(candidate.ID, ag.ID, candidate.AssignedTo); err != nil {
 			return fmt.Errorf("re-claim bead: %w", err)
 		}
 		log.Printf("[Dispatcher] Re-claimed bead %s from stale agent %s → %s",

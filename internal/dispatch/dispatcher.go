@@ -531,7 +531,7 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 
 	if err := d.claimAndAssign(candidate, ag, selectedProjectID); err != nil {
 		releaseInflight()
-		d.setStatus(StatusParked, "failed to claim bead")
+		log.Printf("[Dispatcher] Skipping bead %s (claim failed for agent %s, project=%s): %v", candidate.ID, ag.ID, selectedProjectID, err)
 		return &DispatchResult{Dispatched: false, ProjectID: projectID}, nil
 	}
 
@@ -572,7 +572,10 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 	// If a remote agent swarm member is registered for this project, prefer routing
 	// via NATS task publish. Skip control-plane members — they handle routing but
 	// don't subscribe to agent task NATS subjects.
-	if d.swarmMgr != nil && d.messageBus != nil {
+	//
+	// Swarm NATS routing disabled: project containers hit "consumer already bound"
+	// on JetStream subscribe. In-process execution used until NATS consumer isolation fixed.
+	if false && d.swarmMgr != nil && d.messageBus != nil {
 		members := d.swarmMgr.GetMembersByProject(selectedProjectID)
 		for _, m := range members {
 			if m.ServiceType == "control-plane" {

@@ -498,6 +498,40 @@ func (m *Manager) ClaimBead(beadID, agentID string) error {
 	return nil
 }
 
+// ReassignBead forcibly reassigns a bead to a new agent, overriding any
+// existing assignment. The caller (dispatcher) must have already validated
+// that the previous agent is no longer actively working on this bead.
+func (m *Manager) ReassignBead(beadID, newAgentID, previousAgentID string) error {
+	m.mu.Lock()
+
+	bead, ok := m.beads[beadID]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("bead not found: %s", beadID)
+	}
+
+	oldAgent := bead.AssignedTo
+	bead.AssignedTo = newAgentID
+	bead.Status = models.BeadStatusInProgress
+	bead.UpdatedAt = time.Now()
+
+	observability.Info("bead.reassign", map[string]interface{}{
+		"bead_id":      bead.ID,
+		"project_id":   bead.ProjectID,
+		"old_agent_id": oldAgent,
+		"new_agent_id": newAgentID,
+		"expected_old": previousAgentID,
+	})
+
+	m.mu.Unlock()
+
+	if err := m.SaveBeadToFilesystem(bead, m.GetProjectBeadsPath(bead.ProjectID)); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save bead to filesystem: %v\n", err)
+	}
+
+	return nil
+}
+
 // AddDependency adds a dependency between beads
 func (m *Manager) AddDependency(childID, parentID, relationship string) error {
 	m.mu.Lock()
