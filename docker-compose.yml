@@ -233,7 +233,10 @@ services:
       - POSTGRES_DB=loom
       - CONNECTORS_SERVICE_ADDR=connectors-service:50051
       - OTEL_ENDPOINT=otel-collector:4317
-      - TOKENHUB_URL=http://tokenhub:8080
+      # LOOM_PROVIDER_URL: any OpenAI-compatible endpoint works here
+      # (embedded TokenHub, standalone TokenHub, direct OpenAI, vLLM, etc.)
+      - LOOM_PROVIDER_URL=http://tokenhub:8080
+      - LOOM_PROVIDER_API_KEY=${LOOM_PROVIDER_API_KEY}
       - TOKENHUB_ADMIN_TOKEN=${TOKENHUB_ADMIN_TOKEN}
     networks:
       - loom-network

@@ -87,3 +87,19 @@ web_ui:
   enabled: true
   static_path: ./web/static
   refresh_interval: 5  # seconds
+
+# LLM Provider
+# I register providers via the REST API (POST /api/v1/providers) or via bootstrap.local.
+# Any OpenAI-compatible endpoint works: TokenHub, OpenAI, Anthropic, vLLM, etc.
+#
+# Example: embedded TokenHub (default when using 'make start')
+#   endpoint: http://localhost:8090/v1
+#   api_key:  set via LOOM_PROVIDER_API_KEY in .env
+#
+# Example: direct OpenAI
+#   endpoint: https://api.openai.com/v1
+#   api_key:  sk-...
+#
+# Example: local vLLM server
+#   endpoint: http://my-gpu-server:8000/v1
+#   api_key:  (empty string or any value)

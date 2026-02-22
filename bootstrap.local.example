@@ -5,22 +5,44 @@
 # Runs automatically after: make start, make restart
 # Or manually via: make bootstrap, ./bootstrap.local
 #
-# Architecture: Loom -> TokenHub -> LLM Providers
-# TokenHub handles routing, health tracking, failover, and scoring.
-# Loom registers TokenHub as its single provider endpoint.
+# Architecture: Loom -> any OpenAI-compatible endpoint -> LLM
+# I work with any provider that speaks the OpenAI chat-completions API.
+# TokenHub is the default embedded option, but you can point me directly
+# at OpenAI, Anthropic, vLLM, or anything else that speaks the same protocol.
 #
-# Prerequisites:
+# Prerequisites (only if using TokenHub):
 #   - tokenhubctl binary on $PATH or at ../tokenhub/bin/tokenhubctl
 #     Build it: cd ../tokenhub && go build -o bin/tokenhubctl ./cmd/tokenhubctl
 
 set -euo pipefail
 
 LOOM_URL="${LOOM_URL:-http://localhost:8080}"
-export TOKENHUB_URL="${TOKENHUB_URL:-http://localhost:8090}"
+
+# Top-level provider vars — these are what I care about.
+LOOM_PROVIDER_URL="${LOOM_PROVIDER_URL:-http://localhost:8090}"
+LOOM_PROVIDER_API_KEY="${LOOM_PROVIDER_API_KEY:-}"
+
+# TokenHub-specific vars — only needed if using embedded/standalone TokenHub.
+export TOKENHUB_URL="${TOKENHUB_URL:-$LOOM_PROVIDER_URL}"
 export TOKENHUB_ADMIN_TOKEN="${TOKENHUB_ADMIN_TOKEN:-}"
 TOKENHUBCTL="${TOKENHUBCTL:-tokenhubctl}"
 
-# === Phase 1: Register your LLM models with TokenHub ===
+# === Phase 1: Configure your LLM provider ===
+#
+# Option A — Direct OpenAI:
+#   LOOM_PROVIDER_URL="https://api.openai.com/v1"
+#   LOOM_PROVIDER_API_KEY="sk-..."
+#
+# Option B — Direct vLLM server:
+#   LOOM_PROVIDER_URL="http://my-gpu-server:8000/v1"
+#   LOOM_PROVIDER_API_KEY=""  # vLLM typically doesn't require a key
+#
+# Option C — TokenHub (default when using 'make start'):
+#   LOOM_PROVIDER_URL="http://localhost:8090"
+#   LOOM_PROVIDER_API_KEY="<your-tokenhub-api-key>"
+#   (Continue to Phase 2 to register models and create an API key in TokenHub.)
+
+# === Phase 2: Register models with TokenHub (optional — only if using TokenHub) ===
 
 # Local vLLM (provider configured via TOKENHUB_VLLM_ENDPOINTS env var in docker-compose):
 # $TOKENHUBCTL model add '{"id":"Qwen/Qwen2.5-Coder-32B-Instruct","provider_id":"vllm","weight":7,"max_context_tokens":32000,"enabled":true}'
@@ -29,20 +51,19 @@ TOKENHUBCTL="${TOKENHUBCTL:-tokenhubctl}"
 # $TOKENHUBCTL model add '{"id":"gpt-4o","provider_id":"openai","weight":8,"max_context_tokens":128000,"input_per_1k":0.0025,"output_per_1k":0.01,"enabled":true}'
 # $TOKENHUBCTL model add '{"id":"claude-opus-4","provider_id":"anthropic","weight":10,"max_context_tokens":200000,"input_per_1k":0.015,"output_per_1k":0.075,"enabled":true}'
 
-# === Phase 2: Create a TokenHub API key for Loom ===
-
+# Create a TokenHub API key (only if using TokenHub):
 # KEY_OUTPUT=$($TOKENHUBCTL apikey create '{"name":"loom-agents","scopes":"[\"chat\",\"plan\"]","monthly_budget_usd":50.0}')
-# API_KEY=$(echo "$KEY_OUTPUT" | grep "Key:" | sed 's/.*Key: //')
+# LOOM_PROVIDER_API_KEY=$(echo "$KEY_OUTPUT" | grep "Key:" | sed 's/.*Key: //')
 
-# === Phase 3: Register TokenHub as Loom's single provider ===
+# === Phase 3: Register the provider with Loom ===
 
 # curl -s -X POST "$LOOM_URL/api/v1/providers" \
 #     -H "Content-Type: application/json" \
 #     -d "{
-#         \"id\": \"tokenhub\",
-#         \"name\": \"TokenHub\",
+#         \"id\": \"default\",
+#         \"name\": \"LLM Provider\",
 #         \"type\": \"openai\",
-#         \"endpoint\": \"http://tokenhub:8080/v1\",
+#         \"endpoint\": \"${LOOM_PROVIDER_URL}/v1\",
 #         \"model\": \"Qwen/Qwen2.5-Coder-32B-Instruct\",
-#         \"api_key\": \"$API_KEY\"
+#         \"api_key\": \"$LOOM_PROVIDER_API_KEY\"
 #     }"

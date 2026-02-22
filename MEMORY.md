@@ -18,7 +18,7 @@
 - Multi-agent orchestration with specialized personas (PM, EM, QA, DevOps, etc.)
 - Temporal-based durable workflow engine with human-in-the-loop approval gates
 - Git-backed issue tracking ("beads") that survive context compaction
-- Single-provider LLM routing through TokenHub (all provider intelligence lives in TokenHub)
+- LLM routing through any OpenAI-compatible provider (TokenHub is the default embedded option)
 - Self-maintaining: Loom works on its own codebase as a perpetual project
 - Real-time event streaming (SSE) for monitoring and coordination
 - OpenTelemetry observability (Prometheus, Jaeger, Grafana, Loki)
@@ -70,7 +70,7 @@
 
 1. User files a bead (issue) via UI or `loomctl`
 2. Control plane creates bead, starts Temporal workflow
-3. Dispatcher selects agent, assigns the sole active provider (TokenHub)
+3. Dispatcher selects agent, assigns the active provider (typically TokenHub)
 4. Agent receives task, makes LLM calls through TokenHub's OpenAI-compatible API
 5. TokenHub handles all provider intelligence internally — model selection, failover, health tracking
 6. Agent processes response, commits code, updates bead status
@@ -311,7 +311,7 @@ projects:
 | `CONFIG_PATH` | `/app/config.yaml` | Config file path |
 | `DB_TYPE` | `postgres` | Database type |
 | `POSTGRES_HOST` | `pgbouncer` | Database host |
-| `TOKENHUB_URL` | `http://tokenhub:8080` | TokenHub proxy address |
+| `LOOM_PROVIDER_URL` | `http://tokenhub:8080` | LLM provider endpoint (any OpenAI-compatible) |
 | `OTEL_ENDPOINT` | `otel-collector:4317` | Telemetry endpoint |
 | `GITHUB_TOKEN` | — | GitHub API access |
 | `LOOM_PASSWORD` | — | Web UI admin password |
@@ -400,19 +400,19 @@ I route all LLM requests through TokenHub, a separate service that handles all p
 - Health tracking and degradation states
 - API key management and budget enforcement
 
-**Architecture:** Loom has one provider ("tokenhub") pointing at `http://tokenhub:8080/v1`. TokenHub has multiple adapters (vllm, nvidia-cloud-gpt, nvidia-cloud-claude) and routes to the best available one. All scoring, complexity estimation, GPU selection, and routing logic that previously lived in Loom has been removed — TokenHub owns all of it.
+**Architecture:** I register providers via `POST /api/v1/providers`. Any OpenAI-compatible endpoint works. The default setup uses TokenHub at `http://tokenhub:8080/v1`, which internally routes to multiple backends (vllm, nvidia-cloud-gpt, nvidia-cloud-claude). You can also point me directly at OpenAI, vLLM, or any other compatible endpoint. All scoring, complexity estimation, GPU selection, and routing logic that previously lived in Loom has been removed — TokenHub owns all of it when used.
 
-Loom's provider layer is now minimal:
-- A `ProviderRegistry` that tracks one active provider
+My provider layer is minimal:
+- A `ProviderRegistry` that tracks active providers
 - A `selectProviderForTask()` that returns the first active provider (no scoring, no round-robin)
-- A heartbeat workflow that probes TokenHub's `/v1/models` endpoint every 30 seconds
-- Bootstrap logic that registers TokenHub on first startup
+- A heartbeat workflow that probes the provider's `/v1/models` endpoint every 30 seconds
+- Bootstrap logic that registers the default provider on first startup
 
 **Provider registration flow:**
-1. TokenHub adapters registered via `TOKENHUB_EXTRA_PROVIDERS` env var (JSON array)
-2. Models registered via TokenHub admin API (`POST /admin/v1/models`)
-3. API key created via TokenHub admin API (`POST /admin/v1/apikeys`)
-4. TokenHub registered in Loom at startup via `bootstrapProviders()` in `internal/loom/loom.go`
+1. Set `LOOM_PROVIDER_URL` and `LOOM_PROVIDER_API_KEY` in `.env` (or pass directly)
+2. For TokenHub: register adapters via `TOKENHUB_EXTRA_PROVIDERS` env var (JSON array)
+3. For TokenHub: register models via TokenHub admin API (`POST /admin/v1/models`)
+4. Provider registered in Loom at startup via `bootstrapProviders()` in `internal/loom/loom.go`
 
 ### What Was Removed
 

@@ -5,7 +5,7 @@ Get Loom running and your first agents working in under 10 minutes.
 ## Prerequisites
 
 - Docker and Docker Compose
-- A running [TokenHub](https://github.com/jordanhubbard/tokenhub) instance with at least one LLM provider configured
+- An LLM provider that speaks the OpenAI-compatible API (TokenHub, OpenAI, vLLM, etc.)
 
 ## 1. Start Loom
 
@@ -22,13 +22,18 @@ Wait about 30 seconds for everything to initialize, then open:
 - **TokenHub**: http://localhost:8090
 - **Temporal UI**: http://localhost:8088
 
-## 2. Connect to TokenHub
+## 2. Connect an LLM Provider
 
-I don't manage LLM providers directly. I delegate all model routing, failover, and provider management to [TokenHub](https://github.com/jordanhubbard/tokenhub) -- an intelligent LLM proxy that speaks the OpenAI-compatible API.
+I work with any endpoint that speaks the OpenAI chat-completions API. The bundled [TokenHub](https://github.com/jordanhubbard/tokenhub) instance is the default, but it's not the only option.
 
-You configure your physical providers (Anthropic, OpenAI, local vLLM servers, etc.) in TokenHub during its onboarding. Then you point me at TokenHub and I treat it as my sole provider.
+**Provider options:**
+- **Embedded TokenHub** (default with `make start`) — multi-provider routing, failover, and budget tracking
+- **Standalone TokenHub** — same as above, running on a separate host
+- **OpenAI directly** — `https://api.openai.com/v1` with your `sk-...` key
+- **Anthropic via OpenAI-compat** — if using an adapter that exposes the OpenAI API
+- **Local vLLM server** — `http://your-gpu-host:8000/v1`
 
-### Register TokenHub
+### Register Your Provider
 
 Run the bootstrap script, or register manually:
 
@@ -36,20 +41,20 @@ Run the bootstrap script, or register manually:
 curl -X POST http://localhost:8080/api/v1/providers \
     -H 'Content-Type: application/json' \
     -d '{
-        "id": "tokenhub",
-        "name": "TokenHub",
+        "id": "default",
+        "name": "LLM Provider",
         "type": "openai",
-        "endpoint": "http://localhost:8090/v1",
+        "endpoint": "'"$LOOM_PROVIDER_URL"'/v1",
         "model": "anthropic/claude-sonnet-4-20250514",
-        "api_key": "your-tokenhub-api-key"
+        "api_key": "'"$LOOM_PROVIDER_API_KEY"'"
     }'
 ```
 
-Replace the endpoint, model, and API key with your TokenHub instance's values. For repeatable setup, see `bootstrap.local.example` or the authoritative sample in the [TokenHub repo](https://github.com/jordanhubbard/tokenhub/blob/main/bootstrap.local.example).
+Set `LOOM_PROVIDER_URL` and `LOOM_PROVIDER_API_KEY` in your `.env`, or substitute the values directly. For repeatable setup, see `bootstrap.local.example`.
 
 ### Verify Connectivity
 
-Within 30 seconds, my heartbeat will check TokenHub. Verify it's healthy:
+Within 30 seconds, my heartbeat will check the provider. Verify it's healthy:
 
 ```bash
 curl -s http://localhost:8080/api/v1/providers | jq '.[].status'
