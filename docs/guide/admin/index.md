@@ -507,6 +507,19 @@ The Temporal UI runs on port **8088** and provides visibility into workflow exec
 
 Access at: `http://localhost:8088`
 
+### TokenHub UI
+
+TokenHub runs on port **8090** and shows LLM token flow:
+
+- Active providers and health status
+- Token usage and cost tracking
+- Request routing decisions and latency
+- API key management
+
+Access at: `http://localhost:8090`
+
+All observability endpoints (Loom, TokenHub, Grafana, Jaeger, Prometheus, Temporal) are also accessible from the eye icon menu in the Loom UI header.
+
 ---
 
 ## Backup and Recovery

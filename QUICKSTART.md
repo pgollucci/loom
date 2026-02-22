@@ -19,6 +19,7 @@ This builds the container and starts the full stack (Loom, Temporal, PostgreSQL)
 Wait about 30 seconds for everything to initialize, then open:
 
 - **Loom UI**: http://localhost:8080
+- **TokenHub**: http://localhost:8090
 - **Temporal UI**: http://localhost:8088
 
 ## 2. Connect to TokenHub

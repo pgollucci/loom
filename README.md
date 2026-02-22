@@ -40,6 +40,7 @@ New to Loom? See **[QUICKSTART.md](QUICKSTART.md)** to get running in 10 minutes
 Once Loom is running, access the various interfaces:
 
 - **Loom Main UI**: http://localhost:8080 — Main dashboard, beads, agents, projects
+- **TokenHub**: http://localhost:8090 — LLM proxy dashboard, token flow monitoring, provider management
 - **Grafana Dashboards**: http://localhost:3000 — Metrics visualization and monitoring (admin/admin)
 - **Prometheus**: http://localhost:9090 — Metrics queries and alerts
 - **Jaeger Tracing**: http://localhost:16686 — Distributed tracing and performance analysis

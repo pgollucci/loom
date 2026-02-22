@@ -1,6 +1,6 @@
 # Observability
 
-Loom includes a complete observability stack for metrics, tracing, and logging.
+Loom includes a complete observability stack for metrics, tracing, logging, and token flow monitoring.
 
 ## Architecture
 
@@ -17,6 +17,41 @@ flowchart LR
     K[Loki] --> G
     PT[Promtail] -->|logs| K
     PT -->|scrape| Docker
+    L -->|LLM requests| TH[TokenHub]
+```
+
+## Service Endpoints
+
+| Service | URL | Purpose |
+|---|---|---|
+| Loom UI | `http://localhost:8080` | Main dashboard |
+| TokenHub | `http://localhost:8090` | LLM proxy -- token flow, routing, provider health |
+| Grafana | `http://localhost:3000` | Dashboards (admin/admin) |
+| Jaeger | `http://localhost:16686` | Distributed tracing |
+| Prometheus | `http://localhost:9090` | Metrics queries and alerts |
+| Temporal UI | `http://localhost:8088` | Workflow monitoring |
+
+All of these are accessible from the observability menu (eye icon) in the Loom UI header.
+
+## TokenHub (LLM Proxy)
+
+Access TokenHub at `http://localhost:8090`.
+
+TokenHub is my sole LLM provider -- it handles model routing, failover, and provider management. Its UI shows:
+
+- Active providers and their health status
+- Token usage and cost tracking
+- Request routing decisions and latency
+- API key management
+
+Use `tokenhubctl` for admin operations:
+
+```bash
+export TOKENHUB_URL=http://localhost:8090
+tokenhubctl status           # Overall health
+tokenhubctl providers list   # Physical LLM providers
+tokenhubctl stats            # Usage statistics
+tokenhubctl logs             # Recent request logs
 ```
 
 ## Metrics (Prometheus)
