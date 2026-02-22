@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-02-21
+
+### Added
+- config: move tokenhub secrets to ~/.loom/config.env, add compose profile
+- add TokenHub to observability UI and documentation
+
+### Changed
+- remove provider UI from web dashboard
+- simplify temporal heartbeat and remove loomctl provider commands
+- strip multi-provider logic from loom core and database
+- simplify dispatcher to pick first active provider
+- simplify provider registry and model for TokenHub-only
+- delete scoring, complexity, GPU selection, and Ollama provider code
+- delete routing package and remove API endpoints
+
+### Fixed
+- prevent runaway bead dispatches with tighter inflight guard and hard upper bound (bd-106)
+- update provider in-place in registry to prevent stale worker pointers (bd-105)
+- use chat completion probe for provider health check and preserve API key on PUT
+- align loop detector tests with read-only progress semantics
+
+### Other
+- config: rename TOKENHUB_URL/API_KEY to generic LOOM_PROVIDER_* names
+- tokenhub: enable vault, drop hardcoded sparky endpoints
+
 ## [0.1.3] - 2026-02-21
 
 ### Added
