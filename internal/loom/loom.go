@@ -2469,6 +2469,15 @@ func (a *Loom) UpdateProvider(ctx context.Context, p *internalmodels.Provider) (
 		return nil, err
 	}
 
+	// The DB preserves the existing api_key when the incoming value is empty
+	// (see UpsertProvider SQL). Read back the persisted row so the registry
+	// and the return value both carry the correct key.
+	if p.APIKey == "" {
+		if dbProvider, err := a.database.GetProvider(p.ID); err == nil && dbProvider != nil {
+			p.APIKey = dbProvider.APIKey
+		}
+	}
+
 	_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
 		ID:                     p.ID,
 		Name:                   p.Name,
@@ -3669,27 +3678,39 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 func (a *Loom) checkProviderHealthAndActivate(providerID string) {
 	time.Sleep(300 * time.Millisecond)
 	log.Printf("Checking health for provider: %s", providerID)
-	models, err := a.GetProviderModels(context.Background(), providerID)
+
+	// Use a lightweight chat completion as the health probe. This verifies
+	// end-to-end connectivity, authentication, and model availability — all
+	// better signals than the /v1/models endpoint, which some proxies
+	// (e.g. TokenHub) restrict behind a different scope.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	registered, err := a.providerRegistry.Get(providerID)
 	if err != nil {
 		log.Printf("Provider %s health check failed: %v", providerID, err)
 		return
 	}
-	if len(models) == 0 {
-		log.Printf("Provider %s returned no models", providerID)
+	_, err = registered.Protocol.CreateChatCompletion(ctx, &provider.ChatCompletionRequest{
+		Model:     registered.Config.SelectedModel,
+		Messages:  []provider.ChatMessage{{Role: "user", Content: "ping"}},
+		MaxTokens: 1,
+	})
+	if err != nil {
+		log.Printf("Provider %s health probe failed: %v", providerID, err)
 		return
 	}
 
-	log.Printf("Provider %s is healthy, activating (models: %d)", providerID, len(models))
-	// Update provider status to active in both database and registry
+	log.Printf("Provider %s is healthy, activating", providerID)
 	if dbProvider, err := a.database.GetProvider(providerID); err == nil && dbProvider != nil {
 		dbProvider.Status = "active"
 		_ = a.database.UpsertProvider(dbProvider)
-		// Sync to registry so UI sees the updated status
 		_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
 			ID:                     dbProvider.ID,
 			Name:                   dbProvider.Name,
 			Type:                   dbProvider.Type,
 			Endpoint:               dbProvider.Endpoint,
+			APIKey:                 dbProvider.APIKey,
 			Model:                  dbProvider.SelectedModel,
 			ConfiguredModel:        dbProvider.ConfiguredModel,
 			SelectedModel:          dbProvider.SelectedModel,
@@ -3700,7 +3721,6 @@ func (a *Loom) checkProviderHealthAndActivate(providerID string) {
 		log.Printf("Provider %s activated successfully", providerID)
 	}
 
-	// Attach newly active provider to paused agents (best-effort)
 	a.attachProviderToPausedAgents(context.Background(), providerID)
 }
 
