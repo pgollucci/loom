@@ -579,65 +579,9 @@ func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*Dispa
 	d.setStatus(StatusActive, fmt.Sprintf("dispatching %s", candidate.ID))
 	dispatchResult := &DispatchResult{Dispatched: true, ProjectID: selectedProjectID, BeadID: candidate.ID, AgentID: ag.ID, ProviderID: ag.ProviderID}
 
-	if d.useNATSDispatch && d.messageBus != nil {
-		log.Printf("[Dispatcher] NATS-only dispatch for bead %s — skipping in-process execution", candidate.ID)
-		releaseInflight()
-		return dispatchResult, nil
-	}
-
-	// If a remote agent swarm member is registered for this project, prefer routing
-	// via NATS task publish. Skip control-plane members — they handle routing but
-	// don't subscribe to agent task NATS subjects.
-	//
-	// Consumer isolation fixed: each agent now uses a unique ConsumerPrefix
-	// (ServiceID-scoped) preventing the "consumer already bound" JetStream error.
-	if d.swarmMgr != nil && d.messageBus != nil {
-		members := d.swarmMgr.GetMembersByProject(selectedProjectID)
-		for _, m := range members {
-			if m.ServiceType == "control-plane" {
-				continue // control-plane doesn't process agent tasks via NATS
-			}
-			if m.Status == "online" || m.Status == "" {
-				// Build memory context summary for injection into agent prompt.
-				var memCtx string
-				if d.memoryMgr != nil {
-					if summary, err := d.memoryMgr.BuildContextSummary(ctx, selectedProjectID); err == nil {
-						memCtx = summary
-					}
-				}
-				// Publish role-targeted task so the correct agent role picks it up.
-				taskMsg := messages.TaskAssigned(
-					selectedProjectID,
-					candidate.ID,
-					ag.ID,
-					messages.TaskData{
-						Title:         candidate.Title,
-						Description:   candidate.Description,
-						Type:          "bead",
-						MemoryContext: memCtx,
-						Context: map[string]interface{}{
-							"bead_id": candidate.ID,
-							"role":    ag.Role,
-						},
-					},
-					task.ID, // correlation ID
-				)
-				if err := d.messageBus.PublishTaskForRole(ctx, selectedProjectID, ag.Role, taskMsg); err != nil {
-					log.Printf("[Dispatcher] Swarm-based NATS dispatch failed for bead %s: %v; falling through to in-process", candidate.ID, err)
-				} else {
-					log.Printf("[Dispatcher] Routed bead %s to swarm member %s (role=%s)", candidate.ID, m.ServiceID, ag.Role)
-					// NATS publish succeeded. The remote container handles execution.
-					// Release the inflight entry so the next dispatch cycle can
-					// re-dispatch if the container doesn't process it.
-					d.inflightMu.Lock()
-					delete(d.inflight, candidate.ID)
-					d.inflightMu.Unlock()
-					return dispatchResult, nil
-				}
-				break
-			}
-		}
-	}
+	// NATS-only and swarm routing removed: the TaskExecutor handles all bead
+	// execution directly via worker.ExecuteTaskWithLoop. The dispatcher is kept
+	// for legacy compatibility but always falls through to in-process execution.
 
 	go func() {
 		defer func() {

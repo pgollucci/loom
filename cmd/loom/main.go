@@ -130,9 +130,10 @@ func main() {
 
 	go arb.StartMaintenanceLoop(runCtx)
 
-	// Ralph dispatch loop: drain all dispatchable work every 10 seconds.
-	log.Printf("Starting dispatch loop goroutine")
-	go arb.StartDispatchLoop(runCtx, 10*time.Second)
+	// Task executor: direct bead-claim → ExecuteTaskWithLoop loop per project.
+	// Bypasses Temporal, NATS, and the WorkerPool for reliable execution.
+	log.Printf("Starting task executor")
+	go arb.StartTaskExecutor(runCtx)
 
 	// Self-audit loop: periodically run build/test/lint and file beads for failures.
 	// Disabled by default via env var. Set SELF_AUDIT_INTERVAL_MINUTES to enable.

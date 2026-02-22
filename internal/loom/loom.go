@@ -26,6 +26,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/dispatch"
 	"github.com/jordanhubbard/loom/internal/executor"
 	"github.com/jordanhubbard/loom/internal/files"
+	"github.com/jordanhubbard/loom/internal/taskexecutor"
 	"github.com/jordanhubbard/loom/internal/gitops"
 	"github.com/jordanhubbard/loom/internal/keymanager"
 	"github.com/jordanhubbard/loom/internal/logging"
@@ -2909,19 +2910,8 @@ func (a *Loom) CreateBead(title, description string, priority models.BeadPriorit
 		return nil, err
 	}
 
-	// Auto-assign to default triage agent (CTO > Engineering Manager > any)
-	if bead.AssignedTo == "" {
-		if defaultAgent := a.findDefaultAssignee(projectID); defaultAgent != "" {
-			bead.AssignedTo = defaultAgent
-			if updateErr := a.beadsManager.UpdateBead(bead.ID, map[string]interface{}{
-				"assigned_to": defaultAgent,
-			}); updateErr != nil {
-				log.Printf("[Loom] Warning: failed to auto-assign bead %s to %s: %v", bead.ID, defaultAgent, updateErr)
-			} else {
-				log.Printf("[Loom] Auto-assigned new bead %s to default agent %s", bead.ID, defaultAgent)
-			}
-		}
-	}
+	// Auto-assignment removed: TaskExecutor claims beads directly via ClaimBead.
+	// Pre-assigning a bead prevents the executor from claiming it.
 
 	if a.eventBus != nil {
 		_ = a.eventBus.PublishBeadEvent(eventbus.EventTypeBeadCreated, bead.ID, projectID, map[string]interface{}{
@@ -3696,6 +3686,62 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 					break
 				}
 				dispatched++
+			}
+		}
+	}
+}
+
+// StartTaskExecutor starts the direct bead execution engine for all registered projects.
+// It creates a taskexecutor.Executor and launches worker goroutines per project.
+// Call this instead of StartDispatchLoop to bypass Temporal/NATS/WorkerPool overhead.
+func (a *Loom) StartTaskExecutor(ctx context.Context) {
+	exec := taskexecutor.New(
+		a.providerRegistry,
+		a.beadsManager,
+		a.actionRouter,
+		a.projectManager,
+		a.database,
+	)
+
+	// Wire in lessons provider if database is available
+	if a.database != nil {
+		lp := dispatch.NewLessonsProvider(a.database)
+		if lp != nil {
+			exec.SetLessonsProvider(lp)
+		}
+	}
+
+	// Start worker goroutines for all currently registered projects
+	for _, proj := range a.projectManager.ListProjects() {
+		if proj == nil || proj.ID == "" {
+			continue
+		}
+		exec.Start(ctx, proj.ID)
+	}
+
+	// Watch for newly registered projects and start the executor for them
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	started := make(map[string]struct{})
+	for _, proj := range a.projectManager.ListProjects() {
+		if proj != nil && proj.ID != "" {
+			started[proj.ID] = struct{}{}
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for _, proj := range a.projectManager.ListProjects() {
+				if proj == nil || proj.ID == "" {
+					continue
+				}
+				if _, ok := started[proj.ID]; !ok {
+					log.Printf("[TaskExecutor] Starting executor for new project %s", proj.ID)
+					exec.Start(ctx, proj.ID)
+					started[proj.ID] = struct{}{}
+				}
 			}
 		}
 	}
