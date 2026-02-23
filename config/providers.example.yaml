@@ -47,7 +47,7 @@ providers:
     endpoint: http://localhost:8000/v1
     api_key: ""
     model: meta-llama/Llama-2-70b-hf
-    enabled: false  # Disabled by default
+    enabled: true  # Disabled by default
 
   # Custom provider example
   - id: custom-provider

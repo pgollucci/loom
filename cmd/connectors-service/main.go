@@ -42,7 +42,7 @@ log.Info("Starting ConnectorsService", slog.String("port", port), slog.String("c
 
 	mgr := pkgconnectors.NewManager(configPath)
 	if err := mgr.LoadConfig(); err != nil {
-		log.Printf("[ConnectorsService] Warning: config load failed: %v", err)
+		log.Warn("Config load failed", slog.Error(err))
 	}
 
 	interval, err := time.ParseDuration(healthInterval)
@@ -53,7 +53,7 @@ log.Info("Starting ConnectorsService", slog.String("port", port), slog.String("c
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
-		log.Fatalf("[ConnectorsService] Failed to listen on port %s: %v", port, err)
+		log.Error("Failed to listen on port", slog.String("port", port), slog.Error(err))
 	}
 
 	grpcServer := grpc.NewServer()
@@ -75,9 +75,9 @@ log.Info("Starting ConnectorsService", slog.String("port", port), slog.String("c
 		mgr.Close()
 	}()
 
-	log.Printf("[ConnectorsService] Serving gRPC on :%s", port)
+	log.Info("Serving gRPC", slog.String("port", port))
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("[ConnectorsService] gRPC serve error: %v", err)
+		log.Error("gRPC serve error", slog.Error(err))
 	}
 }
 

@@ -87,7 +87,7 @@ func (s *Server) handlePersona(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		var agents interface{}
+		var agents []*models.Agent
 		if projectID := r.URL.Query().Get("project_id"); projectID != "" {
 			agents = s.app.GetAgentManager().ListAgentsByProject(projectID)
 		} else {

@@ -1,5 +1,5 @@
 [core]
-    askpass = /usr/X11R6/bin/ssh-askpass
+    askpass = /usr/bin/ssh-askpass
 [remote "origin"]
     url = git@github.com:jordanhubbard/loom.git
     fetch = +refs/heads/*:refs/remotes/origin/*
