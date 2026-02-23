@@ -23,7 +23,7 @@ description: |
 status: in_progress
 priority: 3
 projectid: loom
-assignedto: exec-loom-2c39815c
+assignedto: agent-1771534515-Product Manager (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -31,11 +31,20 @@ parent: ""
 children: []
 tags: []
 context:
+    agent_id: agent-1771534515-Product Manager (Default)
     close_reason: ""
     closed_reason: Fixed in commit d5d8785
-    dispatch_count: "0"
-    last_run_error: ""
+    conversation_session_id: e109b87e-f76c-4cbd-bb93-ed3897740e32
+    correlation_id: dispatch-loom-fix-validation-1771815481829969659
+    dispatch_count: "3"
+    dispatch_history: '["agent-1771534515-Engineering Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Product Manager (Default)"]'
+    failed_at: "2026-02-23T02:58:02Z"
+    last_error: command parameter required
+    last_run_at: "2026-02-23T02:58:21Z"
+    last_run_error: 'action loop failed: context canceled'
+    loop_detected: "false"
     loop_detection_reason: ""
+    provider_id: tokenhub
     ralph_blocked_at: ""
     ralph_blocked_reason: ""
     redispatch_requested: "true"
@@ -45,5 +54,5 @@ duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-15T08:10:00Z
-updatedat: 2026-02-23T02:57:38.27216505Z
+updatedat: 2026-02-23T02:58:30.012746361Z
 closedat: null
