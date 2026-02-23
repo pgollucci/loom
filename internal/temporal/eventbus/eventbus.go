@@ -20,6 +20,7 @@ const (
 	EventTypeAgentStatusChange  EventType = "agent.status_change"
 	EventTypeAgentHeartbeat     EventType = "agent.heartbeat"
 	EventTypeAgentCompleted     EventType = "agent.completed"
+	EventTypeAgentIteration     EventType = "agent.iteration"
 	EventTypeBeadCreated        EventType = "bead.created"
 	EventTypeBeadAssigned       EventType = "bead.assigned"
 	EventTypeBeadStatusChange   EventType = "bead.status_change"
