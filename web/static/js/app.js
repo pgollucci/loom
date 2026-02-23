@@ -2248,6 +2248,54 @@ async function sendReplQuery() {
     }
 }
 
+// Assign agent to project from CEO REPL
+async function assignAgentFromCeoRepl() {
+    const agentSelect = document.getElementById('ceo-repl-agent-select');
+    const projectSelect = document.getElementById('ceo-repl-project-select');
+    
+    const agentId = agentSelect ? agentSelect.value : '';
+    const projectId = projectSelect ? projectSelect.value : '';
+    
+    if (!agentId) {
+        showToast('Select an agent to assign.', 'error');
+        return;
+    }
+    
+    if (!projectId) {
+        showToast('Select a project to assign the agent to.', 'error');
+        return;
+    }
+    
+    const agent = (state.agents || []).find(a => a.id === agentId);
+    if (!agent) {
+        showToast('Agent not found.', 'error');
+        return;
+    }
+    
+    const project = (state.projects || []).find(p => p.id === projectId);
+    if (!project) {
+        showToast('Project not found.', 'error');
+        return;
+    }
+    
+    try {
+        // Update the agent's project_id
+        await apiCall(`/agents/${encodeURIComponent(agentId)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ project_id: projectId })
+        });
+        
+        const agentName = agent.name || agent.persona_name || agentId;
+        const projectName = project.name || projectId;
+        showToast(`Assigned ${agentName} to ${projectName}`, 'success');
+        
+        // Refresh data to reflect the change
+        loadAll();
+    } catch (error) {
+        // Error already handled by apiCall
+    }
+}
+
 // CEO REPL — supports "agent: message" routing and general queries
 async function sendCeoReplQuery() {
     const input = document.getElementById('ceo-repl-input');
