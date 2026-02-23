@@ -213,10 +213,14 @@ func (a *ProviderActivities) syncRegistry(record *internalmodels.Provider) {
 		selected = record.ConfiguredModel
 	}
 
-	// Retrieve API key so the Protocol gets constructed with auth
+	// Retrieve API key so the Protocol gets constructed with auth.
+	// Prefer KeyManager lookup (when KeyID is set), fall back to plaintext api_key in DB.
 	var apiKey string
 	if record.KeyID != "" && a.keys != nil {
 		apiKey, _ = a.keys.GetKey(record.KeyID)
+	}
+	if apiKey == "" {
+		apiKey = record.APIKey
 	}
 
 	cfg := &provider.ProviderConfig{
