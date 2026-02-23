@@ -294,6 +294,17 @@ const (
 )
 
 // handleTokenLimits truncates messages if they exceed model token limits
+
+// Constants for token limit calculations
+const (
+	CharToTokenRatio = 4 // Approximate characters per token
+	TokenLimitHeadroom = 0.8 // Headroom for token limit
+	DefaultTokenLimit = 32768 // Default token limit if not specified
+	TruncationFraction1 = 0.5 // Fraction for first truncation
+	TruncationFraction2 = 0.25 // Fraction for second truncation
+	TruncationFraction3 = 0.0 // Fraction for final truncation
+)
+
 func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.ChatMessage {
 	// Get model token limit (default to 100K if not specified)
 	modelLimit := w.getModelTokenLimit()

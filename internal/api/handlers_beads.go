@@ -69,7 +69,7 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 			Type        string            `json:"type"`
 			Title       string            `json:"title"`
 			Description string            `json:"description"`
-			Priority    *int              `json:"priority"`
+			Priority    *int              `json:"priority,omitempty"`
 			ProjectID   string            `json:"project_id"`
 			Parent      string            `json:"parent"`
 			Tags        []string          `json:"tags"`

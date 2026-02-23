@@ -35,7 +35,67 @@ All output is structured JSON by default (pipe through jq for human-readable for
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "Output format: json, table")
 
 	// Add subcommands
-	rootCmd.AddCommand(newBeadCommand())
+	rootCmd.AddCommand(newProjectCommand())
+
+func newProjectCommand() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "project",
+        Short: "Manage projects and their resources",
+    }
+    cmd.AddCommand(newProjectBeadCommand())
+    cmd.AddCommand(newProjectWorkflowCommand())
+    cmd.AddCommand(newProjectAgentCommand())
+    cmd.AddCommand(newProjectShowCommand())
+    return cmd
+}
+
+func newProjectBeadCommand() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "bead",
+        Short: "Manage beads within a project",
+    }
+    cmd.AddCommand(newBeadListCommand())
+    cmd.AddCommand(newBeadCreateCommand())
+    cmd.AddCommand(newBeadShowCommand())
+    cmd.AddCommand(newBeadClaimCommand())
+    cmd.AddCommand(newBeadPokeCommand())
+    cmd.AddCommand(newBeadUpdateCommand())
+    cmd.AddCommand(newBeadDeleteCommand())
+    return cmd
+}
+
+func newProjectWorkflowCommand() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "workflow",
+        Short: "Manage workflows within a project",
+    }
+    cmd.AddCommand(newWorkflowListCommand())
+    cmd.AddCommand(newWorkflowShowCommand())
+    cmd.AddCommand(newWorkflowStartCommand())
+    return cmd
+}
+
+func newProjectAgentCommand() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "agent",
+        Short: "Manage agents within a project",
+    }
+    cmd.AddCommand(newAgentListCommand())
+    cmd.AddCommand(newAgentShowCommand())
+    return cmd
+}
+
+func newProjectShowCommand() *cobra.Command {
+    cmd := &cobra.Command{
+        Use:   "show",
+        Short: "Show project dashboard",
+        RunE: func(cmd *cobra.Command, args []string) error {
+            // Implement dashboard logic here
+            return nil
+        },
+    }
+    return cmd
+}
 rootCmd.AddCommand(newContainerCommand())
 	rootCmd.AddCommand(newWorkflowCommand())
 	rootCmd.AddCommand(newAgentCommand())
