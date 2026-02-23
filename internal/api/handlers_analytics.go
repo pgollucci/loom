@@ -497,7 +497,7 @@ func (s *Server) handleGetChangeVelocity(w http.ResponseWriter, r *http.Request)
 
 	// Parse query parameters
 	projectID := r.URL.Query().Get("project_id")
-	if projectID == "" {
+	if projectID == "" { projectID = "loom" }
 		http.Error(w, "project_id is required", http.StatusBadRequest)
 		return
 	}
