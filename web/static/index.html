@@ -48,25 +48,6 @@
             </div>
         </div>
         <div id="system-status" class="system-status" aria-live="polite" aria-atomic="true"></div>
-        <nav aria-label="Primary">
-            <ul class="nav-list">
-                <li><a href="#project-viewer" aria-label="Jump to Project Viewer section">Project Viewer</a></li>
-                <li><a href="#kanban" aria-label="Jump to Kanban Board section">Kanban Board</a></li>
-                <li><a href="/static/workflows.html" aria-label="View Workflow System">Workflows</a></li>
-                <li><a href="/static/connectors.html" aria-label="View Connectors">Connectors</a></li>
-                <li><a href="#agents" aria-label="Jump to Agents section">Agents</a></li>
-                <li><a href="#decisions" aria-label="Jump to Decisions section">Decisions</a></li>
-                <li><a href="#ceo-dashboard" aria-label="Jump to CEO Dashboard section">CEO Dashboard</a></li>
-                <li><a href="#personas" aria-label="Jump to Personas section">Personas</a></li>
-                <li><a href="#projects" aria-label="Jump to Projects section">Projects</a></li>
-                <li><a href="#repl" aria-label="Jump to CEO REPL section">CEO REPL</a></li>
-                <li><a href="#streaming-test" aria-label="Jump to Streaming Test section">Streaming Test</a></li>
-                <li><a href="#users" aria-label="Jump to Users section">Users</a></li>
-                <li><a href="#analytics" aria-label="Jump to Analytics section">Analytics</a></li>
-                <li><a href="#motivations" aria-label="Jump to Motivations section">Motivations</a></li>
-                <li><a href="#diagrams" aria-label="Jump to Diagrams section">Diagrams</a></li>
-            </ul>
-        </nav>
     </header>
 
     <main id="main-content">
@@ -248,11 +229,19 @@
             <!-- CEO REPL -->
             <h3 style="margin-top: 2rem;">CEO REPL</h3>
             <div class="repl-container">
-                <div class="field" style="margin-bottom: 0.75rem;">
-                    <label for="ceo-repl-agent-select">Target Agent</label>
-                    <select id="ceo-repl-agent-select">
-                        <option value="">General Query (no specific agent)</option>
-                    </select>
+                <div style="display: flex; gap: 1rem; margin-bottom: 0.75rem;">
+                    <div class="field" style="flex: 1;">
+                        <label for="ceo-repl-agent-select">Target Agent</label>
+                        <select id="ceo-repl-agent-select">
+                            <option value="">General Query (no specific agent)</option>
+                        </select>
+                    </div>
+                    <div class="field" style="flex: 1;">
+                        <label for="ceo-repl-project-select">Assign to Project</label>
+                        <select id="ceo-repl-project-select">
+                            <option value="">Select a project...</option>
+                        </select>
+                    </div>
                 </div>
                 <label for="ceo-repl-input">Ask Loom</label>
                 <textarea id="ceo-repl-input" rows="4" placeholder="Ask a question or describe a task"></textarea>
@@ -261,7 +250,10 @@
                         <input type="checkbox" id="ceo-repl-stream-toggle" checked>
                         <label for="ceo-repl-stream-toggle" style="margin: 0; font-size: 0.9rem;">Enable streaming</label>
                     </div>
-                    <button type="button" id="ceo-repl-send">Send</button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button type="button" id="ceo-repl-assign" class="secondary" title="Assign selected agent to selected project">Assign Agent</button>
+                        <button type="button" id="ceo-repl-send">Send</button>
+                    </div>
                 </div>
                 <div id="ceo-repl-response" class="repl-response" aria-live="polite"></div>
             </div>

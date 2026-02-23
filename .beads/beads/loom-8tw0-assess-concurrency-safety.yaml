@@ -7,10 +7,10 @@ id: loom-8tw0
 type: task
 title: Assess concurrency safety
 description: Identify goroutine leaks and race‑prone code
-status: blocked
+status: open
 priority: 2
 projectid: loom
-assignedto: agent-1771534515-Engineering Manager (Default)
+assignedto: ""
 blockedby: []
 blocks: []
 relatedto: []
@@ -30,7 +30,7 @@ context:
     agent_worker_id: worker-agent-1770537362-Project Manager (Default)-1770666986
     conversation_session_id: 8e2f7bc6-9d1b-42ab-a2ff-5f5ddf2c87f9
     correlation_id: dispatch-loom-8tw0-1771812404044517687
-    dispatch_count: "20"
+    dispatch_count: "0"
     dispatch_history: '["agent-1771534515-QA Engineer (Default)","agent-1771534515-QA Engineer (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)"]'
     error_history: '[{"timestamp":"2026-02-23T00:10:57.193220635Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 429: rate limit exceeded\n","dispatch":20},{"timestamp":"2026-02-23T00:11:00.448347259Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 429: rate limit exceeded\n","dispatch":20},{"timestamp":"2026-02-23T00:11:11.43783527Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 429: rate limit exceeded\n","dispatch":20},{"timestamp":"2026-02-23T00:11:19.763832896Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 429: rate limit exceeded\n","dispatch":20},{"timestamp":"2026-02-23T00:11:19.775797228Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 429: rate limit exceeded\n","dispatch":20},{"timestamp":"2026-02-23T01:35:59.215877487Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 429: rate limit exceeded\n","dispatch":20},{"timestamp":"2026-02-23T02:17:48.224152397Z","error":"action loop failed: LLM call failed on iteration 4: failed to send request: Post \"http://172.17.0.1:8090/v1/chat/completions\": context canceled","dispatch":20}]'
     failed_at: "2026-02-23T02:06:46Z"
@@ -38,14 +38,15 @@ context:
     last_failed_at: ""
     last_run_at: "2026-02-23T02:17:33Z"
     last_run_error: 'action loop failed: LLM call failed on iteration 4: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
-    loop_detected: "false"
+    loop_detected: ""
+    loop_detected_reason: ""
     loop_detection_reason: Repeated rate limit errors (6 attempts) - exhausted provider quota
     loop_iterations: "0"
     progress_summary: No progress data
     provider_id: tokenhub
     provider_model: Qwen/Qwen2.5-Coder-32B-Instruct
-    ralph_blocked_at: "2026-02-23T02:17:48Z"
-    ralph_blocked_reason: 'dispatch_count=20 exceeded max_hops=20, stuck in loop: Repeated rate limit errors (6 attempts) - exhausted provider quota'
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
     redispatch_requested: "false"
     redispatch_requested_at: "2026-02-23T02:02:11Z"
     remediation_for: ""
@@ -64,5 +65,5 @@ duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-06T14:23:40Z
-updatedat: 2026-02-23T02:17:48.224209085Z
+updatedat: 2026-02-23T19:33:34.653558732Z
 closedat: null

@@ -320,6 +320,12 @@ function initUI() {
         sendCeoReplQuery();
     });
 
+    // CEO REPL Assign button
+    const ceoReplAssign = document.getElementById('ceo-repl-assign');
+    ceoReplAssign?.addEventListener('click', () => {
+        assignAgentFromCeoRepl();
+    });
+
     // Streaming test controls
     const streamTestSend = document.getElementById('stream-test-send');
     streamTestSend?.addEventListener('click', () => {
