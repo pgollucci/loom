@@ -21,10 +21,10 @@ context:
     agent_id: agent-1771534515-QA Engineer (Default)
     close_reason: ""
     conversation_session_id: 28941081-5c84-4f03-a519-b936511f0b7b
-    correlation_id: dispatch-loom-aedp-1771815100053202482
-    dispatch_count: "2"
+    correlation_id: dispatch-loom-aedp-1771815139121404667
+    dispatch_count: "3"
     dispatch_history: '["agent-1771534515-QA Engineer (Default)","agent-1771534515-QA Engineer (Default)"]'
-    failed_at: "2026-02-23T02:51:43Z"
+    failed_at: "2026-02-23T02:52:19Z"
     last_error: command parameter required
     last_run_at: "2026-02-23T02:51:42Z"
     last_run_error: 'action loop failed: LLM call failed on iteration 2: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
@@ -40,5 +40,5 @@ duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-06T15:24:36Z
-updatedat: 2026-02-23T02:51:43.663124691Z
+updatedat: 2026-02-23T02:52:19.123731104Z
 closedat: null
