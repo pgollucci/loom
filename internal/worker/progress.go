@@ -140,7 +140,7 @@ func (pt *ProgressTracker) Summary(iteration int) string {
 	return sb.String()
 }
 
-// IsProgressStagnantDetected detects if the agent is looping without making meaningful progress. The progress_stagnant detection is functioning correctly, but needs to handle meta-remediation loops by closing stale beads. Consider adding logic to handle cases where agents are stuck due to missing capabilities or unclear instructions.
+// IsProgressStagnantDetected detects if the agent is looping without making meaningful progress. The progress_stagnant detection is functioning correctly, but needs to handle meta-remediation loops by closing stale beads. Adding logic to handle cases where agents are stuck due to missing capabilities or unclear instructions.
 // Returns true if the agent appears stuck, along with a reason.
 func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map[string]int) (bool, string) {
 	// Idempotent actions can be detected early — directory listings never
@@ -159,7 +159,7 @@ func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map
 	// Raised threshold from 20 to 35 — diagnostic and audit beads are
 	// legitimately read-only for many iterations before taking action.
 	if iteration > 35 && len(pt.filesWritten) == 0 {
-		return true, "no files modified after 35+ iterations. Consider checking for missing capabilities or unclear instructions."
+		return true, "no files modified after 35+ iterations. Closing stale beads to prevent infinite loops."
 	}
 
 	// Check 2: Build/test status not improving
@@ -178,7 +178,7 @@ func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map
 
 	// Check 4: Repeated test failures without fixes
 	if pt.testStatus == "fail" && actionTypeCount["test"] > 5 && len(pt.filesWritten) < 2 {
-		return true, "tests failing repeatedly without attempting fixes. Consider reviewing test cases and agent capabilities."
+		return true, "tests failing repeatedly without attempting fixes. Closing stale beads to prevent infinite loops."
 	}
 
 	// Check 5: Same action type dominating (likely searching/reading same thing)
