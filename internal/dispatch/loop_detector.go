@@ -210,7 +210,7 @@ func (ld *LoopDetector) checkRepeatedErrors(bead *models.Bead) (bool, string) {
 	}
 
 	// Hard failure conditions
-	if authErrors >= 5 {
+	if authErrors >= 3 {
 		return true, fmt.Sprintf("Repeated authentication errors (%d attempts) - provider credentials invalid or missing", authErrors)
 	}
 
