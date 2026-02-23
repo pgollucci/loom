@@ -63,6 +63,9 @@ func (e *Engine) StartWorkflow(beadID, workflowID, projectID string) (*WorkflowE
 if workflowID == "" {
     return nil, fmt.Errorf("workflowID cannot be empty")
 }
+	if workflowID == "" {
+		return nil, fmt.Errorf("workflowID cannot be empty")
+	}
 	if projectID == "" {
 		return nil, fmt.Errorf("projectID cannot be empty")
 	}
