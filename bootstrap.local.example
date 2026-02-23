@@ -39,7 +39,7 @@ TOKENHUBCTL="tokenhubctl"
 #
 # Option C — TokenHub (default when using 'make start'):
 #   LOOM_PROVIDER_URL="http://localhost:8090"
-#   LOOM_PROVIDER_API_KEY="tokenhub_1579cc67"
+#   LOOM_PROVIDER_API_KEY=""
 #   (Continue to Phase 2 to register models and create an API key in TokenHub.)
 
 # === Phase 2: Register models with TokenHub (optional — only if using TokenHub) ===

@@ -29,14 +29,14 @@ context:
     agent_tokens: "77116"
     agent_worker_id: worker-agent-1770515004-Code Reviewer (Default)-1770666986
     conversation_session_id: caeff8c6-0eb9-4dcb-85cd-967d9caddfd4
-    correlation_id: dispatch-loom-2joc-1771812697089646143
-    dispatch_count: "3"
-    dispatch_history: '["agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)"]'
+    correlation_id: dispatch-loom-2joc-1771812830265292679
+    dispatch_count: "4"
+    dispatch_history: '["agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)"]'
     error_history: '[{"timestamp":"2026-02-23T00:11:00.472057538Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 401: authorization required\n","dispatch":20},{"timestamp":"2026-02-23T00:11:10.535160253Z","error":"action loop failed: context canceled","dispatch":21},{"timestamp":"2026-02-23T00:11:11.424671202Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 401: authorization required\n","dispatch":22},{"timestamp":"2026-02-23T00:11:19.752433575Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 401: authorization required\n","dispatch":23},{"timestamp":"2026-02-23T00:11:39.020649141Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 401: authorization required\n","dispatch":24},{"timestamp":"2026-02-23T00:12:06.836033595Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 401: authorization required\n","dispatch":25},{"timestamp":"2026-02-23T01:35:59.200926082Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 401: authorization required\n","dispatch":25}]'
-    failed_at: "2026-02-23T02:11:40Z"
+    failed_at: "2026-02-23T02:13:50Z"
     last_error: command parameter required
     last_failed_at: ""
-    last_run_at: "2026-02-23T02:11:37Z"
+    last_run_at: "2026-02-23T02:13:50Z"
     last_run_error: 'action loop failed: context canceled'
     loop_detected: "false"
     loop_detection_reason: ""
@@ -64,5 +64,5 @@ duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-06T14:23:40Z
-updatedat: 2026-02-23T02:11:40.402383945Z
+updatedat: 2026-02-23T02:13:50.320092243Z
 closedat: null
