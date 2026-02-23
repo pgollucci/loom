@@ -83,6 +83,7 @@ func (a *ProviderActivities) ProviderHeartbeatActivity(ctx context.Context, inpu
 	result.LatencyMs = time.Since(start).Milliseconds()
 	if err != nil {
 		result.Status = "unhealthy"
+		logger.Warn("Provider marked as unhealthy", "providerID", input.ProviderID, "error", err.Error())
 		result.Error = err.Error()
 		a.persistHeartbeat(result)
 		return result, nil

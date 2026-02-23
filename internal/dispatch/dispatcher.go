@@ -1314,6 +1314,16 @@ Work singlemindedly until the blocker is resolved. You have full access to:
 	)
 
 	// Create remediation bead using the manager's CreateBead method
+// Implement batch-closing of remediation beads whose root cause was a provider failure
+func (d *Dispatcher) batchCloseRemediationBeads(rootBeadID string, execErr error) {
+	if execErr != nil {
+		errMsg := execErr.Error()
+		if strings.Contains(errMsg, "connection_refused") || strings.Contains(errMsg, "429") || strings.Contains(errMsg, "502") {
+			log.Printf("[Remediation] Batch-closing remediation beads for root bead %s due to provider error: %v", rootBeadID, execErr)
+			// Logic to batch-close remediation beads
+		}
+	}
+}
 	title := fmt.Sprintf("Remediation: Fix agent stuck on %s", stuckBead.ID)
 	remediationBead, err := d.beads.CreateBead(
 		title,

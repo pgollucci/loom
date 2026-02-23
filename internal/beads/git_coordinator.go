@@ -9,7 +9,7 @@ import (
 // GitCoordinator replaces DoltCoordinator for git-based federation
 // It periodically pulls the beads-sync branch to coordinate with other instances
 type GitCoordinator struct {
-	worktreeManager interface{} // GitWorktreeManager interface
+	worktreeManager syncer // GitWorktreeManager interface
 	projectID       string
 	syncInterval    time.Duration
 }

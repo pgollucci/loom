@@ -143,7 +143,7 @@ func New(cfg *config.Config) (*Loom, error) {
 		}
 		mb, err := messagebus.NewNatsMessageBus(mbCfg)
 		if err != nil {
-			log.Printf("Warning: failed to initialize NATS message bus: %v", err)
+			return nil, fmt.Errorf("failed to initialize NATS message bus: %w", err)
 			// Don't fail startup if NATS is unavailable - allow graceful degradation
 		} else {
 			messageBus = mb
