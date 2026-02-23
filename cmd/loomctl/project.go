@@ -13,7 +13,7 @@ func newProjectCommand() *cobra.Command {
 
 	cmd.AddCommand(newProjectListCommand())
 	cmd.AddCommand(newProjectShowCommand())
-	cmd.AddCommand(newProjectBeadListCommand())
+	cmd.AddCommand(newProjectDashboardCommand())
 
 	return cmd
 }
@@ -22,9 +22,8 @@ func newProjectListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List all projects",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("Listing all projects...")
-			return nil
 		},
 	}
 }
@@ -32,25 +31,21 @@ func newProjectListCommand() *cobra.Command {
 func newProjectShowCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <project_id>",
-		Short: "Show project details",
+		Short: "Show details of a project",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			projectID := args[0]
-			fmt.Printf("Showing details for project: %s\n", projectID)
-			return nil
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("Showing details for project: %s\n", args[0])
 		},
 	}
 }
 
-func newProjectBeadListCommand() *cobra.Command {
+func newProjectDashboardCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "<project_id> bead list",
-		Short: "List beads for a project",
+		Use:   "dashboard <project_id>",
+		Short: "Show dashboard for a project",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			projectID := args[0]
-			fmt.Printf("Listing beads for project: %s\n", projectID)
-			return nil
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("Showing dashboard for project: %s\n", args[0])
 		},
 	}
 }
