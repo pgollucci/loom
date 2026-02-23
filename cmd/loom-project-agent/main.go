@@ -28,7 +28,7 @@ func main() {
 		role              = flag.String("role", os.Getenv("AGENT_ROLE"), "Agent role (coder, reviewer, qa, pm, architect). Empty = run all roles.")
 		providerEndpoint  = flag.String("provider-endpoint", os.Getenv("PROVIDER_ENDPOINT"), "LLM provider endpoint")
 		providerModel     = flag.String("provider-model", os.Getenv("PROVIDER_MODEL"), "LLM model name")
-		providerAPIKey    = flag.String("provider-api-key", getEnvOrDefault("PROVIDER_API_KEY", ""), "LLM provider API key")
+		providerAPIKey    = flag.String("provider-api-key", getEnvOrDefault("PROVIDER_API_KEY", "default-api-key"), "LLM provider API key")
 		personaPath       = flag.String("persona-path", os.Getenv("PERSONA_PATH"), "Path to persona file (single-role mode)")
 		personaBasePath   = flag.String("persona-base-path", getEnvOrDefault("PERSONA_BASE_PATH", "/app/personas"), "Base dir for per-role persona files (multi-role mode)")
 		actionLoop        = flag.Bool("action-loop", getEnvBool("ACTION_LOOP_ENABLED", false), "Enable multi-turn action loop")
