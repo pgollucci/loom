@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-02-22
+
+### Added
+- Project beads reset API: `POST /api/v1/projects/{id}/beads/reset` clears in-memory bead state and reloads from the beads-sync branch — essential for recovering from dolt migrations, force-pushed beads worktrees, or other out-of-band changes
+- `loomctl project reset-beads <project-id>` subcommand to invoke the reset from the CLI
+- `loomctl container` subcommands: `list`, `logs`, `restart`, `status` for managing project containers
+- `loomctl bead list` now supports `--status`, `--type`, `--assigned-to`, and `--priority` filters
+
+### Changed
+- Replaced Temporal/NATS dispatch loop with direct `TaskExecutor` — worker goroutines now claim and run beads without going through Temporal workflows or NATS routing, eliminating the primary source of dispatch failures
+- Bead status persistence hardened: closing a bead now always clears `assigned_to`; stale `open+assigned` beads are auto-reset on next claim attempt
+
+### Fixed
+- Beads completing work but remaining `open` due to `assigned_to` not being cleared on status update
+- Dispatch starvation: skip open beads whose assigned agent is busy rather than blocking the entire queue
+- Agent-introduced build errors repaired: duplicate const blocks, `sync.Map` used as regular map, `Priority *int` type mismatch, orphaned error-handling statements, missing braces, undefined sentinel errors
+
 ## [0.1.5] - 2026-02-22
 
 ### Added
