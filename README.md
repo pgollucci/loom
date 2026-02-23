@@ -1,4 +1,5 @@
 <!-- Autonomous agent capability enabled 2026-02-15 -->
+<!-- Autonomous agent capability enabled 2026-02-15 -->
 ![CI](https://img.shields.io/github/actions/workflow/status/jordanhubbard/loom/ci.yml?branch=main)
 ![Coverage](https://img.shields.io/codecov/c/github/jordanhubbard/loom/main)
 ![Go Version](https://img.shields.io/github/go-mod/go-version/jordanhubbard/loom)

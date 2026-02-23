@@ -75,7 +75,7 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 			Tags        []string          `json:"tags"`
 			Context     map[string]string `json:"context"`
 		}
-		if err := s.parseJSON(r, &req); err != nil {
+		if err := s.parseJSON(r, &req); err != nil { s.respondError(w, http.StatusBadRequest, "Invalid request body"); return }
 			s.respondError(w, http.StatusBadRequest, "Invalid request body")
 			return
 		}
