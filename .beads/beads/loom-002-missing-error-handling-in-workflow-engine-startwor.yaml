@@ -16,10 +16,10 @@ description: |-
     if workflowID == "" {
         return nil, fmt.Errorf("workflowID cannot be empty")
     }
-status: blocked
+status: open
 priority: 3
 projectid: loom
-assignedto: agent-1771534515-Engineering Manager (Default)
+assignedto: ""
 blockedby: []
 blocks: []
 relatedto: []
@@ -32,26 +32,27 @@ context:
     closed_reason: Fixed in commit d5d8785
     conversation_session_id: df7f8614-ccb5-4142-ad1b-311d69aeef3a
     correlation_id: dispatch-loom-002-1771815482172617494
-    dispatch_count: "30"
+    dispatch_count: "0"
     dispatch_history: '["agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)"]'
     error_history: '[{"timestamp":"2026-02-23T03:02:46.158269368Z","error":"action loop failed: context canceled","dispatch":20},{"timestamp":"2026-02-23T03:02:57.620597661Z","error":"action loop failed: LLM call failed on iteration 1: failed to send request: Post \"http://172.17.0.1:8090/v1/chat/completions\": context canceled","dispatch":21},{"timestamp":"2026-02-23T03:03:13.360475665Z","error":"action loop failed: context canceled","dispatch":22},{"timestamp":"2026-02-23T03:03:33.475303816Z","error":"action loop failed: LLM call failed on iteration 1: failed to send request: Post \"http://172.17.0.1:8090/v1/chat/completions\": context canceled","dispatch":23},{"timestamp":"2026-02-23T03:03:33.516952506Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 502: {\"error\":{\"message\":\"no eligible models registered\",\"type\":\"server_error\",\"code\":null}}\n","dispatch":24},{"timestamp":"2026-02-23T03:03:33.561207069Z","error":"action loop failed: LLM call failed on iteration 1: unexpected status code 502: {\"error\":{\"message\":\"no eligible models registered\",\"type\":\"server_error\",\"code\":null}}\n","dispatch":25},{"timestamp":"2026-02-23T03:03:47.472934155Z","error":"action loop failed: context canceled","dispatch":26},{"timestamp":"2026-02-23T03:04:10.970145091Z","error":"action loop failed: context canceled","dispatch":27},{"timestamp":"2026-02-23T03:04:25.143275013Z","error":"action loop failed: context canceled","dispatch":28},{"timestamp":"2026-02-23T03:04:40.52560091Z","error":"action loop failed: context canceled","dispatch":29},{"timestamp":"2026-02-23T03:04:51.82699749Z","error":"action loop failed: context canceled","dispatch":30}]'
     failed_at: "2026-02-23T02:58:02Z"
     last_error: command parameter required
     last_run_at: "2026-02-23T03:04:40Z"
     last_run_error: 'action loop failed: context canceled'
-    loop_detected: "false"
+    loop_detected: ""
+    loop_detected_reason: ""
     loop_detection_reason: 'Identical error repeated 5 times - error pattern: action loop failed: context canceled'
     progress_summary: No progress data
     provider_id: tokenhub
-    ralph_blocked_at: "2026-02-23T03:04:51Z"
-    ralph_blocked_reason: 'dispatch_count=30 exceeded max_hops=20, stuck in loop: Identical error repeated 5 times - error pattern: action loop failed: context canceled'
-    redispatch_requested: "false"
-    redispatch_requested_at: "2026-02-23T02:50:45Z"
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
+    redispatch_requested: "true"
+    redispatch_requested_at: "2026-02-23T19:36:05Z"
     revert_status: not_attempted
     terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-15T08:03:53.734489-08:00
-updatedat: 2026-02-23T03:04:51.827050978Z
+updatedat: 2026-02-23T19:40:22.964820832Z
 closedat: null
