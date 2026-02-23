@@ -172,13 +172,13 @@ func (ac *AlertChecker) checkMonthlyBudget(ctx context.Context) *Alert {
 		return nil
 	}
 
-	if stats.TotalCostUSD > ac.config.MonthlyBudgetUSD {
+	if stats.TotalCostUSD > ac.config.MonthlyBudgetUSD * 0.9 {
 		return &Alert{
 			ID:          fmt.Sprintf("alert-monthly-%d", time.Now().Unix()),
 			UserID:      ac.config.UserID,
 			Type:        "budget_exceeded",
 			Severity:    "critical",
-			Message:     fmt.Sprintf("Monthly budget exceeded: $%.2f / $%.2f (%.0f%%)", stats.TotalCostUSD, ac.config.MonthlyBudgetUSD, (stats.TotalCostUSD/ac.config.MonthlyBudgetUSD)*100),
+			Message:     fmt.Sprintf("Monthly budget nearing limit: $%.2f / $%.2f (%.0f%%)", stats.TotalCostUSD, ac.config.MonthlyBudgetUSD, (stats.TotalCostUSD/ac.config.MonthlyBudgetUSD)*100),
 			CurrentCost: stats.TotalCostUSD,
 			Threshold:   ac.config.MonthlyBudgetUSD,
 			TriggeredAt: now,

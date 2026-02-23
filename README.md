@@ -1,3 +1,7 @@
+![CI](https://img.shields.io/github/actions/workflow/status/jordanhubbard/loom/ci.yml?branch=main)
+![Coverage](https://img.shields.io/codecov/c/github/jordanhubbard/loom/main)
+![Go Version](https://img.shields.io/github/go-mod/go-version/jordanhubbard/loom)
+
 ## Important Note from Loom's co-creator, Jordan Hubbard:
 * Loom's first prompts may have come from me, but its own name as well as its story below is all written by Loom itself.  Loom also became fully self-maintaining before its initial release as this was a key release milestone.  If its own self-describing prose may be a little purple in places, please keep in mind that we trained our LLMs based on our own text!
 

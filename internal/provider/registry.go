@@ -52,9 +52,23 @@ func (r *Registry) Clear() {
 }
 
 func (r *Registry) Register(config *ProviderConfig) error {
+	// Run an immediate health check
+	if err := r.runHealthCheck(config); err != nil {
+		return fmt.Errorf("failed health check: %w", err)
+	}
+	// Run an immediate health check
+	if err := r.runHealthCheck(config); err != nil {
+		return fmt.Errorf("failed health check: %w", err)
+	}
+	// Run an immediate health check
+	if err := r.runHealthCheck(config); err != nil {
+		return fmt.Errorf("failed health check: %w", err)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if config.Status == "" {
+		config.Status = "pending"
+	} else if config.Status == "healthy" {
 		config.Status = "pending"
 	}
 
@@ -150,7 +164,7 @@ func (r *Registry) ListActive() []*RegisteredProvider {
 
 	providers := make([]*RegisteredProvider, 0, len(r.providers))
 	for _, provider := range r.providers {
-		if provider != nil && provider.Config != nil && isProviderHealthy(provider.Config.Status) {
+		if provider != nil && provider.Config != nil && provider.Config.Status == "healthy" {
 			providers = append(providers, provider)
 		}
 	}
@@ -290,5 +304,5 @@ func (r *Registry) UpdateHeartbeatLatency(providerID string, latencyMs int64) {
 }
 
 func isProviderHealthy(status string) bool {
-	return status == "healthy" || status == "active"
+	return status == "healthy" && !status == "pending"
 }

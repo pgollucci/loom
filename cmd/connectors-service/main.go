@@ -27,7 +27,8 @@ func main() {
 	healthInterval := envOrDefault("HEALTH_INTERVAL", "30s")
 	otelEndpoint := os.Getenv("OTEL_ENDPOINT")
 
-	log.Printf("[ConnectorsService] Starting on port %s (config=%s)", port, configPath)
+	log := slog.New(slog.NewJSONHandler(os.Stdout))
+log.Info("Starting ConnectorsService", slog.String("port", port), slog.String("config", configPath))
 
 	// Optionally initialise OTel tracing
 	if otelEndpoint != "" {

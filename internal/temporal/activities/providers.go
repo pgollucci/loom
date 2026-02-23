@@ -82,7 +82,7 @@ func (a *ProviderActivities) ProviderHeartbeatActivity(ctx context.Context, inpu
 	record, models, discoveredType, discoveredEndpoint, err := a.discoverAndListModels(ctx, input.ProviderID)
 	result.LatencyMs = time.Since(start).Milliseconds()
 	if err != nil {
-		result.Status = "failed"
+		result.Status = "unhealthy"
 		result.Error = err.Error()
 		a.persistHeartbeat(result)
 		return result, nil
