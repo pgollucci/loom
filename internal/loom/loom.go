@@ -105,6 +105,7 @@ type Loom struct {
 	pdaOrchestrator       *orchestrator.PDAOrchestrator
 	swarmManager          *swarm.Manager
 	swarmFederation       *swarm.Federation
+	taskExecutor          *taskexecutor.Executor
 	readinessMu           sync.Mutex
 	readinessCache        map[string]projectReadinessState
 	readinessFailures     map[string]time.Time
@@ -3735,7 +3736,9 @@ func (a *Loom) StartTaskExecutor(ctx context.Context) {
 		}
 	}
 
-	// Start worker goroutines for all currently registered projects
+	a.taskExecutor = exec
+
+	// Start watcher + initial workers for all currently registered projects
 	for _, proj := range a.projectManager.ListProjects() {
 		if proj == nil || proj.ID == "" {
 			continue
@@ -3743,7 +3746,7 @@ func (a *Loom) StartTaskExecutor(ctx context.Context) {
 		exec.Start(ctx, proj.ID)
 	}
 
-	// Watch for newly registered projects and start the executor for them
+	// Watch for newly registered projects
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	started := make(map[string]struct{})
@@ -3768,6 +3771,14 @@ func (a *Loom) StartTaskExecutor(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+// WakeProject signals the task executor that new work is available for projectID.
+// Safe to call if no executor is running (no-op in that case).
+func (a *Loom) WakeProject(projectID string) {
+	if a.taskExecutor != nil {
+		a.taskExecutor.WakeProject(projectID)
 	}
 }
 

@@ -98,6 +98,9 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Wake the executor for this project in case workers are sleeping
+		s.app.WakeProject(req.ProjectID)
+
 		s.respondJSON(w, http.StatusCreated, bead)
 
 	case http.MethodPatch:

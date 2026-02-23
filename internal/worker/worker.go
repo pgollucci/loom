@@ -175,7 +175,7 @@ func (w *Worker) ExecuteTask(ctx context.Context, task *Task) (*TaskResult, erro
 		messages = w.buildConversationMessages(conversationCtx, task)
 
 		// Handle token limits
-		messages = w.handleTokenLimits(messages, w.provider.Config.TokenLimit)
+		messages = w.handleTokenLimits(messages)
 	} else {
 		// Single-shot mode (backward compatibility)
 		messages = w.buildSingleShotMessages(task)
@@ -748,8 +748,8 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 	var allActions []actions.Result
 	consecutiveParseFailures := 0
 	consecutiveValidationFailures := 0
-	var actionHashes sync.Map // for inner loop detection
-	var actionTypeCount sync.Map // for progress stagnation detection
+	actionHashes := make(map[string]int)    // for inner loop detection
+	actionTypeCount := make(map[string]int) // for progress stagnation detection
 	treePaths := make(map[string]int)       // track repeated scope/tree calls per path
 
 	for iteration := 0; iteration < maxIter; iteration++ {

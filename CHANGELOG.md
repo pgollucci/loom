@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-02-23
+
+### Added
+- Executor idle/sleep mode: worker goroutines exit after 3 minutes of no work (36 × 5s idle rounds) instead of spinning forever, eliminating idle token spend
+- Per-project watcher goroutine (long-lived): polls for ready beads every 30 seconds and respawns workers immediately when work appears
+- Periodic git fetch in watcher: every 5 minutes, fetches the project's beads-sync branch and reloads if new commits are found — detects beads pushed externally without needing an API call
+- `WakeProject(projectID)` on the executor and `Loom`: signals via buffered channel for zero-latency wake on bead creation or beads reset
+
+### Changed
+- `POST /api/v1/beads` (bead creation) now calls `WakeProject` after creating a bead, ensuring sleeping workers restart within milliseconds
+- `POST /api/v1/projects/{id}/beads/reset` also calls `WakeProject` after reload
+
+### Fixed
+- Agent-introduced build errors: `sync.Map` used as `map[string]int` for `actionHashes` and `actionTypeCount`, `handleTokenLimits` called with extra argument, `if` block body left orphaned in `handlers_analytics.go`
+
 ## [0.1.6] - 2026-02-22
 
 ### Added

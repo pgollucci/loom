@@ -317,6 +317,9 @@ func (s *Server) handleProjectBeadsReset(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	// Wake the executor now that beads have been reloaded
+	s.app.WakeProject(id)
+
 	s.respondJSON(w, http.StatusOK, map[string]interface{}{
 		"project_id":   id,
 		"beads_loaded": count,

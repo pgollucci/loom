@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,7 +24,25 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
-const defaultNumWorkers = 3
+const (
+	defaultNumWorkers = 3
+	// maxIdleRounds: after this many consecutive nil-claim rounds (each 5s),
+	// a worker goroutine exits. 36 × 5s = 3 minutes of idleness.
+	maxIdleRounds = 36
+	// watcherInterval: how often the watcher checks for new work when idle.
+	watcherInterval = 30 * time.Second
+	// gitFetchInterval: how often the watcher does a git fetch to detect
+	// beads pushed from external sources.
+	gitFetchInterval = 5 * time.Minute
+)
+
+// projectState tracks per-project executor state.
+type projectState struct {
+	activeWorkers  int
+	watcherRunning bool
+	// wakeCh is sent on to immediately unblock a sleeping watcher.
+	wakeCh chan struct{}
+}
 
 // Executor is the direct bead execution engine.
 type Executor struct {
@@ -34,7 +53,7 @@ type Executor struct {
 	db               *database.Database
 	lessonsProvider  worker.LessonsProvider
 	numWorkers       int
-	startedProjects  map[string]struct{}
+	projectStates    map[string]*projectState
 	mu               sync.Mutex
 }
 
@@ -53,7 +72,7 @@ func New(
 		projectManager:   projectManager,
 		db:               db,
 		numWorkers:       defaultNumWorkers,
-		startedProjects:  make(map[string]struct{}),
+		projectStates:    make(map[string]*projectState),
 	}
 }
 
@@ -71,38 +90,96 @@ func (e *Executor) SetNumWorkers(n int) {
 	e.numWorkers = n
 }
 
-// Start spawns numWorkers goroutines for projectID. Idempotent.
+// Start ensures the watcher is running and spawns workers for projectID.
+// Safe to call multiple times; spawns workers only when none are active.
 func (e *Executor) Start(ctx context.Context, projectID string) {
 	e.mu.Lock()
-	if _, ok := e.startedProjects[projectID]; ok {
-		e.mu.Unlock()
-		return
-	}
-	e.startedProjects[projectID] = struct{}{}
+	state := e.getOrCreateState(projectID)
 	n := e.numWorkers
+
+	// Start the long-lived watcher if not already running
+	if !state.watcherRunning {
+		state.watcherRunning = true
+		e.mu.Unlock()
+		go e.watcherLoop(ctx, projectID)
+	} else {
+		e.mu.Unlock()
+	}
+
+	// Spawn workers up to numWorkers
+	e.mu.Lock()
+	toSpawn := n - state.activeWorkers
+	state.activeWorkers += toSpawn
 	e.mu.Unlock()
 
-	log.Printf("[TaskExecutor] Starting %d worker(s) for project %s", n, projectID)
-	for i := 0; i < n; i++ {
-		go e.workerLoop(ctx, projectID)
+	if toSpawn > 0 {
+		log.Printf("[TaskExecutor] Spawning %d worker(s) for project %s", toSpawn, projectID)
+		for i := 0; i < toSpawn; i++ {
+			go e.workerLoop(ctx, projectID)
+		}
 	}
 }
 
-// workerLoop repeatedly claims and executes beads for a project.
+// WakeProject signals that new work may be available, spawning workers if idle.
+func (e *Executor) WakeProject(projectID string) {
+	e.mu.Lock()
+	state := e.getOrCreateState(projectID)
+	ch := state.wakeCh
+	e.mu.Unlock()
+
+	// Non-blocking send: watcher may already be awake
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// getOrCreateState returns the projectState for projectID, creating it if needed.
+// Caller must hold e.mu.
+func (e *Executor) getOrCreateState(projectID string) *projectState {
+	if s, ok := e.projectStates[projectID]; ok {
+		return s
+	}
+	s := &projectState{
+		wakeCh: make(chan struct{}, 1),
+	}
+	e.projectStates[projectID] = s
+	return s
+}
+
+// workerLoop claims and executes beads. Exits after maxIdleRounds of no work.
 func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 	workerID := fmt.Sprintf("exec-%s-%s", projectID, uuid.New().String()[:8])
 	log.Printf("[TaskExecutor] Worker %s started for project %s", workerID, projectID)
 
+	idleRounds := 0
+	defer func() {
+		e.mu.Lock()
+		if s, ok := e.projectStates[projectID]; ok {
+			s.activeWorkers--
+			if s.activeWorkers < 0 {
+				s.activeWorkers = 0
+			}
+		}
+		e.mu.Unlock()
+		log.Printf("[TaskExecutor] Worker %s exiting (idle=%d)", workerID, idleRounds)
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[TaskExecutor] Worker %s stopping: context cancelled", workerID)
 			return
 		default:
 		}
 
 		bead := e.claimNextBead(ctx, projectID, workerID)
 		if bead == nil {
+			idleRounds++
+			if idleRounds >= maxIdleRounds {
+				log.Printf("[TaskExecutor] Worker %s idle for %ds, going to sleep",
+					workerID, idleRounds*5)
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -111,9 +188,129 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 			continue
 		}
 
+		idleRounds = 0
 		log.Printf("[TaskExecutor] Worker %s claimed bead %s (%s)", workerID, bead.ID, bead.Title)
 		e.executeBead(ctx, bead, workerID)
 	}
+}
+
+// watcherLoop runs forever for a project. It wakes workers when new beads arrive,
+// either from the API (via WakeProject) or from a periodic git fetch.
+func (e *Executor) watcherLoop(ctx context.Context, projectID string) {
+	log.Printf("[TaskExecutor] Watcher started for project %s", projectID)
+	defer log.Printf("[TaskExecutor] Watcher stopped for project %s", projectID)
+
+	ticker := time.NewTicker(watcherInterval)
+	defer ticker.Stop()
+	gitTicker := time.NewTicker(gitFetchInterval)
+	defer gitTicker.Stop()
+
+	e.mu.Lock()
+	state := e.getOrCreateState(projectID)
+	wakeCh := state.wakeCh
+	e.mu.Unlock()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-wakeCh:
+			// Immediate wake signal from API (new bead created or beads reloaded)
+			e.maybeSpawnWorkers(ctx, projectID)
+
+		case <-ticker.C:
+			// Periodic check: any ready beads?
+			e.maybeSpawnWorkers(ctx, projectID)
+
+		case <-gitTicker.C:
+			// Periodic git fetch to detect beads pushed externally
+			e.fetchAndReloadBeads(ctx, projectID)
+			e.maybeSpawnWorkers(ctx, projectID)
+		}
+	}
+}
+
+// maybeSpawnWorkers spawns workers for projectID if there is work and none are active.
+func (e *Executor) maybeSpawnWorkers(ctx context.Context, projectID string) {
+	readyBeads, err := e.beadManager.GetReadyBeads(projectID)
+	if err != nil || len(readyBeads) == 0 {
+		return
+	}
+
+	e.mu.Lock()
+	state := e.getOrCreateState(projectID)
+	n := e.numWorkers
+	toSpawn := n - state.activeWorkers
+	if toSpawn <= 0 {
+		e.mu.Unlock()
+		return
+	}
+	state.activeWorkers += toSpawn
+	e.mu.Unlock()
+
+	log.Printf("[TaskExecutor] Waking %d worker(s) for project %s (%d ready beads)",
+		toSpawn, projectID, len(readyBeads))
+	for i := 0; i < toSpawn; i++ {
+		go e.workerLoop(ctx, projectID)
+	}
+}
+
+// fetchAndReloadBeads does a git fetch on the project's beads worktree and reloads
+// if the remote has new commits.
+func (e *Executor) fetchAndReloadBeads(ctx context.Context, projectID string) {
+	beadsPath := e.beadManager.GetProjectBeadsPath(projectID)
+	if beadsPath == "" {
+		return
+	}
+	// The beads path is the .beads directory inside the worktree.
+	// Git operations run on the parent (the worktree root).
+	worktreeRoot := filepath.Dir(beadsPath)
+
+	// Get current HEAD before fetch
+	headBefore, err := os.ReadFile(filepath.Join(worktreeRoot, ".git", "HEAD"))
+	if err != nil {
+		// Not a git worktree or no HEAD — skip
+		return
+	}
+
+	// Fetch from origin (non-blocking: if it fails we skip gracefully)
+	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := fmt.Sprintf("cd %q && git fetch origin 2>/dev/null", worktreeRoot)
+	if err := runShell(fetchCtx, cmd); err != nil {
+		return
+	}
+
+	// Check FETCH_HEAD vs current HEAD
+	fetchHead, err := os.ReadFile(filepath.Join(worktreeRoot, ".git", "FETCH_HEAD"))
+	if err != nil {
+		return
+	}
+	if strings.TrimSpace(string(headBefore)) == strings.TrimSpace(strings.Fields(string(fetchHead))[0]) {
+		return // No new commits
+	}
+
+	// New commits: reset to FETCH_HEAD and reload
+	resetCtx, cancel2 := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel2()
+	if err := runShell(resetCtx, fmt.Sprintf("cd %q && git reset --hard FETCH_HEAD 2>/dev/null", worktreeRoot)); err != nil {
+		log.Printf("[TaskExecutor] git reset failed for project %s: %v", projectID, err)
+		return
+	}
+
+	log.Printf("[TaskExecutor] New beads detected for project %s, reloading", projectID)
+	e.beadManager.ClearProjectBeads(projectID)
+	if err := e.beadManager.LoadBeadsFromGit(ctx, projectID, beadsPath); err != nil {
+		log.Printf("[TaskExecutor] reload failed for project %s: %v", projectID, err)
+	}
+}
+
+// runShell executes a shell command, returning an error on non-zero exit.
+func runShell(ctx context.Context, cmd string) error {
+	c := exec.CommandContext(ctx, "sh", "-c", cmd)
+	return c.Run()
 }
 
 // claimNextBead returns the next available bead for the project, or nil.
