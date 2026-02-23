@@ -27,3 +27,7 @@ If you encounter any issues, please report them by opening an issue in the [issu
 ## License
 
 By contributing to Loom, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+
+## Placeholder Section
+
+This section is reserved for future contributions guidelines and best practices.

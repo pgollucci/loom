@@ -7,7 +7,7 @@ id: loom-t84yo
 type: bug
 title: No beads database inside Docker container
 description: bd commands fail inside the loom container with 'no beads database found'. The .beads/ directory is not mounted and bd init was never run in the container. This prevents loom from loading or creating beads, so the dispatcher has no work to hand out. Either mount .beads/ from the host, run bd init in the entrypoint, or configure BEADS_DIR.
-status: closed
+status: open
 priority: 2
 projectid: loom
 assignedto: ""
@@ -18,11 +18,18 @@ parent: ""
 children: []
 tags: []
 context:
+    close_reason: ""
+    dispatch_count: "0"
+    last_run_error: ""
+    loop_detection_reason: ""
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
     redispatch_requested: "true"
     redispatch_requested_at: "2026-02-09T21:46:13Z"
+    terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-07T03:19:22Z
-updatedat: 2026-02-09T13:46:13.483615-08:00
+updatedat: 2026-02-23T02:50:36.637413917Z
 closedat: null

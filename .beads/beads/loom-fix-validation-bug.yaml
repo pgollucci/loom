@@ -1,29 +1,29 @@
 entitymetadata:
-  schemaversion: ""
-  attributes: {}
-  migratedat: null
-  migratedfrom: ""
+    schemaversion: ""
+    attributes: {}
+    migratedat: null
+    migratedfrom: ""
 id: loom-fix-validation
 type: bug
 title: Add input validation to StartWorkflow function
 description: |
-  The StartWorkflow function in internal/workflow/engine.go needs input validation.
+    The StartWorkflow function in internal/workflow/engine.go needs input validation.
 
-  File: internal/workflow/engine.go
-  Function: StartWorkflow
-  Issue: Missing validation for empty workflowID parameter
+    File: internal/workflow/engine.go
+    Function: StartWorkflow
+    Issue: Missing validation for empty workflowID parameter
 
-  Expected: Should return error if workflowID is empty
-  Actual: No validation, proceeds to database lookup
+    Expected: Should return error if workflowID is empty
+    Actual: No validation, proceeds to database lookup
 
-  Suggested fix:
-  if workflowID == "" {
-      return nil, fmt.Errorf("workflowID cannot be empty")
-  }
-status: closed
+    Suggested fix:
+    if workflowID == "" {
+        return nil, fmt.Errorf("workflowID cannot be empty")
+    }
+status: in_progress
 priority: 3
 projectid: loom
-assignedto: ""
+assignedto: exec-loom-2c39815c
 blockedby: []
 blocks: []
 relatedto: []
@@ -31,10 +31,19 @@ parent: ""
 children: []
 tags: []
 context:
-    closed_reason: "Fixed in commit d5d8785"
+    close_reason: ""
+    closed_reason: Fixed in commit d5d8785
+    dispatch_count: "0"
+    last_run_error: ""
+    loop_detection_reason: ""
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
+    redispatch_requested: "true"
+    redispatch_requested_at: "2026-02-23T02:50:45Z"
+    terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-15T08:10:00Z
-updatedat: 2026-02-15T19:25:00Z
-closedat: 2026-02-15T19:25:00Z
+updatedat: 2026-02-23T02:51:37.298613413Z
+closedat: null

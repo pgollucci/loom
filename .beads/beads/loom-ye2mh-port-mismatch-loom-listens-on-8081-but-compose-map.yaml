@@ -7,10 +7,10 @@ id: loom-ye2mh
 type: bug
 title: 'Port mismatch: loom listens on 8081 but compose maps 8080'
 description: Loom API binds to :8081 (main.go:161) but docker-compose exposes 8080:8080. The UI is unreachable on the host. Either change the app to listen on 8080 or fix the compose port mapping to 8080:8081.
-status: closed
+status: in_progress
 priority: 1
 projectid: loom
-assignedto: ""
+assignedto: agent-1771534515-Product Manager (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -18,11 +18,24 @@ parent: ""
 children: []
 tags: []
 context:
+    agent_id: agent-1771534515-Product Manager (Default)
+    close_reason: ""
+    conversation_session_id: 7b8b550d-7776-4d7b-bf9f-1b80f799f055
+    dispatch_count: "2"
+    dispatch_history: '["agent-1771534515-Product Manager (Default)","agent-1771534515-Product Manager (Default)"]'
+    last_run_at: "2026-02-23T02:51:08Z"
+    last_run_error: 'action loop failed: LLM call failed on iteration 5: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
+    loop_detected: "false"
+    loop_detection_reason: ""
+    provider_id: tokenhub
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
     redispatch_requested: "true"
     redispatch_requested_at: "2026-02-09T21:46:13Z"
+    terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-07T03:19:16Z
-updatedat: 2026-02-09T13:46:13.466117-08:00
+updatedat: 2026-02-23T02:51:08.498986502Z
 closedat: null

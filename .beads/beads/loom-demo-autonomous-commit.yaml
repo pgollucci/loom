@@ -5,7 +5,7 @@ entitymetadata:
     migratedfrom: ""
 id: loom-demo-autonomous
 type: task
-title: "[Self-Improvement] Demonstrate autonomous commit capability"
+title: '[Self-Improvement] Demonstrate autonomous commit capability'
 description: |-
     Create a simple demonstration that Loom can autonomously fix issues and commit changes.
 
@@ -25,7 +25,7 @@ description: |-
     - Commit shows in git log as autonomous agent work
 
     Expected result: Git log shows commit by agent, not human author
-status: closed
+status: open
 priority: 2
 projectid: loom
 assignedto: ""
@@ -39,10 +39,19 @@ tags:
     - autonomous
     - demo
 context:
+    close_reason: ""
+    dispatch_count: "0"
+    last_run_error: ""
+    loop_detection_reason: ""
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
+    redispatch_requested: "true"
+    redispatch_requested_at: "2026-02-23T02:50:45Z"
+    terminal_reason: ""
     workflow_type: self-improvement
 duedate: null
 milestoneid: ""
 estimatedtime: 30
 createdat: 2026-02-15T19:40:00Z
-updatedat: 2026-02-15T19:40:00Z
+updatedat: 2026-02-23T02:50:45.953599773Z
 closedat: null

@@ -52,10 +52,10 @@ description: |
       * Testing Infrastructure (section 11)
     - Preserved legacy ASCII diagram for backwards compatibility
     - Renumbered all sections to maintain consistency
-status: closed
+status: open
 priority: 1
 projectid: loom
-assignedto: agent-1768861966-project-manager
+assignedto: agent-1771534515-QA Engineer (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -68,11 +68,27 @@ tags:
     - p1
     - sticky
 context:
+    agent_id: agent-1771534515-QA Engineer (Default)
+    close_reason: ""
+    conversation_session_id: 08379dbd-a964-47fd-a6b4-147dbd831d7a
+    correlation_id: dispatch-loom-aak-1771815040659195673
+    dispatch_count: "1"
+    dispatch_history: '["agent-1771534515-QA Engineer (Default)"]'
+    failed_at: "2026-02-23T02:50:42Z"
+    last_error: command parameter required
+    last_run_at: "2026-02-23T02:50:46Z"
+    last_run_error: 'action loop failed: LLM call failed on iteration 2: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
+    loop_detected: "false"
+    loop_detection_reason: ""
+    provider_id: tokenhub
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
     redispatch_requested: "true"
     redispatch_requested_at: "2026-02-09T21:46:13Z"
+    terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-01-21T11:25:29Z
-updatedat: 2026-02-09T13:46:13.477429-08:00
+updatedat: 2026-02-23T02:50:46.006587496Z
 closedat: null

@@ -283,6 +283,16 @@ func (w *Worker) buildSingleShotMessages(task *Task) []provider.ChatMessage {
 	}
 }
 
+// Constants for token limit calculations
+const (
+	CharToTokenRatio = 4 // Approximate ratio of characters to tokens
+	TokenLimitHeadroom = 0.8 // Headroom to avoid hitting token limit
+	DefaultTokenLimit = 32768 // Default token limit if not specified
+	TruncationFractionHigh = 0.5 // Fraction for high truncation
+	TruncationFractionMedium = 0.25 // Fraction for medium truncation
+	TruncationFractionLow = 0.0 // Fraction for low truncation
+)
+
 // handleTokenLimits truncates messages if they exceed model token limits
 func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.ChatMessage {
 	// Get model token limit (default to 100K if not specified)

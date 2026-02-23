@@ -29,10 +29,10 @@ description: |
     - The user guide has been reviewed by the required personas.
     - The guide is updated to reflect any changes in workflows or features.
     - Release approval includes the review evidence.
-status: closed
+status: in_progress
 priority: 1
 projectid: loom
-assignedto: agent-1768861966-project-manager
+assignedto: agent-1771534515-Project Manager (Default)
 blockedby: []
 blocks: []
 relatedto: []
@@ -45,11 +45,24 @@ tags:
     - release
     - sticky
 context:
+    agent_id: agent-1771534515-Project Manager (Default)
+    close_reason: ""
+    conversation_session_id: cb7ce575-db75-4e8e-9de2-ba88b62c1221
+    dispatch_count: "4"
+    dispatch_history: '["agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)"]'
+    last_run_at: "2026-02-23T02:51:27Z"
+    last_run_error: 'action loop failed: LLM call failed on iteration 2: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
+    loop_detected: "false"
+    loop_detection_reason: ""
+    provider_id: tokenhub
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
     redispatch_requested: "true"
     redispatch_requested_at: "2026-02-09T21:46:13Z"
+    terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-01-21T11:25:33Z
-updatedat: 2026-02-09T13:46:13.47731-08:00
+updatedat: 2026-02-23T02:51:38.362664411Z
 closedat: null

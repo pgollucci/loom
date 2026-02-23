@@ -16,10 +16,10 @@ description: |-
     if workflowID == "" {
         return nil, fmt.Errorf("workflowID cannot be empty")
     }
-status: closed
+status: open
 priority: 3
 projectid: loom
-assignedto: agent-1771148987-Engineering Manager (Default)
+assignedto: ""
 blockedby: []
 blocks: []
 relatedto: []
@@ -28,19 +28,24 @@ children: []
 tags: []
 context:
     agent_id: agent-1771148987-Engineering Manager (Default)
+    close_reason: ""
+    closed_reason: Fixed in commit d5d8785
     conversation_session_id: 783e170d-558b-4e0e-a3ed-2696cafb7588
-    dispatch_count: "1"
+    dispatch_count: "0"
     dispatch_history: '["agent-1771148987-Engineering Manager (Default)"]'
     last_run_at: "2026-02-15T16:06:29Z"
-    last_run_error: 'action loop failed: LLM call failed on iteration 2: failed to send request: Post "http://ollama-server.hrd.nvidia.com:8000/v1/chat/completions": context canceled'
+    last_run_error: ""
     loop_detected: "false"
+    loop_detection_reason: ""
     provider_id: ollama-nvidia
-    redispatch_requested: "false"
-    redispatch_requested_at: "2026-02-15T16:03:58Z"
-    closed_reason: "Fixed in commit d5d8785"
+    ralph_blocked_at: ""
+    ralph_blocked_reason: ""
+    redispatch_requested: "true"
+    redispatch_requested_at: "2026-02-23T02:50:45Z"
+    terminal_reason: ""
 duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-15T08:03:53.734489-08:00
-updatedat: 2026-02-15T19:25:00Z
-closedat: 2026-02-15T19:25:00Z
+updatedat: 2026-02-23T02:50:45.956356951Z
+closedat: null

@@ -238,7 +238,7 @@ type Provider struct {
     ID                string
     Name              string
     Type              string    // always "openai" (TokenHub speaks OpenAI-compatible API)
-    Endpoint          string    // e.g. "http://tokenhub:8080/v1"
+    Endpoint          string    // e.g. "http://localhost:8090/v1"
     APIKey            string
     Model             string    // configured model
     Status            string    // pending, healthy, failed

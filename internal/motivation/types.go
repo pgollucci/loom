@@ -96,7 +96,7 @@ type Motivation struct {
 	TriggerCount    int           `json:"trigger_count" db:"trigger_count"`
 
 	// Priority
-	Priority int `json:"priority" db:"priority"` // Higher = more important (0-100)
+	Priority *int `json:"priority" db:"priority"` // Higher = more important (0-100)
 
 	// Behavior
 	CreateBeadOnTrigger bool   `json:"create_bead_on_trigger" db:"create_bead_on_trigger"` // Create a stimulus bead

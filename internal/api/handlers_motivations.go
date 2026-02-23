@@ -21,7 +21,7 @@ type MotivationResponse struct {
 	AgentID         string                 `json:"agent_id,omitempty"`
 	ProjectID       string                 `json:"project_id,omitempty"`
 	Parameters      map[string]interface{} `json:"parameters,omitempty"`
-	CooldownMinutes int                    `json:"cooldown_minutes"`
+	CooldownMinutes *int                   `json:"cooldown_minutes,omitempty"`
 	LastTriggeredAt *time.Time             `json:"last_triggered_at,omitempty"`
 	NextTriggerAt   *time.Time             `json:"next_trigger_at,omitempty"`
 	TriggerCount    int                    `json:"trigger_count"`

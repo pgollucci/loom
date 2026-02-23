@@ -34,7 +34,12 @@ func (s *Server) handleProjectStateEndpoints(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// handleProjectAgents handles POST /api/v1/projects/{id}/agents
+// handleProjectAgents handles GET /api/v1/projects/{id}/agents
+// handleProjectBeads handles GET /api/v1/projects/{id}/beads
+// handleProjectWorkflows handles GET /api/v1/projects/{id}/workflows
+// handleProjectLogs handles GET /api/v1/projects/{id}/logs
+// handleProjectEvents handles GET /api/v1/projects/{id}/events
+// handleProjectConversations handles GET /api/v1/projects/{id}/conversations
 func (s *Server) handleProjectAgents(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodPost {
 		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")

@@ -36,6 +36,7 @@ All output is structured JSON by default (pipe through jq for human-readable for
 
 	// Add subcommands
 	rootCmd.AddCommand(newBeadCommand())
+rootCmd.AddCommand(newContainerCommand())
 	rootCmd.AddCommand(newWorkflowCommand())
 	rootCmd.AddCommand(newAgentCommand())
 	rootCmd.AddCommand(newProjectCommand())
