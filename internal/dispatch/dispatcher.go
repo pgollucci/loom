@@ -1131,6 +1131,18 @@ func (d *Dispatcher) createRemediationBead(stuckBead *models.Bead, execErr error
 	// Existing logic for creating remediation beads
 }
 func (d *Dispatcher) createRemediationBead(stuckBead *models.Bead, stuckAgent *models.Agent, result *worker.TaskResult) {
+    // Check for provider errors and skip remediation bead creation if detected
+    switch result.Error {
+    case "connection_refused", "429", "502":
+        log.Printf("Skipping remediation bead creation due to provider error: %s", result.Error)
+        return
+    }
+        log.Printf("Skipping remediation bead creation due to provider error: %s", result.Error)
+        return
+    }
+        log.Printf("Skipping remediation bead creation due to provider error: %s", result.Error)
+        return
+    }
 	if d.beads == nil {
 		log.Printf("[Remediation] Cannot create remediation bead: beads manager not available")
 		return
