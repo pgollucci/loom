@@ -1275,7 +1275,7 @@ Work singlemindedly until the blocker is resolved. You have full access to:
 			"stuck_terminal_reason": result.LoopTerminalReason,
 			"stuck_iterations":      fmt.Sprintf("%d", result.LoopIterations),
 			"created_by":            "dispatcher_auto_remediation",
-			"requires_persona":      "remediation-specialist",
+			"requires_persona":      "remediation-expert",
 		},
 	}
 	if err := d.beads.UpdateBead(remediationBead.ID, contextUpdates); err != nil {
