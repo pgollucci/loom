@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-02-23
+
+### Added
+- `loomctl bead errors <id>` — decodes and displays a bead's `error_history` in a readable per-dispatch table with timestamps and truncated error messages; also shows `dispatch_count`, `last_run_error`, `ralph_blocked_reason`, and `loop_detected_reason`
+- `loomctl bead unblock <id>` — shorthand for redispatching a blocked bead with an optional `--reason` flag
+- `loomctl provider list/show/register/delete` — provider management commands restored to source (existed in installed binary but had been lost from `main.go`, meaning any rebuild would silently drop them)
+- `tokenhubctl model-test <id> [api-key]` — fires a real inference request through a specific model and reports status code, latency, token usage, and partial response; accepts key via argument, `TOKENHUB_API_KEY` env, or falls back to the admin token
+- `tokenhubctl provider-status <id>` — shows full health detail for a single provider: state, request/error counts, average latency, last success time, last error message and timestamp, and cooldown expiry
+
+### Fixed
+- `tokenhubctl health` was displaying `-` for the ERRORS and LAST SUCCESS columns due to wrong field names (`consecutive_errors` / `last_success` instead of the API's actual `consec_errors` / `last_success_at`); columns now show correct values and a new LAST ERROR column has been added
+- NATS consumer leak on restart: `Close()` now calls `conn.Drain()` with a 5-second deadline instead of iterating `Unsubscribe()`, cleanly unbinding durable consumers before the TCP connection drops and preventing "already bound" errors on the next startup
+- NATS "already bound" recovery: `subscribe()` now detects the `already bound` error, deletes the stale durable consumer from the previous run, and retries once, preventing cascading context-canceled failures when the PDA orchestrator starts up
+- `dispatch_phases.go`: `isProviderError` call-sites corrected after upstream signature changed from `error` to `string` — previously `isProviderError(execErr)` and `isProviderError(fmt.Errorf(...))` caused compile errors
+- TaskExecutor `executeBead` return value: added missing `return false` on the success path after signature changed to `(needsBackoff bool)`
+- Worker backoff: TaskExecutor workers now pause 3 seconds after a provider error instead of immediately retrying, preventing the 50+ RPS spin that saturated tokenhub's 60 RPS/IP rate limit
+
+### Changed
+- Ralph `LoomHeartbeatActivity` Phase 3 (DispatchOnce loop) is now a no-op: it was spawning goroutines tied to the Temporal activity context, causing all inflight tasks to receive `context.Canceled` every ~10 seconds when the activity completed (~1 300 errors/hour); TaskExecutor handles all execution directly
+- Ralph auto-recovery now includes `rate limit` in the set of transient block reasons eligible for 30-minute cooldown reset
+- Ralph auto-recovery for auth-blocked beads: beads blocked for authentication errors are now eligible for automatic reset after 2 hours (key rotation and temporary outages can cause auth failures that clear on their own)
+- CEO REPL: agent dropdown added for targeted bead dispatch to a specific agent
+
 ## [0.1.8] - 2026-02-23
 
 ### Changed
