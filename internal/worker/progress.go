@@ -159,7 +159,7 @@ func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map
 	// Raised threshold from 20 to 35 — diagnostic and audit beads are
 	// legitimately read-only for many iterations before taking action.
 	if iteration > 35 && len(pt.filesWritten) == 0 {
-		return true, "no files modified after 35+ iterations"
+		return true, "no files modified after 35+ iterations. Consider checking for missing capabilities or unclear instructions."
 	}
 
 	// Check 2: Build/test status not improving
@@ -178,7 +178,7 @@ func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map
 
 	// Check 4: Repeated test failures without fixes
 	if pt.testStatus == "fail" && actionTypeCount["test"] > 5 && len(pt.filesWritten) < 2 {
-		return true, "tests failing repeatedly without attempting fixes"
+		return true, "tests failing repeatedly without attempting fixes. Consider reviewing test cases and agent capabilities."
 	}
 
 	// Check 5: Same action type dominating (likely searching/reading same thing)
