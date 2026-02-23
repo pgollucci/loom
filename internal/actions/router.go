@@ -1729,8 +1729,35 @@ func (r *Router) runQualityGate(ctx context.Context, actx ActionContext, action 
 	if buildErr != nil {
 		log.Printf("[QualityGate] Build error (allowing commit): %v", buildErr)
 	}
-	if buildResult != nil && !buildResult.Success && buildResult.ExitCode > 0 && buildResult.ExitCode != 127 {
-		return fmt.Sprintf("commit blocked: build failed (exit %d):\nstdout: %s\nstderr: %s",
+	if buildResult != nil && buildResult.ExitCode == 127 {
+		// Build command not found — toolchain is missing. Block the commit and
+		// instruct the agent to detect and install the required toolchain.
+		return fmt.Sprintf(
+			"commit blocked: build toolchain not found (exit 127).\n\n"+
+				"The build command could not be executed because the required tool is not installed.\n\n"+
+				"You MUST:\n"+
+				"1. Inspect the project files (go.mod, package.json, Cargo.toml, requirements.txt, etc.) "+
+				"to determine the required toolchain.\n"+
+				"2. Use execute_command to install it (e.g. 'apt-get install -y golang-go' for Go, "+
+				"'apt-get install -y nodejs npm' for Node, 'apt-get install -y python3' for Python, "+
+				"'curl https://sh.rustup.rs -sSf | sh -s -- -y' for Rust).\n"+
+				"3. Verify the build passes by running the build command via execute_command.\n"+
+				"4. Only then retry git_commit.\n\n"+
+				"DO NOT call done or git_commit until the build passes.\n\n"+
+				"Command output:\n%s%s",
+			buildResult.Stdout, buildResult.Stderr)
+	}
+	if buildResult != nil && !buildResult.Success && buildResult.ExitCode > 0 {
+		return fmt.Sprintf(
+			"commit blocked: build failed (exit %d).\n\n"+
+				"You MUST fix the build error before committing.\n"+
+				"DO NOT call done or git_commit until the build passes.\n\n"+
+				"Steps:\n"+
+				"1. Read the error output below carefully.\n"+
+				"2. Fix the files causing the error.\n"+
+				"3. Run the build command via execute_command to verify it passes.\n"+
+				"4. Only then retry git_commit.\n\n"+
+				"Build output:\nstdout:\n%s\nstderr:\n%s",
 			buildResult.ExitCode, buildResult.Stdout, buildResult.Stderr)
 	}
 

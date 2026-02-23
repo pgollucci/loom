@@ -383,6 +383,16 @@ func writeErrorSuggestion(sb *strings.Builder, r Result) {
 	case strings.Contains(msg, "escapes project") || strings.Contains(msg, "must be relative"):
 		sb.WriteString("\n**Suggestion:** Use relative paths from the project root, e.g. 'internal/actions/router.go'\n")
 
+	case strings.Contains(msg, "commit blocked") && strings.Contains(msg, "toolchain not found"):
+		sb.WriteString("\n**REQUIRED ACTION:** Install the missing toolchain using execute_command, " +
+			"then verify the build passes before retrying git_commit. " +
+			"DO NOT call done until the build is working.\n")
+
+	case strings.Contains(msg, "commit blocked") && strings.Contains(msg, "build failed"):
+		sb.WriteString("\n**REQUIRED ACTION:** Fix the build errors shown above. " +
+			"Use execute_command to run the build and confirm it passes. " +
+			"DO NOT call done or git_commit again until the build is clean.\n")
+
 	case strings.Contains(msg, "build") && strings.Contains(msg, "fail"):
 		sb.WriteString("\n**Suggestion:** Read the error output above, fix the issue, then BUILD again.\n")
 
