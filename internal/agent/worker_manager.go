@@ -466,7 +466,7 @@ func (m *WorkerManager) GetIdleAgentsByProject(projectID string) []*models.Agent
 // ExecuteTask assigns a task to an agent's worker
 func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *worker.Task) (*worker.TaskResult, error) {
 	// Wrap context with cancellation so ResetStuckAgents can kill the LLM call.
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	m.mu.Lock()
 	// Cancel any previously registered task for this agent (defensive).
 	if prev, ok := m.activeCancels[agentID]; ok {
