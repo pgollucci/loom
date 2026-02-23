@@ -194,7 +194,7 @@ projects:
     beads_path: "/.beads"  # Path within beads worktree
     beads_branch: "beads-sync"  # Branch for beads storage
     use_worktrees: true  # Enable git worktree isolation
-    use_container: true  # Enable per-project container for hermetic execution
+    use_container: false  # TaskExecutor runs in-process; no per-project container needed
     git_auth_method: token  # Use token authentication (GITHUB_TOKEN or GITLAB_TOKEN env var)
     git_strategy: direct
     is_perpetual: true
