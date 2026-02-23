@@ -111,7 +111,7 @@ func beadSkipCheck(b *models.Bead, maxHops int) (skip bool, reason string) {
 
 	if b.Context != nil {
 		switch b.Context["terminal_reason"] {
-		case "parse_failures", "progress_stagnant", "max_iterations":
+		case "parse_failures", "max_iterations":
 			return true, "terminal_" + b.Context["terminal_reason"]
 		case "completed":
 			return true, "terminal_completed"
