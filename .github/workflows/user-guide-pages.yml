@@ -28,11 +28,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install MkDocs
-        run: |
-          pip install \
-            mkdocs-material \
-            pymdownx \
-            "mkdocs>=1.5"
+        run: pip install "mkdocs-material>=9.5"
 
       - name: Build site
         run: mkdocs build
