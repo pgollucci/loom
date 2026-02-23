@@ -51,27 +51,133 @@ func (a *LoomActivities) LoomHeartbeatActivity(ctx context.Context, beatCount in
 	stuckResolved := a.resolveStuckBeads()
 	log.Printf("[Ralph] Beat %d: phase2 done (stuckResolved=%d, elapsed=%v)", beatCount, stuckResolved, time.Since(start).Round(time.Millisecond))
 
-	// Phase 3: Drain all dispatchable work
+	// Phase 3: Drain all dispatchable work.
+	// NOTE: TaskExecutor (internal/taskexecutor) handles all bead execution
+	// directly via workerLoop → claimNextBead → ExecuteTaskWithLoop. The old
+	// dispatcher goroutines were tied to the Temporal activity context, causing
+	// mass "context canceled" errors every ~10s when the activity completed.
+	// Phase 3 is intentionally a no-op to avoid double-dispatch.
 	dispatched := 0
-	if a.dispatcher != nil {
-		for i := 0; i < maxDispatchesPerBeat; i++ {
-			result, err := a.dispatcher.DispatchOnce(ctx, "")
-			if err != nil {
-				log.Printf("[Ralph] Beat %d: dispatch error on iteration %d: %v", beatCount, i+1, err)
-				break
-			}
-			if result == nil || !result.Dispatched {
-				break
-			}
-			dispatched++
+
+	// Phase 4: Auto-recover beads blocked due to transient provider failures.
+	// Provider errors (context canceled, 5xx, NATS disconnect) cause dispatch
+	// failures that accumulate until max_hops is reached and the bead is blocked.
+	// Once the underlying cause is fixed, these beads are permanently stuck
+	// unless explicitly recovered. We scan every ~10 beats (every ~100s) to
+	// reset eligible beads back to open so they can be retried.
+	recovered := 0
+	if beatCount%10 == 0 {
+		recovered = a.autoRecoverProviderBlockedBeads()
+		if recovered > 0 {
+			log.Printf("[Ralph] Beat %d: auto-recovered %d provider-blocked bead(s)", beatCount, recovered)
 		}
 	}
 
 	elapsed := time.Since(start)
-	log.Printf("[Ralph] Beat %d: dispatched=%d stuck_resolved=%d agents_reset=%d elapsed=%v",
-		beatCount, dispatched, stuckResolved, agentsReset, elapsed.Round(time.Millisecond))
+	log.Printf("[Ralph] Beat %d: dispatched=%d stuck_resolved=%d agents_reset=%d recovered=%d elapsed=%v",
+		beatCount, dispatched, stuckResolved, agentsReset, recovered, elapsed.Round(time.Millisecond))
 
 	return nil
+}
+
+// autoRecoverProviderBlockedBeads scans blocked beads and resets those that
+// were blocked due to transient provider failures (context canceled, repeated
+// provider errors, NATS-related errors). These beads are safe to retry once
+// the underlying infrastructure issue is resolved.
+//
+// Beads blocked for auth failures, budget exhaustion, or hard dispatch limits
+// are intentionally left alone — those require human intervention.
+func (a *LoomActivities) autoRecoverProviderBlockedBeads() int {
+	if a.beadsMgr == nil {
+		return 0
+	}
+
+	blockedBeads, err := a.beadsMgr.ListBeads(map[string]interface{}{
+		"status": models.BeadStatusBlocked,
+	})
+	if err != nil {
+		log.Printf("[Ralph] autoRecover: could not list blocked beads: %v", err)
+		return 0
+	}
+
+	recovered := 0
+	for _, b := range blockedBeads {
+		if b == nil || b.Context == nil {
+			continue
+		}
+
+		reason := b.Context["ralph_blocked_reason"]
+		if reason == "" {
+			continue
+		}
+
+		// Categorize the block reason.
+		isProviderTransient := strings.Contains(reason, "provider errors") ||
+			strings.Contains(reason, "context canceled") ||
+			strings.Contains(reason, "provider unavailable") ||
+			strings.Contains(reason, "Identical error repeated") ||
+			strings.Contains(reason, "provider error") ||
+			strings.Contains(reason, "rate limit")
+		isAuthBlocked := strings.Contains(reason, "auth") || strings.Contains(reason, "Authentication")
+		isBudgetBlocked := strings.Contains(reason, "budget") || strings.Contains(reason, "hard_dispatch_limit")
+
+		// Budget exhaustion always requires human intervention — skip.
+		if isBudgetBlocked {
+			continue
+		}
+
+		blockedAt, _ := time.Parse(time.RFC3339, b.Context["ralph_blocked_at"])
+
+		if isProviderTransient {
+			// Recover provider-blocked beads after 30 minutes.
+			if !blockedAt.IsZero() && time.Since(blockedAt) < 30*time.Minute {
+				continue
+			}
+		} else if isAuthBlocked {
+			// Auth errors may be transient (key rotation, temporary outage, stale
+			// error history from a fixed provider). Retry after 2 hours with a
+			// clean error slate so the fresh run can succeed.
+			if !blockedAt.IsZero() && time.Since(blockedAt) < 2*time.Hour {
+				continue
+			}
+		} else {
+			// Unknown block reason — leave alone, require human intervention.
+			continue
+		}
+
+		// Reset to open with a fresh dispatch count so the bead gets a clean
+		// retry slate. Preserve all other context fields for debugging.
+		ctxReset := map[string]string{
+			"ralph_blocked_reason": "",
+			"ralph_blocked_at":     "",
+			"dispatch_count":       "0",
+			"loop_detected":        "",
+			"loop_detected_reason": "",
+			"error_history":        "",
+			"redispatch_requested": "true",
+		}
+		updates := map[string]interface{}{
+			"status":      models.BeadStatusOpen,
+			"assigned_to": "",
+			"context":     ctxReset,
+		}
+		if err := a.beadsMgr.UpdateBead(b.ID, updates); err != nil {
+			log.Printf("[Ralph] autoRecover: failed to reset bead %s: %v", b.ID, err)
+			continue
+		}
+		log.Printf("[Ralph] Auto-recovered blocked bead %s (was blocked: %s)",
+			b.ID, reason[:min(len(reason), 80)])
+		recovered++
+	}
+	return recovered
+}
+
+// min returns the smaller of two ints (until Go 1.21 built-in min is available).
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // resolveStuckBeads finds beads with loop_detected=true that haven't been

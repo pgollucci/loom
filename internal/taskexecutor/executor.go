@@ -14,10 +14,14 @@ import (
 	"sync"
 	"time"
 
+	"encoding/json"
+	"errors"
+
 	"github.com/google/uuid"
 	"github.com/jordanhubbard/loom/internal/actions"
 	"github.com/jordanhubbard/loom/internal/beads"
 	"github.com/jordanhubbard/loom/internal/database"
+	"github.com/jordanhubbard/loom/internal/dispatch"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/worker"
@@ -34,6 +38,10 @@ const (
 	// gitFetchInterval: how often the watcher does a git fetch to detect
 	// beads pushed from external sources.
 	gitFetchInterval = 5 * time.Minute
+	// zombieBeadThreshold: if an in_progress bead with an ephemeral exec-*
+	// assignment has not been updated in this long, its executor goroutine
+	// is considered dead and the bead is reclaimed.
+	zombieBeadThreshold = 30 * time.Minute
 )
 
 // projectState tracks per-project executor state.
@@ -330,9 +338,23 @@ func (e *Executor) claimNextBead(ctx context.Context, projectID, workerID string
 		if b.Type == "decision" {
 			continue
 		}
-		// Skip in-progress beads that already have an assigned agent (being actively worked)
+		// Rescue zombie in-progress beads. Ephemeral executor IDs (exec-<project>-<uuid>)
+		// are created per goroutine and die without cleanup when loom restarts or the
+		// goroutine is killed. If the bead has not been updated in zombieBeadThreshold,
+		// the executor is gone and we reset it back to open so it can be reclaimed.
 		if b.Status == models.BeadStatusInProgress && b.AssignedTo != "" {
-			continue
+			if strings.HasPrefix(b.AssignedTo, "exec-") && time.Since(b.UpdatedAt) > zombieBeadThreshold {
+				log.Printf("[TaskExecutor] Reclaiming zombie bead %s (stale executor %s, age %v)",
+					b.ID, b.AssignedTo, time.Since(b.UpdatedAt).Round(time.Second))
+				_ = e.beadManager.UpdateBead(b.ID, map[string]interface{}{
+					"status":      models.BeadStatusOpen,
+					"assigned_to": "",
+				})
+				b.Status = models.BeadStatusOpen
+				b.AssignedTo = ""
+			} else {
+				continue
+			}
 		}
 		// Fix inconsistent state: open bead with stale assignment — reset it
 		if b.Status == models.BeadStatusOpen && b.AssignedTo != "" {
@@ -426,10 +448,7 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 	result, err := w.ExecuteTaskWithLoop(ctx, task, loopConfig)
 	if err != nil {
 		log.Printf("[TaskExecutor] ExecuteTaskWithLoop error for bead %s: %v", bead.ID, err)
-		_ = e.beadManager.UpdateBead(bead.ID, map[string]interface{}{
-			"status":      models.BeadStatusOpen,
-			"assigned_to": "",
-		})
+		e.handleBeadError(bead, err)
 		return
 	}
 
@@ -449,6 +468,81 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 			"assigned_to": "",
 		})
 	}
+}
+
+// handleBeadError records the error in bead context and detects dispatch loops.
+// Context-canceled errors (from loom shutdown) are silently reset.
+// Repeated provider/infra errors trigger loop detection and eventual blocking.
+func (e *Executor) handleBeadError(bead *models.Bead, execErr error) {
+	// Context cancellations are from loom shutdown — silently reset, no history needed.
+	if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
+		_ = e.beadManager.UpdateBead(bead.ID, map[string]interface{}{
+			"status":      models.BeadStatusOpen,
+			"assigned_to": "",
+		})
+		return
+	}
+
+	// Reload the bead to get fresh context (dispatch_count, error_history).
+	fresh, loadErr := e.beadManager.GetBead(bead.ID)
+	if loadErr != nil || fresh == nil {
+		fresh = bead
+	}
+	if fresh.Context == nil {
+		fresh.Context = map[string]string{}
+	}
+
+	// Increment dispatch_count.
+	dc := 0
+	fmt.Sscanf(fresh.Context["dispatch_count"], "%d", &dc)
+	dc++
+	fresh.Context["dispatch_count"] = fmt.Sprintf("%d", dc)
+
+	// Append to error_history (capped at 20 entries).
+	type errRecord struct {
+		Timestamp string `json:"timestamp"`
+		Error     string `json:"error"`
+		Dispatch  int    `json:"dispatch"`
+	}
+	var history []errRecord
+	if raw := fresh.Context["error_history"]; raw != "" {
+		_ = json.Unmarshal([]byte(raw), &history)
+	}
+	history = append(history, errRecord{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Error:     execErr.Error(),
+		Dispatch:  dc,
+	})
+	if len(history) > 20 {
+		history = history[len(history)-20:]
+	}
+	histBytes, _ := json.Marshal(history)
+	fresh.Context["error_history"] = string(histBytes)
+	fresh.Context["last_run_error"] = execErr.Error()
+	fresh.Context["last_run_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	// Run loop detection on the updated bead context.
+	ld := dispatch.NewLoopDetector()
+	isStuck, loopReason := ld.IsStuckInLoop(fresh)
+
+	ctxUpdate := map[string]string{
+		"dispatch_count":  fresh.Context["dispatch_count"],
+		"error_history":   fresh.Context["error_history"],
+		"last_run_error":  fresh.Context["last_run_error"],
+		"last_run_at":     fresh.Context["last_run_at"],
+		"loop_detected":   fmt.Sprintf("%t", isStuck),
+	}
+	if isStuck {
+		ctxUpdate["loop_detected_reason"] = loopReason
+		ctxUpdate["loop_detected_at"] = time.Now().UTC().Format(time.RFC3339)
+		log.Printf("[TaskExecutor] Loop detected for bead %s: %s", bead.ID, loopReason)
+	}
+
+	_ = e.beadManager.UpdateBead(bead.ID, map[string]interface{}{
+		"status":      models.BeadStatusOpen,
+		"assigned_to": "",
+		"context":     ctxUpdate,
+	})
 }
 
 // personaForBead picks a persona name based on bead tags.

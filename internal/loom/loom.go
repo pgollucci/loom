@@ -999,6 +999,14 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		log.Printf("[Loom] Reset %d agent(s) left in 'working' state from previous run", resetCount)
 	}
 
+	// Reset any beads left in_progress with ephemeral executor IDs from the previous
+	// run. Agent status reset above only covers named agents; exec-* goroutine IDs
+	// die silently on restart and must be cleaned up here so the task executor can
+	// reclaim the work immediately.
+	if zombieCount := a.resetZombieBeads(); zombieCount > 0 {
+		log.Printf("[Loom] Reset %d zombie bead(s) left in 'in_progress' state from previous run", zombieCount)
+	}
+
 	// Attach healthy providers to any paused agents after creating default agents
 	// Small delay to ensure agents are persisted to database
 	time.Sleep(500 * time.Millisecond)
@@ -1676,6 +1684,34 @@ func (a *Loom) ensureOrgChart(ctx context.Context, projectID string) error {
 	chart, err := a.orgChartManager.CreateForProject(projectID, project.Name)
 	if err != nil {
 		return err
+	}
+
+	// Backfill any positions from the default template that are missing from
+	// the existing project chart. This ensures that new personas added to
+	// DefaultOrgChartPositions() are automatically propagated to all existing
+	// projects without requiring a fresh project creation.
+	defaultPositions := models.DefaultOrgChartPositions()
+	existingRoles := make(map[string]struct{})
+	for _, p := range chart.Positions {
+		existingRoles[p.RoleName] = struct{}{}
+	}
+	for _, tmplPos := range defaultPositions {
+		if _, alreadyExists := existingRoles[tmplPos.RoleName]; !alreadyExists {
+			newPos := models.Position{
+				ID:           tmplPos.ID,
+				RoleName:     tmplPos.RoleName,
+				PersonaPath:  tmplPos.PersonaPath,
+				Required:     tmplPos.Required,
+				MaxInstances: tmplPos.MaxInstances,
+				ReportsTo:    tmplPos.ReportsTo,
+				AgentIDs:     []string{},
+			}
+			if addErr := a.orgChartManager.AddPosition(projectID, newPos); addErr == nil {
+				log.Printf("[OrgChart] Backfilled missing position %q for project %s", tmplPos.RoleName, projectID)
+			}
+			// Refresh chart reference after mutation
+			chart, _ = a.orgChartManager.CreateForProject(projectID, project.Name)
+		}
 	}
 
 	allowedRoles := a.allowedRoleSet()
@@ -3598,7 +3634,104 @@ func (a *Loom) StartMaintenanceLoop(ctx context.Context) {
 					lastFederationSync = time.Now()
 				}
 			}
+
+			// Self-removal for inactive agents: a persona agent that has had no
+			// work for 30 days removes itself from the org chart so the slot can
+			// be GC'd. The CEO or the project can always re-spawn the persona
+			// later. Required positions (e.g. ceo, engineering-manager) are
+			// intentionally excluded from this cleanup.
+			a.retireInactiveAgents(30 * 24 * time.Hour)
 		}
+	}
+}
+
+// resetZombieBeads resets in_progress beads whose assigned executor ID is an
+// ephemeral exec-* goroutine ID from a previous run. These IDs are never
+// persisted to the agents table and cannot survive a restart, so any bead
+// they hold is permanently stuck unless explicitly cleared here.
+//
+// This runs once at startup, immediately after ResetStuckAgents, so the task
+// executor can reclaim the work on its very first tick.
+func (a *Loom) resetZombieBeads() int {
+	if a.beadsManager == nil {
+		return 0
+	}
+
+	inProgressBeads, err := a.beadsManager.ListBeads(map[string]interface{}{
+		"status": models.BeadStatusInProgress,
+	})
+	if err != nil {
+		log.Printf("[Loom] resetZombieBeads: could not list in-progress beads: %v", err)
+		return 0
+	}
+
+	count := 0
+	for _, b := range inProgressBeads {
+		if b == nil || !strings.HasPrefix(b.AssignedTo, "exec-") {
+			continue
+		}
+		if err := a.beadsManager.UpdateBead(b.ID, map[string]interface{}{
+			"status":      models.BeadStatusOpen,
+			"assigned_to": "",
+		}); err != nil {
+			log.Printf("[Loom] resetZombieBeads: could not reset bead %s: %v", b.ID, err)
+			continue
+		}
+		log.Printf("[Loom] Recovered zombie bead %s [%s] (was held by stale executor %s)",
+			b.ID, b.Title, b.AssignedTo)
+		count++
+	}
+	return count
+}
+
+// retireInactiveAgents removes agents from the org chart that have been idle for
+// longer than the given threshold. Only non-required personas are eligible.
+// Required roles (CEO, Engineering Manager, Product Manager) are never retired.
+// The CEO can always re-spawn a retired persona via the REPL or UI.
+func (a *Loom) retireInactiveAgents(threshold time.Duration) {
+	if a.agentManager == nil || a.orgChartManager == nil {
+		return
+	}
+
+	// Build the set of required roles so we never auto-retire them.
+	required := make(map[string]struct{})
+	for _, pos := range models.DefaultOrgChartPositions() {
+		if pos.Required {
+			required[strings.ToLower(pos.RoleName)] = struct{}{}
+		}
+	}
+
+	now := time.Now()
+	for _, ag := range a.agentManager.ListAgents() {
+		if ag == nil {
+			continue
+		}
+		role := strings.ToLower(ag.Role)
+		if role == "" {
+			role = strings.ToLower(roleFromPersonaName(ag.PersonaName))
+		}
+		// Never retire required roles.
+		if _, isRequired := required[role]; isRequired {
+			continue
+		}
+		// Skip agents that have been active recently.
+		if now.Sub(ag.LastActive) < threshold {
+			continue
+		}
+		// Skip agents that are currently working.
+		if ag.Status == "working" {
+			continue
+		}
+		positions := a.orgChartManager.GetPositionsForAgent(ag.ProjectID, ag.ID)
+		if len(positions) == 0 {
+			continue
+		}
+		if err := a.orgChartManager.RemoveAgentFromAll(ag.ProjectID, ag.ID); err != nil {
+			log.Printf("[Maintenance] Failed to retire agent %s from org chart: %v", ag.ID, err)
+			continue
+		}
+		log.Printf("[Maintenance] Retired inactive agent %s (role: %s, last active: %s)",
+			ag.ID, role, ag.LastActive.Format("2006-01-02"))
 	}
 }
 

@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -609,11 +610,37 @@ func (d *Dispatcher) publishDispatchedTask(ctx context.Context, candidate *model
 // processTaskError handles the aftermath of a failed task execution,
 // including bead context updates, loop detection, and workflow failure.
 func (d *Dispatcher) processTaskError(candidate *models.Bead, ag *models.Agent, selectedProjectID string, execErr error) {
-	// Check if the error is a provider error
-	if isProviderError(execErr) {
-		log.Printf("[Dispatcher] Skipping remediation bead creation for provider error: %v", execErr)
+	// Reset bead to open for transient errors so it can be re-dispatched.
+	// Without this, any early return leaves the bead in in_progress with
+	// assigned_to still set — a zombie that no future dispatch will ever pick up.
+	resetBeadToOpen := func() {
+		if err := d.beads.UpdateBead(candidate.ID, map[string]interface{}{
+			"status":      models.BeadStatusOpen,
+			"assigned_to": "",
+		}); err != nil {
+			log.Printf("[Dispatcher] Warning: failed to reset bead %s to open after error: %v", candidate.ID, err)
+		}
+	}
+
+	// Context cancellation: the dispatcher's parent context was cancelled (e.g.
+	// loom shutdown, NATS disconnect). Reset the bead so it is immediately
+	// re-dispatchable on the next heartbeat.
+	if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
+		log.Printf("[Dispatcher] Bead %s resetting to open after context cancellation: %v", candidate.ID, execErr)
+		resetBeadToOpen()
 		return
 	}
+
+	// Provider error (5xx, 502, budget exceeded, etc.): the provider is
+	// temporarily unhealthy. Reset the bead so Ralph can re-dispatch it once
+	// the provider recovers. Previously this returned early without resetting,
+	// leaving beads permanently stuck as in_progress (bd-012).
+	if isProviderError(execErr) {
+		log.Printf("[Dispatcher] Bead %s resetting to open after provider error: %v", candidate.ID, execErr)
+		resetBeadToOpen()
+		return
+	}
+
 	d.setStatus(StatusParked, "execution failed")
 	observability.Error("dispatch.execute", map[string]interface{}{
 		"agent_id":    ag.ID,

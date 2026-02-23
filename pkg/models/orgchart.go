@@ -95,6 +95,8 @@ func DefaultOrgChartPositions() []Position {
 		{ID: "pos-pr", RoleName: "public-relations-manager", PersonaPath: "default/public-relations-manager", Required: false, MaxInstances: 1, ReportsTo: "pos-ceo"},
 		{ID: "pos-dm", RoleName: "decision-maker", PersonaPath: "default/decision-maker", Required: false, MaxInstances: 1, ReportsTo: "pos-ceo"},
 		{ID: "pos-hk", RoleName: "housekeeping-bot", PersonaPath: "default/housekeeping-bot", Required: false, MaxInstances: 1},
+		{ID: "pos-cto", RoleName: "cto", PersonaPath: "default/cto", Required: false, MaxInstances: 1, ReportsTo: "pos-ceo"},
+		{ID: "pos-remspec", RoleName: "remediation-specialist", PersonaPath: "default/remediation-specialist", Required: false, MaxInstances: 0, ReportsTo: "pos-em"},
 	}
 }
 
