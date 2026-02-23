@@ -1119,6 +1119,17 @@ func (d *Dispatcher) findDefaultTriageAgent(projectID string) string {
 }
 
 // createRemediationBead creates a P0 remediation bead when an agent gets stuck
+// Add provider-error detection to avoid creating remediation beads for specific errors
+func (d *Dispatcher) createRemediationBead(stuckBead *models.Bead, execErr error) {
+	if execErr != nil {
+		errMsg := execErr.Error()
+		if strings.Contains(errMsg, "connection_refused") || strings.Contains(errMsg, "429") || strings.Contains(errMsg, "502") {
+			log.Printf("[Remediation] Skipping remediation bead creation for provider error: %v", execErr)
+			return
+		}
+	}
+	// Existing logic for creating remediation beads
+}
 func (d *Dispatcher) createRemediationBead(stuckBead *models.Bead, stuckAgent *models.Agent, result *worker.TaskResult) {
 	if d.beads == nil {
 		log.Printf("[Remediation] Cannot create remediation bead: beads manager not available")
