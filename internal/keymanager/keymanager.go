@@ -157,7 +157,7 @@ func (km *KeyManager) StoreKey(id, name, description, key string) error {
 	defer km.mu.Unlock()
 
 	if !km.unlocked {
-		return errors.New("key store is locked")
+		return errors.New("key store is locked. Please unlock the key store to access credentials.")
 	}
 
 	// Encrypt the key

@@ -140,7 +140,7 @@ func (pt *ProgressTracker) Summary(iteration int) string {
 	return sb.String()
 }
 
-// IsProgressStagnant detects if the agent is looping without making meaningful progress.
+// IsProgressStagnant detects if the agent is looping without making meaningful progress, including handling meta-remediation loops.
 // Returns true if the agent appears stuck, along with a reason.
 func (pt *ProgressTracker) IsProgressStagnant(iteration int, actionTypeCount map[string]int) (bool, string) {
 	// Idempotent actions can be detected early — directory listings never
