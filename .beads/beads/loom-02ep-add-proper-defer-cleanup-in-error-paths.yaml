@@ -22,7 +22,7 @@ context:
     close_reason: ""
     conversation_session_id: dab5875d-0c82-4729-a4cd-097604253e50
     correlation_id: dispatch-loom-02ep-1771817043644609107
-    dispatch_count: "0"
+    dispatch_count: "2"
     dispatch_history: '["agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)","agent-1771534515-CEO (Default)"]'
     error_history: '[{"timestamp":"2026-02-23T03:22:26.737755605Z","error":"action loop failed: context canceled","dispatch":20},{"timestamp":"2026-02-23T03:22:59.491660238Z","error":"action loop failed: context canceled","dispatch":21},{"timestamp":"2026-02-23T03:23:31.378859517Z","error":"action loop failed: context canceled","dispatch":22},{"timestamp":"2026-02-23T03:24:03.639406591Z","error":"action loop failed: context canceled","dispatch":23},{"timestamp":"2026-02-23T03:24:38.405664113Z","error":"action loop failed: context canceled","dispatch":24}]'
     failed_at: "2026-02-23T03:24:03Z"
@@ -44,5 +44,5 @@ duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-02-06T13:19:04Z
-updatedat: 2026-02-23T20:23:18.510972544Z
+updatedat: 2026-02-23T20:41:44.521069053Z
 closedat: null

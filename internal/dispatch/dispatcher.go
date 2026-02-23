@@ -99,6 +99,14 @@ type Dispatcher struct {
 	// useNATSDispatch controls whether tasks are routed exclusively to NATS
 	// container agents instead of in-process workers. Set via SetUseNATSDispatch.
 	useNATSDispatch bool
+
+	// lifecycleCtx is the dispatcher's lifecycle context, used for graceful shutdown.
+	// Task goroutines derive their context from this, not from request contexts.
+	lifecycleCtx context.Context
+
+	// taskTimeout is the maximum duration for a single task execution.
+	// Defaults to 30 minutes if not set.
+	taskTimeout time.Duration
 }
 
 // MessageBus defines the interface for publishing task messages

@@ -339,47 +339,6 @@ function initUI() {
     });
 }
 
-function setupNavActiveState() {
-    const links = Array.from(document.querySelectorAll('.nav-list a'));
-    const sectionIds = links
-        .map((a) => (a.getAttribute('href') || '').replace('#', ''))
-        .filter(Boolean);
-
-    function setActive(id) {
-        for (const a of links) {
-            const targetId = (a.getAttribute('href') || '').replace('#', '');
-            if (targetId === id) {
-                a.setAttribute('aria-current', 'page');
-            } else {
-                a.removeAttribute('aria-current');
-            }
-        }
-    }
-
-    window.addEventListener('hashchange', () => {
-        const id = (location.hash || '').replace('#', '');
-        if (id) setActive(id);
-    });
-
-    const sections = sectionIds
-        .map((id) => document.getElementById(id))
-        .filter(Boolean);
-
-    if (sections.length === 0) return;
-
-    const observer = new IntersectionObserver(
-        (entries) => {
-            const visible = entries
-                .filter((e) => e.isIntersecting)
-                .sort((a, b) => (b.intersectionRatio || 0) - (a.intersectionRatio || 0));
-            if (visible.length > 0) setActive(visible[0].target.id);
-        },
-        { rootMargin: '-40% 0px -55% 0px', threshold: [0, 0.2, 0.4, 0.6] }
-    );
-
-    for (const s of sections) observer.observe(s);
-}
-
 function initViewTabs() {
     const tabs = Array.from(document.querySelectorAll('.view-tab'));
     const panels = Array.from(document.querySelectorAll('.view-panel'));
