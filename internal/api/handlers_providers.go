@@ -14,7 +14,7 @@ type ProviderRequest struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
-	Endpoint    string `json:"endpoint" default:"http://localhost:8090/v1"`
+	Endpoint    string `json:"endpoint" default:"http://localhost:8090/v1"` // Correct default endpoint
 	APIKey      string `json:"api_key"`
 	Model       string `json:"model"`
 	Description string `json:"description"`
