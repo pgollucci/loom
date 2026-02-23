@@ -434,6 +434,9 @@ if assignedTo != "" {
 	cmd.Flags().StringVar(&beadType, "type", "", "Filter by bead type (task, bug, feature)")
 	cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "Filter by assigned agent")
 	cmd.Flags().IntVarP(&priority, "priority", "P", 0, "Filter by priority (0=P0/highest, 4=lowest)")
+cmd.Flags().StringVar(&assignedTo, "assigned-to", "", "Filter by assigned agent")
+cmd.Flags().StringVar(&beadType, "type", "", "Filter by bead type (task, bug, feature)")
+cmd.Flags().StringVar(&status, "status", "", "Filter by status (open, in_progress, closed, blocked)")
 	cmd.Flags().BoolVar(&hasPriority, "has-priority", false, "")
 	cmd.Flags().MarkHidden("has-priority")
 	// Use PreRunE to detect if --priority was explicitly set
