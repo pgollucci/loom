@@ -297,8 +297,6 @@ function initUI() {
         render();
     });
 
-    setupNavActiveState();
-
     initKanbanDnD();
 
 
@@ -2623,6 +2621,30 @@ function renderCeoDashboard() {
         // Restore previous selection if still valid
         if (currentValue && Array.from(agentSelect.options).some(o => o.value === currentValue)) {
             agentSelect.value = currentValue;
+        }
+    }
+
+    // Populate the CEO REPL project dropdown for agent assignment
+    const projectSelect = document.getElementById('ceo-repl-project-select');
+    if (projectSelect) {
+        const currentValue = projectSelect.value;
+        
+        // Clear existing options except the first one
+        while (projectSelect.options.length > 1) {
+            projectSelect.remove(1);
+        }
+        
+        // Add all projects
+        for (const project of (state.projects || [])) {
+            const option = document.createElement('option');
+            option.value = project.id;
+            option.textContent = project.name || project.id;
+            projectSelect.appendChild(option);
+        }
+        
+        // Restore previous selection if still valid
+        if (currentValue && Array.from(projectSelect.options).some(o => o.value === currentValue)) {
+            projectSelect.value = currentValue;
         }
     }
 

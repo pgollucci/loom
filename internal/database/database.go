@@ -66,7 +66,7 @@ func NewPostgreSQL() (*Database, error) {
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		defer db.Close()
+		db.Close()
 		return nil, fmt.Errorf("failed to ping PostgreSQL database: %w", err)
 	}
 

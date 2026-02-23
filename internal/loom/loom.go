@@ -3653,7 +3653,6 @@ func (a *Loom) resetInconsistentAgents() int {
 			}
 		}
 	}
-	os.WriteFile("/tmp/dispatch-working-agents.txt", []byte(fmt.Sprintf("working=%d reset=%d\n", workingCount, count)), 0644)
 	return count
 }
 

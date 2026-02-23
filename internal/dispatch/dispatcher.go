@@ -1066,9 +1066,11 @@ func (d *Dispatcher) findDefaultTriageAgent(projectID string) string {
 
 // createRemediationBead creates a P0 remediation bead when an agent gets stuck.
 func (d *Dispatcher) createRemediationBead(stuckBead *models.Bead, stuckAgent *models.Agent, result *worker.TaskResult) {
-	// Skip remediation for provider errors that will resolve on their own
-	if result.Error == "connection_refused" || result.Error == "429" || result.Error == "502" {
-		log.Printf("[Remediation] Skipping remediation bead creation due to provider error: %s", result.Error)
+	// Skip remediation for provider/infrastructure errors that will resolve on their own.
+	// These errors indicate transient issues (rate limits, auth problems, network issues)
+	// rather than agent logic problems that remediation could fix.
+	if isProviderError(result.Error) {
+		log.Printf("[Remediation] Skipping remediation bead creation due to provider/infrastructure error: %s", result.Error)
 		return
 	}
 	if d.beads == nil {

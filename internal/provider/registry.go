@@ -52,21 +52,34 @@ func (r *Registry) Clear() {
 }
 
 func (r *Registry) Register(config *ProviderConfig) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if config.Status == "" {
-		config.Status = "pending"
-	} else if config.Status == "healthy" {
-		config.Status = "pending"
-	}
-
-	if _, exists := r.providers[config.ID]; exists {
-		return fmt.Errorf("provider %s already registered", config.ID)
-	}
+	// Always start with pending status - health check will promote to healthy
+	config.Status = "pending"
 
 	protocol := createProtocol(config)
 	if protocol == nil {
 		return fmt.Errorf("unsupported provider type: %s", config.Type)
+	}
+
+	// Run immediate health check before accepting the provider
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	_, err := protocol.GetModels(ctx)
+	if err != nil {
+		log.Printf("[Registry] Health check failed for provider %s: %v", config.ID, err)
+		// Still register but keep status as pending
+	} else {
+		// Health check passed - promote to healthy
+		config.Status = "healthy"
+		config.LastHeartbeatAt = time.Now()
+		log.Printf("[Registry] Provider %s passed health check, status: healthy", config.ID)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.providers[config.ID]; exists {
+		return fmt.Errorf("provider %s already registered", config.ID)
 	}
 
 	r.providers[config.ID] = &RegisteredProvider{

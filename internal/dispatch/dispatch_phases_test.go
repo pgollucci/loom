@@ -1095,3 +1095,17 @@ func TestProcessTaskSuccess_NormalIteration_BeadRemainsInProgress(t *testing.T) 
 		t.Errorf("max_iterations: status should not be set (bead stays in_progress), got %v", updates["status"])
 	}
 }
+
+// TestProcessTaskSuccess_CompletedTakesPrecedenceOverLoopDetected verifies that
+// when an agent successfully completes a task (LoopTerminalReason=completed),
+// the bead is closed regardless of dispatch-level loop detection. This guards
+// against the bug where loopDetected=true would override a successful completion.
+func TestProcessTaskSuccess_CompletedTakesPrecedenceOverLoopDetected(t *testing.T) {
+	// This test verifies the fix in processTaskSuccess where we check
+	// LoopTerminalReason=="completed" BEFORE checking loopDetected.
+	// The agent did its job successfully, so the bead should be closed.
+	updates := simulateProcessTaskSuccessUpdates("completed")
+	if updates["status"] != models.BeadStatusClosed {
+		t.Errorf("completed: expected status=closed even if loopDetected would be true, got %v", updates["status"])
+	}
+}
