@@ -1,3 +1,4 @@
+<!-- Autonomous agent capability enabled 2026-02-15 -->
 ![CI](https://img.shields.io/github/actions/workflow/status/jordanhubbard/loom/ci.yml?branch=main)
 ![Coverage](https://img.shields.io/codecov/c/github/jordanhubbard/loom/main)
 ![Go Version](https://img.shields.io/github/go-mod/go-version/jordanhubbard/loom)
@@ -141,72 +142,5 @@ Default personas are available under `./personas/`:
 - `personas/default/documentation-manager` — Keeps docs accurate per doc policy
 - `personas/default/decision-maker` — Resolves routine decisions (non-CEO)
 - `personas/default/web-designer` — UX/UI guidance
-- `personas/default/web-designer-engineer` — UX/UI + implementation guidance
-- `personas/default/public-relations-manager` — Messaging/launch communication support
-- `personas/default/housekeeping-bot` — Cleanup and hygiene tasks
-
-## Architecture
-
-Loom is a Go monorepo with a microservices runtime:
-
-```mermaid
-flowchart LR
-    UI[Web UI :8080] --> CP[Control Plane]
-    CP --> T[Temporal :7233]
-    CP --> NATS[NATS JetStream :4222]
-    CP --> CS[Connectors Service :50051]
-    NATS --> A1[Agent: Coder]
-    NATS --> A2[Agent: Reviewer]
-    NATS --> A3[Agent: QA]
-    CP --> PG[(PostgreSQL)]
-    CP --> TH[TokenHub]
-    CS --> Prom[Prometheus]
-    CS --> Jaeger[Jaeger]
-    CS --> Graf[Grafana]
-```
-
-- **Control Plane** -- HTTP API, dispatcher, workflow engine
-- **Agents** -- Autonomous workers subscribing to NATS topics
-- **TokenHub** -- LLM proxy handling model routing, failover, and provider management
-- **Connectors Service** -- External integrations via gRPC
-- **Temporal** -- Durable workflow orchestration
-- **NATS JetStream** -- Inter-service messaging
-- **Observability** -- OpenTelemetry, Prometheus, Jaeger, Grafana, Loki
-
-For the full architecture, see the [Developer Guide](docs/guide/developer/architecture.md).
-
-## Project Structure
-
-```
-loom/
-├── cmd/
-│   ├── loom/                  # Control plane binary
-│   ├── loom-project-agent/    # Agent binary
-│   ├── connectors-service/    # Connectors gRPC service
-│   └── loomctl/              # CLI tool
-├── internal/                  # Private application packages
-├── pkg/                       # Shared packages
-├── web/static/                # Web UI assets
-├── docs/                      # Documentation (mkdocs source)
-├── deploy/k8s/                # Kubernetes manifests
-├── config/                    # Service configurations
-├── personas/                  # Agent persona definitions
-├── docker-compose.yml         # Full development stack
-└── Makefile                   # Build, test, deploy commands
-```
-
-## Contributing
-
-See the [Contributing Guide](docs/guide/developer/contributing.md) for development setup, code style, and PR workflow.
-
-```bash
-make build       # Build all binaries
-make test        # Run test suite
-make lint        # Run all linters
-make start       # Start Docker stack
-make docs-serve  # Serve documentation locally
-```
-
-## License
-
-See LICENSE file for details.
+- `person
+... (truncated)

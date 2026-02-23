@@ -48,10 +48,10 @@ context:
     agent_id: agent-1771534515-Project Manager (Default)
     close_reason: ""
     conversation_session_id: cb7ce575-db75-4e8e-9de2-ba88b62c1221
-    dispatch_count: "14"
-    dispatch_history: '["agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)"]'
-    last_run_at: "2026-02-23T02:56:11Z"
-    last_run_error: 'action loop failed: LLM call failed on iteration 2: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
+    dispatch_count: "16"
+    dispatch_history: '["agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)","agent-1771534515-Project Manager (Default)"]'
+    last_run_at: "2026-02-23T02:56:48Z"
+    last_run_error: 'action loop failed: LLM call failed on iteration 1: failed to send request: Post "http://172.17.0.1:8090/v1/chat/completions": context canceled'
     loop_detected: "false"
     loop_detection_reason: ""
     provider_id: tokenhub
@@ -64,5 +64,5 @@ duedate: null
 milestoneid: ""
 estimatedtime: 0
 createdat: 2026-01-21T11:25:33Z
-updatedat: 2026-02-23T02:56:11.698811729Z
+updatedat: 2026-02-23T02:56:48.626732425Z
 closedat: null
