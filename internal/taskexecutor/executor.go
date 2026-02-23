@@ -42,6 +42,10 @@ const (
 	// assignment has not been updated in this long, its executor goroutine
 	// is considered dead and the bead is reclaimed.
 	zombieBeadThreshold = 30 * time.Minute
+	// providerErrorBackoff: how long a worker pauses after a provider error
+	// (502, 429, context canceled) before claiming the next bead. Prevents
+	// hot-spin loops that exhaust the tokenhub rate limit (60 RPS / IP).
+	providerErrorBackoff = 3 * time.Second
 )
 
 // projectState tracks per-project executor state.
@@ -198,7 +202,15 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 
 		idleRounds = 0
 		log.Printf("[TaskExecutor] Worker %s claimed bead %s (%s)", workerID, bead.ID, bead.Title)
-		e.executeBead(ctx, bead, workerID)
+		if needsBackoff := e.executeBead(ctx, bead, workerID); needsBackoff {
+			// Provider error (502, 429, context canceled): pause before
+			// claiming the next bead to avoid hammering tokenhub rate limits.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(providerErrorBackoff):
+			}
+		}
 	}
 }
 
@@ -373,7 +385,9 @@ func (e *Executor) claimNextBead(ctx context.Context, projectID, workerID string
 }
 
 // executeBead runs the full action loop for a claimed bead.
-func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID string) {
+// executeBead runs a bead through the worker loop. Returns true if the worker
+// should back off before claiming the next bead (provider errors, rate limits).
+func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID string) (needsBackoff bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("[TaskExecutor] PANIC for bead %s: %v", bead.ID, r)
@@ -391,7 +405,7 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 			"status":      models.BeadStatusOpen,
 			"assigned_to": "",
 		})
-		return
+		return true // no providers = back off
 	}
 	prov := providers[0]
 
@@ -449,7 +463,7 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 	if err != nil {
 		log.Printf("[TaskExecutor] ExecuteTaskWithLoop error for bead %s: %v", bead.ID, err)
 		e.handleBeadError(bead, err)
-		return
+		return true // provider error — caller should back off
 	}
 
 	log.Printf("[TaskExecutor] Bead %s finished: %s (%d iterations)",
@@ -468,6 +482,7 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 			"assigned_to": "",
 		})
 	}
+	return false
 }
 
 // handleBeadError records the error in bead context and detects dispatch loops.

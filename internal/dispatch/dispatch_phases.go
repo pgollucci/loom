@@ -635,7 +635,7 @@ func (d *Dispatcher) processTaskError(candidate *models.Bead, ag *models.Agent, 
 	// temporarily unhealthy. Reset the bead so Ralph can re-dispatch it once
 	// the provider recovers. Previously this returned early without resetting,
 	// leaving beads permanently stuck as in_progress (bd-012).
-	if isProviderError(execErr) {
+	if isProviderError(execErr.Error()) {
 		log.Printf("[Dispatcher] Bead %s resetting to open after provider error: %v", candidate.ID, execErr)
 		resetBeadToOpen()
 		return
@@ -785,7 +785,7 @@ func (d *Dispatcher) processTaskSuccess(candidate *models.Bead, ag *models.Agent
 // (iteration count, terminal reason, cooldown, remediation).
 func (d *Dispatcher) applyLoopMetadata(ctxUpdates map[string]string, candidate *models.Bead, ag *models.Agent, result *worker.TaskResult) {
 	// Check if the result contains a provider error
-	if result.Error != "" && isProviderError(fmt.Errorf("%s", result.Error)) {
+	if result.Error != "" && isProviderError(result.Error) {
 		log.Printf("[Dispatcher] Skipping loop metadata application for provider error: %v", result.Error)
 		return
 	}
