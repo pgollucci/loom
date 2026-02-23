@@ -475,7 +475,7 @@ func (a *Loom) setupProviderMetrics() {
 		if success {
 			provider.RecordSuccess(latencyMs, totalTokens)
 		} else {
-			provider.RecordFailure()
+			provider.RecordFailure(0)
 		}
 		_ = a.database.UpsertProvider(provider)
 
