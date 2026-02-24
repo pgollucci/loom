@@ -348,12 +348,12 @@ func newBeadListCommand() *cobra.Command {
 			}
 			if status != "" {
 				params.Set("status", status)
-if hasPriority {
-    params.Set("priority", fmt.Sprintf("%d", priority))
-}
-if assignedTo != "" {
-    params.Set("assigned_to", assignedTo)
-}
+				if hasPriority {
+					params.Set("priority", fmt.Sprintf("%d", priority))
+				}
+				if assignedTo != "" {
+					params.Set("assigned_to", assignedTo)
+				}
 			}
 			if beadType != "" {
 				params.Set("type", beadType)

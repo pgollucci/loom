@@ -1301,9 +1301,9 @@ Work singlemindedly until the blocker is resolved. You have full access to:
 	// Track remediation metadata on the source bead for cooldown/counter checks.
 	sourceCtx := map[string]interface{}{
 		"context": map[string]string{
-			"last_remediation_at":    time.Now().UTC().Format(time.RFC3339),
-			"remediation_count":      fmt.Sprintf("%d", remCount+1),
-			"last_remediation_bead":  remediationBead.ID,
+			"last_remediation_at":   time.Now().UTC().Format(time.RFC3339),
+			"remediation_count":     fmt.Sprintf("%d", remCount+1),
+			"last_remediation_bead": remediationBead.ID,
 		},
 	}
 	if err := d.beads.UpdateBead(stuckBead.ID, sourceCtx); err != nil {

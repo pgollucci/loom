@@ -230,20 +230,20 @@ func (c *Client) ListPRs(ctx context.Context, state string) ([]PullRequest, erro
 		Conclusion string `json:"conclusion"`
 	}
 	type ghPR struct {
-		Number            int              `json:"number"`
-		Title             string           `json:"title"`
-		Body              string           `json:"body"`
-		State             string           `json:"state"`
-		URL               string           `json:"url"`
-		Author            struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		State  string `json:"state"`
+		URL    string `json:"url"`
+		Author struct {
 			Login string `json:"login"`
 		} `json:"author"`
-		HeadRefName       string           `json:"headRefName"`
-		BaseRefName       string           `json:"baseRefName"`
-		Mergeable         string           `json:"mergeable"`
-		ReviewDecision    string           `json:"reviewDecision"`
-		IsDraft           bool             `json:"isDraft"`
-		StatusCheckRollup []ghStatusCheck  `json:"statusCheckRollup"`
+		HeadRefName       string          `json:"headRefName"`
+		BaseRefName       string          `json:"baseRefName"`
+		Mergeable         string          `json:"mergeable"`
+		ReviewDecision    string          `json:"reviewDecision"`
+		IsDraft           bool            `json:"isDraft"`
+		StatusCheckRollup []ghStatusCheck `json:"statusCheckRollup"`
 	}
 	var raw []ghPR
 	if err := json.Unmarshal(out, &raw); err != nil {

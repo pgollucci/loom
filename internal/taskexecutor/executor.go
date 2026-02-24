@@ -541,11 +541,11 @@ func (e *Executor) handleBeadError(bead *models.Bead, execErr error) {
 	isStuck, loopReason := ld.IsStuckInLoop(fresh)
 
 	ctxUpdate := map[string]string{
-		"dispatch_count":  fresh.Context["dispatch_count"],
-		"error_history":   fresh.Context["error_history"],
-		"last_run_error":  fresh.Context["last_run_error"],
-		"last_run_at":     fresh.Context["last_run_at"],
-		"loop_detected":   fmt.Sprintf("%t", isStuck),
+		"dispatch_count": fresh.Context["dispatch_count"],
+		"error_history":  fresh.Context["error_history"],
+		"last_run_error": fresh.Context["last_run_error"],
+		"last_run_at":    fresh.Context["last_run_at"],
+		"loop_detected":  fmt.Sprintf("%t", isStuck),
 	}
 	if isStuck {
 		ctxUpdate["loop_detected_reason"] = loopReason

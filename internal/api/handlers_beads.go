@@ -105,7 +105,7 @@ func (s *Server) handleBeads(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPatch:
 		var req struct {
-			Filter map[string]interface{} `json:"filter"`
+			Filter  map[string]interface{} `json:"filter"`
 			Updates map[string]interface{} `json:"updates"`
 		}
 		if err := s.parseJSON(r, &req); err != nil {

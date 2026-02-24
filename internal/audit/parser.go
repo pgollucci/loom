@@ -21,10 +21,10 @@ type Finding struct {
 type FindingType string
 
 const (
-	FindingTypeBuildError FindingType = "build_error"
+	FindingTypeBuildError  FindingType = "build_error"
 	FindingTypeTestFailure FindingType = "test_failure"
-	FindingTypeLintError  FindingType = "lint_error"
-	FindingTypeWarning    FindingType = "warning"
+	FindingTypeLintError   FindingType = "lint_error"
+	FindingTypeWarning     FindingType = "warning"
 )
 
 // Severity indicates how serious the finding is
@@ -56,18 +56,18 @@ func NewParser() *Parser {
 // ParseGoBuild parses `go build` output
 func (p *Parser) ParseGoBuild(output string) []Finding {
 	var findings []Finding
-	
+
 	// Pattern: /path/to/file.go:line:col: error message
 	// Example: /home/jkh/Src/loom/internal/foo.go:42:10: undefined: Bar
 	re := regexp.MustCompile(`([^:]+):(\d+):(\d+)?:?\s*(.+)`)
-	
+
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		
+
 		matches := re.FindStringSubmatch(line)
 		if matches != nil {
 			findings = append(findings, Finding{
@@ -91,31 +91,31 @@ func (p *Parser) ParseGoBuild(output string) []Finding {
 			})
 		}
 	}
-	
+
 	return findings
 }
 
 // ParseGoTest parses `go test` output
 func (p *Parser) ParseGoTest(output string) []Finding {
 	var findings []Finding
-	
+
 	lines := strings.Split(output, "\n")
-	
+
 	// Check for test failures
 	// Pattern: --- FAIL: TestName (0.00s)
 	// Followed by:    file_test.go:123: error message
 	failRe := regexp.MustCompile(`^--- FAIL: (\w+)`)
 	fileRe := regexp.MustCompile(`^\s*([^:]+):(\d+):\s*(.+)`)
-	
+
 	var currentTest string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		if matches := failRe.FindStringSubmatch(line); matches != nil {
 			currentTest = matches[1]
 			continue
 		}
-		
+
 		if currentTest != "" {
 			if matches := fileRe.FindStringSubmatch(line); matches != nil {
 				findings = append(findings, Finding{
@@ -130,7 +130,7 @@ func (p *Parser) ParseGoTest(output string) []Finding {
 				currentTest = ""
 			}
 		}
-		
+
 		// Check for panics in test output
 		if strings.Contains(line, "panic:") || strings.Contains(line, "FAIL") {
 			if !strings.HasPrefix(line, "---") && !strings.HasPrefix(line, "PASS") {
@@ -143,7 +143,7 @@ func (p *Parser) ParseGoTest(output string) []Finding {
 			}
 		}
 	}
-	
+
 	// Check for coverage failures
 	if strings.Contains(output, "FAIL") && strings.Contains(output, "coverage") {
 		findings = append(findings, Finding{
@@ -153,41 +153,41 @@ func (p *Parser) ParseGoTest(output string) []Finding {
 			Message:  "Test coverage check failed",
 		})
 	}
-	
+
 	return findings
 }
 
 // ParseGoLint parses golangci-lint output
 func (p *Parser) ParseGoLint(output string) []Finding {
 	var findings []Finding
-	
+
 	// golangci-lint has multiple output formats
 	// JSON: {"from":"file.go:10:5","severity":"error","message":"error message","source":"rule-name"}
 	// Plain: file.go:10:5: error message (rule-name)
-	
+
 	// Try JSON first
 	if strings.HasPrefix(strings.TrimSpace(output), "[") {
 		// For now, fall through to plain parsing
 		// Could add JSON parsing here if needed
 	}
-	
+
 	// Plain text pattern: path/to/file.go:line:col: message (rule)
 	re := regexp.MustCompile(`([^:]+):(\d+):(\d+)?:?\s*(.+?)(?:\s+\(([^)]+)\))?$`)
-	
+
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		// Skip summary lines
 		if strings.HasPrefix(line, "==") || strings.HasPrefix(line, "--") ||
 			strings.HasPrefix(line, "戈") || strings.Contains(line, "complete") ||
 			strings.Contains(line, "error index") {
 			continue
 		}
-		
+
 		matches := re.FindStringSubmatch(line)
 		if matches != nil {
 			severity := SeverityWarning
@@ -195,7 +195,7 @@ func (p *Parser) ParseGoLint(output string) []Finding {
 				strings.Contains(matches[4], "cannot") {
 				severity = SeverityError
 			}
-			
+
 			findings = append(findings, Finding{
 				Type:     FindingTypeLintError,
 				Severity: severity,
@@ -216,7 +216,7 @@ func (p *Parser) ParseGoLint(output string) []Finding {
 			})
 		}
 	}
-	
+
 	return findings
 }
 
@@ -239,7 +239,7 @@ func (p *Parser) NewResult(findings []Finding) *Result {
 	buildErrors := 0
 	testFailures := 0
 	lintErrors := 0
-	
+
 	for _, f := range findings {
 		switch f.Type {
 		case FindingTypeBuildError:
@@ -250,7 +250,7 @@ func (p *Parser) NewResult(findings []Finding) *Result {
 			lintErrors++
 		}
 	}
-	
+
 	summary := "Audit complete"
 	if buildErrors > 0 {
 		summary = summary + fmt.Sprintf(", %d build errors", buildErrors)
@@ -264,7 +264,7 @@ func (p *Parser) NewResult(findings []Finding) *Result {
 	if len(findings) == 0 {
 		summary = "All checks passed"
 	}
-	
+
 	return &Result{
 		Findings:    findings,
 		BuildPassed: buildErrors == 0,

@@ -285,12 +285,12 @@ func (w *Worker) buildSingleShotMessages(task *Task) []provider.ChatMessage {
 
 // Constants for token limit calculations
 const (
-	CharToTokenRatio = 4 // Approximate ratio of characters to tokens
-	TokenLimitHeadroom = 0.8 // Headroom to avoid hitting token limit
-	DefaultTokenLimit = 32768 // Default token limit if not specified
-	TruncationFractionHigh = 0.5 // Fraction for high truncation
-	TruncationFractionMedium = 0.25 // Fraction for medium truncation
-	TruncationFractionLow = 0.0 // Fraction for low truncation
+	CharToTokenRatio         = 4     // Approximate ratio of characters to tokens
+	TokenLimitHeadroom       = 0.8   // Headroom to avoid hitting token limit
+	DefaultTokenLimit        = 32768 // Default token limit if not specified
+	TruncationFractionHigh   = 0.5   // Fraction for high truncation
+	TruncationFractionMedium = 0.25  // Fraction for medium truncation
+	TruncationFractionLow    = 0.0   // Fraction for low truncation
 )
 
 // handleTokenLimits truncates messages if they exceed model token limits
@@ -456,7 +456,7 @@ func (w *Worker) callWithContextRetry(ctx context.Context, req *provider.ChatCom
 	}
 
 	log.Printf("[ContextRetry] All retry attempts failed due to context length: %v", err)
-return nil, minimal, fmt.Errorf("context length exceeded after all retry attempts: %w", err)
+	return nil, minimal, fmt.Errorf("context length exceeded after all retry attempts: %w", err)
 }
 
 // messageExists checks if a message with the same content already exists in history
