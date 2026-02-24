@@ -360,6 +360,7 @@ deps-linux-pacman:
 clean:
 	rm -rf $(BIN_DIR)
 	rm -rf $(OBJ_DIR)
+	rm -rf site/
 
 # Deep clean: stop containers, remove volumes (DELETES DATABASES), remove images, clean all caches
 distclean: clean
