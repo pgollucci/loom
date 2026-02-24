@@ -72,11 +72,11 @@
             <button class="view-tab" data-target="ceo" role="tab" aria-selected="false">🧭 CEO</button>
             <button class="view-tab" data-target="analytics" role="tab" aria-selected="false">📊 Analytics</button>
             <button class="view-tab" data-target="motivations" role="tab" aria-selected="false">⚡ Motivations</button>
-            <button class="view-tab" data-target="logs" role="tab" aria-selected="false">📋 Logs</button>
+            <button class="view-tab" data-target="logs" role="tab" aria-selected="false">📜 Logs</button>
             <button class="view-tab" data-target="export-import" role="tab" aria-selected="false">💾 Export/Import</button>
 
             <!-- Debug & Dev -->
-            <button class="view-tab" data-target="diagrams" role="tab" aria-selected="false">📊 Diagrams</button>
+            <button class="view-tab" data-target="diagrams" role="tab" aria-selected="false">🔀 Diagrams</button>
             <button class="view-tab" data-target="dev-tools" role="tab" aria-selected="false">🔧 Dev Tools</button>
         </div>
 
@@ -90,7 +90,6 @@
                         <select id="project-view-select"></select>
                     </div>
                     <div class="field">
-                        <button type="button" class="secondary" id="project-view-add" onclick="showProjectOptionsMenu()" aria-haspopup="dialog">Add Project</button>
                     </div>
                 </div>
             </div>
@@ -303,9 +302,6 @@
             <div id="projects-table-container">
                 <!-- Projects table will be loaded here -->
             </div>
-            <div id="project-list" class="project-container" style="display: none;">
-                <!-- Legacy project list (kept for backward compatibility) -->
-            </div>
         </section>
 
         <!-- Conversations Section -->
@@ -348,14 +344,10 @@
             </div>
         </section>
 
-        <!-- Legacy REPL section - kept for backward compatibility but hidden by default -->
-        <section id="repl" class="view-panel" role="tabpanel" aria-label="CEO REPL (Legacy)" hidden style="display: none;">
-            <!-- Content moved to unified CEO section -->
-        </section>
 
         <!-- Logs Section -->
         <section id="logs" class="view-panel" role="tabpanel" aria-label="System Logs" hidden>
-            <h2><span aria-hidden="true">📋</span> System Logs & Metrics</h2>
+            <h2><span aria-hidden="true">📜</span> System Logs & Metrics</h2>
             
             <!-- Metrics Panel -->
             <div id="log-metrics" class="log-metrics"></div>
@@ -584,10 +576,6 @@ loomctl import backup.json --dry-run</code></pre>
             </div>
         </section>
 
-        <!-- Legacy Streaming Test section - kept for backward compatibility -->
-        <section id="streaming-test" class="view-panel" role="tabpanel" aria-label="Streaming Test (Legacy)" hidden style="display: none;">
-            <!-- Content moved to dev-tools section -->
-        </section>
 
         <!-- Users Section -->
         <section id="users" class="view-panel" role="tabpanel" aria-label="Users" hidden>
@@ -952,7 +940,7 @@ loomctl import backup.json --dry-run</code></pre>
 
         <!-- Diagrams Section -->
         <section id="diagrams" class="view-panel" role="tabpanel" aria-label="Workflow Diagrams" hidden>
-            <h2><span aria-hidden="true">📊</span> Workflow Diagrams</h2>
+            <h2><span aria-hidden="true">🔀</span> Workflow Diagrams</h2>
             <p class="small" style="margin-bottom: 1rem;">Interactive visualization of projects, agents, beads, and motivations.</p>
 
             <div class="toolbar">
