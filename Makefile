@@ -64,9 +64,9 @@ build: builder
 	@echo "Building loomctl CLI..."
 	@$(DOCKER_RUN) sh -c 'CGO_ENABLED=1 go build $(LDFLAGS) -o $(BIN_DIR)/loomctl ./cmd/loomctl'
 	@echo "Building loom-project-agent..."
-	@$(DOCKER_RUN) go build $(LDFLAGS) -o $(BIN_DIR)/loom-project-agent ./cmd/loom-project-agent
+	@$(DOCKER_RUN) sh -c 'CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/loom-project-agent ./cmd/loom-project-agent'
 	@echo "Building connectors-service..."
-	@$(DOCKER_RUN) go build $(LDFLAGS) -o $(BIN_DIR)/connectors-service ./cmd/connectors-service
+	@$(DOCKER_RUN) sh -c 'CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/connectors-service ./cmd/connectors-service'
 	@echo "Build complete: bin/loom, bin/loomctl, bin/loom-project-agent, bin/connectors-service"
 
 build-all: builder
