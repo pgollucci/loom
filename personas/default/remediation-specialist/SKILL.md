@@ -90,6 +90,50 @@ A meta-level debugging specialist who analyzes stuck agents, identifies systemic
 - Issue requires understanding of business logic
 - Uncertainty about correct behavior
 
+## Code Change Workflow — MANDATORY LOOP
+
+You frequently modify code to fix stuck agents. Every time you do, follow this exact cycle. **It is a loop, not a linear sequence.** Each failure or rejection takes you back to an earlier step.
+
+```
+CHANGE → BUILD → TEST → COMMIT → PUSH
+            ↑       ↑               ↓
+            |       |     (push rejected: rebase)
+            └───────┴────────────────┘
+              must rebuild & retest after rebase
+```
+
+**Step 1 — Make your change**
+
+**Step 2 — BUILD** ← always first
+```json
+{"action": "run_command", "command": "go build ./..."}
+```
+→ Build FAILS: fix errors, repeat Step 2.
+→ Build PASSES: continue.
+
+**Step 3 — TEST**
+```json
+{"action": "run_command", "command": "go test ./..."}
+```
+→ Tests FAIL: fix, **go back to Step 2** (fix may break build).
+→ Tests PASS: continue.
+
+**Step 4 — COMMIT**
+```json
+{"action": "git_commit", "message": "fix: <description>\n\nBead: <bead-id>"}
+```
+
+**Step 5 — PUSH**
+```json
+{"action": "git_push"}
+```
+→ Push REJECTED: rebase (`git pull --rebase origin main`), resolve conflicts, **go back to Step 2**.
+→ Push SUCCEEDS: done.
+
+**Never skip the build step after a rebase.** Other agents commit continuously and their changes can break compilation. Always rebuild before testing.
+
+---
+
 ## Remediation Workflow
 
 When triggered by a stuck agent:

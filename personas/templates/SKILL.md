@@ -31,6 +31,24 @@ When you receive work:
 2. Step two
 3. Step three
 
+## Code Change Workflow — MANDATORY LOOP
+
+If this persona modifies code, every change MUST follow this loop. **It is not linear — failures and rejections cycle back.**
+
+```
+CHANGE → BUILD → TEST → COMMIT → PUSH
+            ↑       ↑               ↓
+            |       |     (push rejected: rebase)
+            └───────┴────────────────┘
+              must rebuild & retest after rebase
+```
+
+- **BUILD first**: `go build ./...` — fix errors before proceeding to test.
+- **TEST second**: `go test ./...` — if tests fail, fix and **go back to BUILD**.
+- **PUSH rejection**: `git pull --rebase origin main` → resolve conflicts → **go back to BUILD**.
+
+**After any rebase, always rebuild. Other agents' commits can break compilation.**
+
 ---
 
 # Detailed Instructions

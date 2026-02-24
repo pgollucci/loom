@@ -22,52 +22,57 @@ compatibility: Designed for Loom
 
 You have access to git operations for version control. Use these actions to commit, push, and manage your work.
 
-### When to Use Git Actions
+### Code Change Workflow — MANDATORY LOOP
 
-**Commit your changes when:**
-- You've completed a logical unit of work (feature, bugfix, refactoring)
-- All tests pass successfully
-- Build completes without issues
+Every time you modify code, you MUST follow this exact cycle. **It is a loop, not a linear sequence.** Each failure or rejection takes you back to an earlier step.
 
-**Push to remote when:**
-- You've made one or more commits
-- You're ready for code review
+```
+CHANGE → BUILD → TEST → COMMIT → PUSH
+            ↑       ↑               ↓
+            |       |     (push rejected: rebase)
+            └───────┴────────────────┘
+              must rebuild & retest after rebase
+```
 
-### Action Format
+**Step 1 — Make your change**
+Edit the files needed to accomplish the task.
 
-You communicate via JSON actions. Each response is ONE action:
+**Step 2 — BUILD** ← always the first verification step
+```json
+{"action": "run_command", "command": "go build ./..."}
+```
+→ Build FAILS: fix the errors, repeat Step 2.
+→ Build PASSES: continue to Step 3.
 
+**Step 3 — TEST**
+```json
+{"action": "run_command", "command": "go test ./..."}
+```
+→ Tests FAIL: fix the failures, **go back to Step 2** (your fix may introduce new build errors).
+→ Tests PASS: continue to Step 4.
+
+**Step 4 — COMMIT**
 ```json
 {"action": "git_commit", "message": "fix: Resolve auth timeout\n\nBead: bead-abc-123"}
 ```
 
-### Git Action Examples
-
-**1. Commit Changes:**
-```json
-{"action": "git_commit", "message": "feat: Add user authentication\n\nBead: bead-abc-123"}
-```
-
-**2. Push to Remote:**
+**Step 5 — PUSH**
 ```json
 {"action": "git_push"}
 ```
+→ Push REJECTED (remote has new commits from other agents):
+  a. Rebase: `{"action": "run_command", "command": "git pull --rebase origin main"}`
+  b. Resolve any merge conflicts in the files shown.
+  c. **Go back to Step 2** — other agents' commits may not compile or may break your tests.
+→ Push SUCCEEDS: mark the bead done.
 
-**3. Complete Workflow:**
+**Never skip the build step after a rebase.** Other agents commit continuously; their changes can introduce compile errors (duplicate imports, changed function signatures, removed identifiers) that running tests alone will not reveal before it is too late.
+
+### Action Format
+
+You communicate via JSON actions. Each response is ONE action:
 ```json
-{"action": "test", "notes": "Running tests before commit"}
-```
-Then after tests pass:
-```json
-{"action": "git_commit", "message": "fix: Resolve authentication timeout issue\n\nBead: bead-abc-123"}
-```
-Then:
-```json
-{"action": "git_push", "notes": "Pushing committed fix"}
-```
-Then:
-```json
-{"action": "done", "reason": "Fixed auth timeout, committed and pushed"}
+{"action": "git_commit", "message": "fix: Resolve auth timeout\n\nBead: bead-abc-123"}
 ```
 
 ### Commit Message Format
@@ -92,10 +97,11 @@ Bead: <bead-id>
 
 ### Git Best Practices
 
-1. **Commit After Success**: Only commit when tests pass and builds succeed
-2. **Atomic Commits**: Each commit should represent one logical change
-3. **Clear Messages**: Write descriptive commit messages explaining why, not what
-4. **Reference Beads**: Always include bead ID in commits
+1. **Build before test**: A failing build cannot run tests — always build first.
+2. **Rebuild after rebase**: Merged code from other agents may not compile.
+3. **Atomic commits**: Each commit should represent one logical change.
+4. **Clear messages**: Write descriptive commit messages explaining why, not what.
+5. **Reference beads**: Always include bead ID in commits.
 
 ### Security Considerations
 
