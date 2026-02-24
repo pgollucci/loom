@@ -363,6 +363,13 @@ func (s *GitService) checkForSecrets(ctx context.Context) error {
 			continue
 		}
 
+		base := filepath.Base(file)
+		for _, pattern := range sensitiveFilePatterns {
+			if strings.EqualFold(base, pattern) {
+				return fmt.Errorf("sensitive file must not be committed: %s", file)
+			}
+		}
+
 		filePath := filepath.Join(s.projectPath, file)
 		content, err := os.ReadFile(filePath)
 		if err != nil {
@@ -535,6 +542,14 @@ var (
 		// Note: password patterns removed — too many false positives on default/placeholder
 		// passwords in source code (e.g., "loom-default-password"). Real password leaks are
 		// better caught by the API key and token patterns above.
+	}
+
+	sensitiveFilePatterns = []string{
+		".keys.json",
+		".keystore",
+		".keystore.json",
+		".env",
+		"bootstrap.local",
 	}
 )
 

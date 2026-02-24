@@ -1,6 +1,8 @@
 package git
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -139,6 +141,42 @@ func TestHasSecrets(t *testing.T) {
 			got := hasSecrets([]byte(tt.content))
 			if got != tt.expected {
 				t.Errorf("hasSecrets() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSensitiveFilePatterns(t *testing.T) {
+	tests := []struct {
+		name      string
+		filename  string
+		sensitive bool
+	}{
+		{"keys.json at root", ".keys.json", true},
+		{"keys.json nested", "data/keys/.keys.json", true},
+		{"keystore file", ".keystore", true},
+		{"keystore json file", ".keystore.json", true},
+		{"env file", ".env", true},
+		{"bootstrap local", "bootstrap.local", true},
+		{"case insensitive", ".Keys.JSON", true},
+		{"normal go file", "main.go", false},
+		{"config yaml", "config.yaml", false},
+		{"readme", "README.md", false},
+		{"partial match", "not-keys.json", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := filepath.Base(tt.filename)
+			found := false
+			for _, pattern := range sensitiveFilePatterns {
+				if strings.EqualFold(base, pattern) {
+					found = true
+					break
+				}
+			}
+			if found != tt.sensitive {
+				t.Errorf("sensitiveFilePatterns match for %q = %v, want %v", tt.filename, found, tt.sensitive)
 			}
 		})
 	}

@@ -49,7 +49,11 @@ arbiter-*
 web/dist/
 loom-self/
 agenticorp-self/
+# Key store files (encrypted API keys — must never be committed)
 .keys.json
+**/.keys.json
+*.keystore
+*.keystore.json
 
 # Runtime data
 data/

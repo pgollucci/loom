@@ -937,12 +937,19 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			if selected == "" {
 				selected = p.ConfiguredModel
 			}
+			var apiKey string
+			if p.KeyID != "" && a.keyManager != nil && a.keyManager.IsUnlocked() {
+				apiKey, _ = a.keyManager.GetKey(p.KeyID)
+			}
+			if apiKey == "" {
+				apiKey = p.APIKey // fall back to key stored directly in provider record
+			}
 			_ = a.providerRegistry.Upsert(&provider.ProviderConfig{
 				ID:                     p.ID,
 				Name:                   p.Name,
 				Type:                   p.Type,
 				Endpoint:               normalizeProviderEndpoint(p.Endpoint),
-				APIKey:                 p.APIKey,
+				APIKey:                 apiKey,
 				Model:                  selected,
 				ConfiguredModel:        p.ConfiguredModel,
 				SelectedModel:          selected,

@@ -29,6 +29,13 @@ vendor/
 .env
 .env.*
 
+# Key store files (encrypted API keys — must never leak into images)
+.keys.json
+**/.keys.json
+*.keystore
+*.keystore.json
+data/keys/
+
 # Temporary files
 tmp/
 temp/

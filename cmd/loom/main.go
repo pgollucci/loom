@@ -73,7 +73,8 @@ func main() {
 
 	// Initialize key manager before Loom.Initialize() so Temporal activities
 	// can use it for provider API key retrieval during heartbeats.
-	keyStorePath := filepath.Join(".", ".keys.json")
+	// Store in the persisted data volume so keys survive container restarts.
+	keyStorePath := filepath.Join(".", "data", "keys", ".keys.json")
 	km := keymanager.NewKeyManager(keyStorePath)
 
 	password := loadPassword()

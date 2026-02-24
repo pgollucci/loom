@@ -1,4 +1,4 @@
-.PHONY: all build build-all start stop restart prune bootstrap run test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch k8s-apply k8s-delete linkerd-setup linkerd-check linkerd-dashboard linkerd-tap proto-gen agents scale-coders scale-reviewers scale-qa scale-agents logs-agents stop-agents docs docs-serve docs-deploy helm-install helm-upgrade helm-uninstall helm-deps helm-lint helm-template helm-package helm-secrets
+.PHONY: all build build-all start stop restart prune bootstrap status run test test-docker test-api coverage test-coverage fmt vet lint lint-install lint-go lint-js lint-yaml lint-docs lint-api deps deps-go deps-macos deps-linux deps-wsl deps-linux-apt deps-linux-dnf deps-linux-pacman clean distclean install config dev-setup help release release-major release-minor release-patch k8s-apply k8s-delete linkerd-setup linkerd-check linkerd-dashboard linkerd-tap proto-gen agents scale-coders scale-reviewers scale-qa scale-agents logs-agents stop-agents docs docs-serve docs-deploy helm-install helm-upgrade helm-uninstall helm-deps helm-lint helm-template helm-package helm-secrets
 
 # Build variables
 BINARY_NAME=loom
@@ -137,6 +137,30 @@ prune:
 # View loom container logs (follow)
 logs:
 	docker compose logs -f loom
+
+# Show status of all containers and loom health
+status:
+	@docker compose ps -a --format '{{.Name}}\t{{.State}}\t{{.Status}}\t{{.Health}}' 2>/dev/null | \
+	while IFS='	' read -r name state status health; do \
+		[ -z "$$name" ] && continue; \
+		label="$$status"; \
+		[ -n "$$health" ] && label="$$health"; \
+		if [ "$$state" = "running" ]; then sym="✔"; else sym="✗"; fi; \
+		printf " %s %-35s %s\n" "$$sym" "$$name" "$$label"; \
+	done || echo " ✗ No containers found. Run 'make start' to launch loom."
+	@echo ""
+	@health=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8080/health 2>/dev/null); \
+	if [ -n "$$health" ]; then \
+		status=$$(echo "$$health" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown"); \
+		if [ "$$status" = "healthy" ]; then \
+			echo " ✔ Loom API                         healthy"; \
+		else \
+			echo " ✗ Loom API                         $$status"; \
+		fi; \
+	else \
+		echo " ✗ Loom API                         not responding"; \
+	fi
+
 
 # Run tests: build binaries first, then run full test suite with PostgreSQL env
 # Set DB vars explicitly so tests can find the local postgres (docker compose must be up)
@@ -606,6 +630,7 @@ help:
 	@echo "  make restart      - Rebuild and restart + bootstrap"
 	@echo "  make prune        - Remove stale Docker images (preserves volumes/databases)"
 	@echo "  make bootstrap    - Run bootstrap.local if present (registers providers)"
+	@echo "  make status       - Show status of all containers and loom health"
 	@echo "  make logs         - Follow loom container logs"
 	@echo ""
 	@echo "Development:"
