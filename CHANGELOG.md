@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-02-24
+
+### Added
+- add explicit build→test→push loop to all code-touching agents
+- auto-bootstrap provider from LOOM_PROVIDER_URL env var
+
+### Fixed
+- move AUTONOMY_TEST.md and release_checklist.md into docs/
+- add site/ to .gitignore so mkdocs build doesn't dirty the tree
+- build project-agent and connectors-service as static binaries
+- trust bind-mounted source dir in builder container
+- add error handling for debug os.WriteFile calls in dispatch loop
+- containerize all Go operations — only Docker+Make required on host
+- add no-stray-scripts rule after observing fix_ui.go incident
+- remove stray fix_ui.go script left in root package
+- prevent remediation beads for provider/infrastructure ...
+- resolve duplicate emojis and remove legacy sections
+- persist provider API keys across restarts, harden key security
+- use lifecycle context with timeout for task goroutines
+- add link for the CI badge to point to status
+- add link for the CI badge to point to status
+- format code with `gofmt`; avoid lint warnings
+
+### Other
+- Move from alpine to ubuntu
+
 ## [0.1.10] - 2026-02-24
 
 ### Added
