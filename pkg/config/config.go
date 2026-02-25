@@ -48,6 +48,10 @@ type Config struct {
 	PDA           PDAConfig       `yaml:"pda" json:"pda,omitempty"`
 	Swarm         SwarmConfig     `yaml:"swarm" json:"swarm,omitempty"`
 
+	// Debug instrumentation level: "off" | "standard" | "extreme"
+	// See docs/DEBUG.md for full documentation.
+	DebugLevel string `yaml:"debug_level" json:"debug_level,omitempty"`
+
 	// JSON/User-specific configuration fields
 	Providers   []Provider     `yaml:"providers,omitempty" json:"providers"`
 	ServerPort  int            `yaml:"server_port,omitempty" json:"server_port"`

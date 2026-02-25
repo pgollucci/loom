@@ -1,13 +1,17 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/analytics"
@@ -23,6 +27,113 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// ─── Debug instrumentation ─────────────────────────────────────────────────
+
+// debugSeq is an atomic sequence counter for debug log entries.
+var debugSeq atomic.Int64
+
+// debugEntry is the canonical JSON structure emitted for every debug event.
+// Schema version 1 — see docs/DEBUG.md.
+type debugEntry struct {
+	TS         string                 `json:"ts"`
+	Seq        int64                  `json:"seq"`
+	Schema     string                 `json:"schema"`
+	DebugLevel string                 `json:"debug_level"`
+	Category   string                 `json:"category"`
+	Action     string                 `json:"action"`
+	Source     string                 `json:"source"`
+	Data       map[string]interface{} `json:"data"`
+	DurationMS int64                  `json:"duration_ms,omitempty"`
+}
+
+// debugPattern describes a URL + method pair that maps to a standard-level semantic event.
+type debugPattern struct {
+	method   string
+	re       *regexp.Regexp
+	category string
+	action   string
+}
+
+// standardDebugPatterns are the API paths emitted at "standard" debug level.
+var standardDebugPatterns = []debugPattern{
+	// Bead lifecycle
+	{"POST", regexp.MustCompile(`^/api/v1/beads$`), "bead_event", "bead created"},
+	{"PUT", regexp.MustCompile(`^/api/v1/beads/[^/]+$`), "bead_event", "bead updated"},
+	{"PATCH", regexp.MustCompile(`^/api/v1/beads/[^/]+$`), "bead_event", "bead updated"},
+	{"DELETE", regexp.MustCompile(`^/api/v1/beads/[^/]+$`), "bead_event", "bead deleted"},
+	{"POST", regexp.MustCompile(`^/api/v1/beads/[^/]+/close$`), "bead_event", "bead closed"},
+	{"POST", regexp.MustCompile(`^/api/v1/beads/[^/]+/claim$`), "bead_event", "bead claimed"},
+	{"POST", regexp.MustCompile(`^/api/v1/beads/[^/]+/block$`), "bead_event", "bead blocked"},
+	{"POST", regexp.MustCompile(`^/api/v1/beads/[^/]+/redispatch$`), "bead_event", "bead redispatched"},
+	{"POST", regexp.MustCompile(`^/api/v1/beads/[^/]+/annotate$`), "bead_event", "bead annotated"},
+	// Agent lifecycle
+	{"POST", regexp.MustCompile(`^/api/v1/agents$`), "agent_event", "agent created"},
+	{"DELETE", regexp.MustCompile(`^/api/v1/agents/[^/]+$`), "agent_event", "agent deleted"},
+	{"POST", regexp.MustCompile(`^/api/v1/agents/[^/]+/start$`), "agent_event", "agent started"},
+	{"POST", regexp.MustCompile(`^/api/v1/agents/[^/]+/stop$`), "agent_event", "agent stopped"},
+	{"POST", regexp.MustCompile(`^/api/v1/agents/[^/]+/pause$`), "agent_event", "agent paused"},
+	{"POST", regexp.MustCompile(`^/api/v1/agents/[^/]+/resume$`), "agent_event", "agent resumed"},
+	// Project lifecycle
+	{"POST", regexp.MustCompile(`^/api/v1/projects$`), "project_event", "project created"},
+	{"POST", regexp.MustCompile(`^/api/v1/projects/bootstrap$`), "project_event", "project bootstrapped"},
+	{"DELETE", regexp.MustCompile(`^/api/v1/projects/[^/]+$`), "project_event", "project deleted"},
+	{"PUT", regexp.MustCompile(`^/api/v1/projects/[^/]+$`), "project_event", "project updated"},
+	{"POST", regexp.MustCompile(`^/api/v1/projects/[^/]+/close$`), "project_event", "project closed"},
+}
+
+// streamingPaths are SSE/streaming paths whose response bodies must NOT be buffered.
+var streamingPaths = []string{
+	"/api/v1/events/stream",
+	"/api/v1/events",
+	"/api/v1/pair",
+	"/api/v1/chat/completions",
+}
+
+func isStreamingPath(path string) bool {
+	for _, p := range streamingPaths {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchStandardPattern(method, path string) *debugPattern {
+	for i := range standardDebugPatterns {
+		p := &standardDebugPatterns[i]
+		if p.method == method && p.re.MatchString(path) {
+			return p
+		}
+	}
+	return nil
+}
+
+// emitDebugLog writes a JSON debug entry to stdout (appears in docker logs).
+func (s *Server) emitDebugLog(category, action string, data map[string]interface{}, durationMS int64) {
+	lvl := s.config.DebugLevel
+	if lvl == "" || lvl == "off" {
+		return
+	}
+	entry := debugEntry{
+		TS:         time.Now().UTC().Format(time.RFC3339Nano),
+		Seq:        debugSeq.Add(1),
+		Schema:     "1",
+		DebugLevel: lvl,
+		Category:   category,
+		Action:     "[LOOM_DEBUG] " + action,
+		Source:     "api_middleware",
+		Data:       data,
+		DurationMS: durationMS,
+	}
+	b, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(os.Stdout, "%s\n", b)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 // Server represents the HTTP API server
 type Server struct {
@@ -329,6 +440,7 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/health/ready", s.handleHealthReady) // Readiness probe
 
 	// Configuration
+	mux.HandleFunc("/api/v1/config/debug", s.handleDebugConfig)
 	mux.HandleFunc("/api/v1/config", s.handleConfig)
 	mux.HandleFunc("/api/v1/config/export.yaml", s.handleConfigExportYAML)
 	mux.HandleFunc("/api/v1/config/import.yaml", s.handleConfigImportYAML)
@@ -406,18 +518,118 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // Middleware
 
-// loggingMiddleware logs HTTP requests
+// loggingMiddleware logs HTTP requests and emits structured debug events.
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recorder := &statusRecorder{ResponseWriter: w}
+		lvl := s.config.DebugLevel
+		isExtreme := lvl == "extreme"
+		isStandard := lvl == "standard" || isExtreme
+		streaming := isStreamingPath(r.URL.Path)
+		start := time.Now()
+
+		// For extreme: buffer the request body so we can log it (non-streaming only)
+		var reqBodyPreview string
+		if isExtreme && !streaming && r.Body != nil {
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, io.LimitReader(r.Body, 64*1024))
+			reqBodyPreview = buf.String()
+			r.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+		}
+
+		// Emit incoming request event (extreme only)
+		if isExtreme {
+			reqData := map[string]interface{}{
+				"method":         r.Method,
+				"path":           r.URL.Path,
+				"query":          r.URL.RawQuery,
+				"remote_addr":    r.RemoteAddr,
+				"user_agent":     r.Header.Get("User-Agent"),
+				"content_type":   r.Header.Get("Content-Type"),
+				"content_length": r.ContentLength,
+			}
+			if reqBodyPreview != "" {
+				if len(reqBodyPreview) > 1024 {
+					reqData["body_preview"] = reqBodyPreview[:1024] + "…"
+				} else {
+					reqData["body_preview"] = reqBodyPreview
+				}
+			}
+			s.emitDebugLog("api_request", r.Method+" "+r.URL.Path, reqData, 0)
+		}
+
+		// Wrap response writer to capture status code and optional response body
+		recorder := &statusRecorder{
+			ResponseWriter: w,
+			captureBody:    isExtreme && !streaming,
+		}
 		next.ServeHTTP(recorder, r)
-		s.recordAPIFailure(r, recorder.statusCode)
+
+		statusCode := recorder.statusCode
+		if statusCode == 0 {
+			statusCode = http.StatusOK
+		}
+		durationMS := time.Since(start).Milliseconds()
+
+		// Auto-file circuit breaker (existing behaviour)
+		s.recordAPIFailure(r, statusCode)
+
+		// Emit response event
+		if isExtreme || (isStandard && statusCode >= 400) {
+			stdMatch := matchStandardPattern(r.Method, r.URL.Path)
+			category := "api_response"
+			action := fmt.Sprintf("%s %s → %d", r.Method, r.URL.Path, statusCode)
+			if statusCode >= 400 {
+				category = "api_error"
+			} else if stdMatch != nil {
+				category = stdMatch.category
+				action = stdMatch.action + fmt.Sprintf(" (%d)", statusCode)
+			}
+
+			respData := map[string]interface{}{
+				"method": r.Method,
+				"path":   r.URL.Path,
+				"status": statusCode,
+			}
+			if r.URL.RawQuery != "" {
+				respData["query"] = r.URL.RawQuery
+			}
+			if isExtreme {
+				body := recorder.body.String()
+				if len(body) > 1024 {
+					body = body[:1024] + "…"
+				}
+				respData["body_preview"] = body
+				respData["body_bytes"] = recorder.body.Len()
+			}
+			minLevel := "extreme"
+			if stdMatch != nil || statusCode >= 400 {
+				minLevel = "standard"
+			}
+			_ = minLevel // used conceptually; emitDebugLog respects the global level
+			s.emitDebugLog(category, action, respData, durationMS)
+		}
 	})
+}
+
+// handleDebugConfig returns the server-configured debug level.
+// Public endpoint — no auth required.
+func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	lvl := s.config.DebugLevel
+	if lvl == "" {
+		lvl = "off"
+	}
+	s.respondJSON(w, http.StatusOK, map[string]string{"level": lvl})
 }
 
 type statusRecorder struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
+	captureBody bool
+	body        bytes.Buffer
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
@@ -425,7 +637,7 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
-// Flush implements http.Flusher to support streaming
+// Flush implements http.Flusher to support streaming responses (SSE, etc.)
 func (r *statusRecorder) Flush() {
 	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
@@ -435,6 +647,9 @@ func (r *statusRecorder) Flush() {
 func (r *statusRecorder) Write(b []byte) (int, error) {
 	if r.statusCode == 0 {
 		r.statusCode = http.StatusOK
+	}
+	if r.captureBody {
+		r.body.Write(b)
 	}
 	return r.ResponseWriter.Write(b)
 }
@@ -606,6 +821,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			r.URL.Path == "/health/ready" ||
 			r.URL.Path == "/api/v1/auth/login" ||
 			r.URL.Path == "/api/v1/auth/refresh" ||
+			r.URL.Path == "/api/v1/config/debug" ||
 			r.URL.Path == "/" ||
 			r.URL.Path == "/api/openapi.yaml" ||
 			r.URL.Path == "/api/v1/events/stream" ||
