@@ -1907,7 +1907,9 @@ function renderProjects() {
         </div>
     `).join('');
     
-    document.getElementById('project-list').innerHTML =
+    const projectList = document.getElementById('project-list');
+    if (!projectList) return;
+    projectList.innerHTML =
         html || renderEmptyState('No projects configured', 'Add a project to get started.', '<button type="button" onclick="showCreateProjectModal()">Add Project</button>');
 }
 

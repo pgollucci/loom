@@ -183,7 +183,8 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/auth/login", authHandlers.HandleLogin)
 	mux.HandleFunc("/api/v1/auth/refresh", authHandlers.HandleRefreshToken)
 	mux.HandleFunc("/api/v1/auth/change-password", authHandlers.HandleChangePassword)
-	mux.HandleFunc("/api/v1/auth/api-keys", authHandlers.HandleCreateAPIKey)
+	mux.HandleFunc("/api/v1/auth/api-keys", authHandlers.HandleAPIKeys)
+	mux.HandleFunc("/api/v1/auth/api-keys/", authHandlers.HandleAPIKeyByID)
 	mux.HandleFunc("/api/v1/auth/me", authHandlers.HandleGetCurrentUser)
 	mux.HandleFunc("/api/v1/auth/users", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

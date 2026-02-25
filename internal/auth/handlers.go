@@ -70,36 +70,74 @@ func (h *Handlers) HandleChangePassword(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// HandleCreateAPIKey handles POST /auth/api-keys
-func (h *Handlers) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+// HandleAPIKeys handles GET and POST /auth/api-keys
+func (h *Handlers) HandleAPIKeys(w http.ResponseWriter, r *http.Request) {
 	userID := GetUserIDFromRequest(r)
 	if userID == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	var req CreateAPIKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	switch r.Method {
+	case http.MethodGet:
+		keys := h.manager.ListAPIKeys(userID)
+		if keys == nil {
+			keys = []*APIKey{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(keys); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
+	case http.MethodPost:
+		var req CreateAPIKeyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		resp, err := h.manager.CreateAPIKey(userID, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleAPIKeyByID handles DELETE /auth/api-keys/{id}
+func (h *Handlers) HandleAPIKeyByID(w http.ResponseWriter, r *http.Request) {
+	userID := GetUserIDFromRequest(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-
-	resp, err := h.manager.CreateAPIKey(userID, req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	// Extract key ID from path: /api/v1/auth/api-keys/{id}
+	path := r.URL.Path
+	const prefix = "/api/v1/auth/api-keys/"
+	if len(path) <= len(prefix) {
+		http.Error(w, "Missing key ID", http.StatusBadRequest)
+		return
 	}
+	keyID := path[len(prefix):]
+	if err := h.manager.RevokeAPIKey(keyID, userID); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleCreateAPIKey is kept as an alias for backward compatibility
+func (h *Handlers) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.HandleAPIKeys(w, r)
 }
 
 // HandleGetCurrentUser handles GET /auth/me

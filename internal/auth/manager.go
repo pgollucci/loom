@@ -216,6 +216,27 @@ func (m *Manager) CreateAPIKey(userID string, req CreateAPIKeyRequest) (*CreateA
 	}, nil
 }
 
+// ListAPIKeys returns all active API keys for a user (hashes never included)
+func (m *Manager) ListAPIKeys(userID string) []*APIKey {
+	var keys []*APIKey
+	for _, k := range m.apiKeys {
+		if k.UserID == userID && k.IsActive {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+// RevokeAPIKey marks an API key as inactive
+func (m *Manager) RevokeAPIKey(keyID, userID string) error {
+	k, exists := m.apiKeys[keyID]
+	if !exists || k.UserID != userID {
+		return fmt.Errorf("API key not found")
+	}
+	k.IsActive = false
+	return nil
+}
+
 // ValidateAPIKey validates an API key and returns the user and permissions
 func (m *Manager) ValidateAPIKey(keyValue string) (string, []string, error) {
 	// Find API key by hashing the provided value

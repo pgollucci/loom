@@ -102,12 +102,18 @@ func (s *Server) HandleAutoFileBug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get project ID (use loom-self for now)
-	projectID := "loom-self"
+	// Get project ID: prefer "loom-self", fall back to first available project
+	projectID := ""
 	if pm := s.app.GetProjectManager(); pm != nil {
 		if project, err := pm.GetProject("loom-self"); err == nil && project != nil {
 			projectID = project.ID
+		} else if projects := pm.ListProjects(); len(projects) > 0 {
+			projectID = projects[0].ID
 		}
+	}
+	if projectID == "" {
+		s.respondError(w, http.StatusServiceUnavailable, "No projects available for auto-filing")
+		return
 	}
 
 	// Create the bead
