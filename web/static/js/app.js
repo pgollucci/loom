@@ -1420,15 +1420,20 @@ function renderKanban() {
     const inProgressBeads = filtered.filter((b) => b.status === 'in_progress');
     const closedBeads = filtered.filter((b) => b.status === 'closed');
 
-    document.getElementById('open-beads').innerHTML =
+    const openEl = document.getElementById('open-beads');
+    const ipEl = document.getElementById('in-progress-beads');
+    const closedEl = document.getElementById('closed-beads');
+    if (!openEl || !ipEl || !closedEl) return;
+
+    openEl.innerHTML =
         openBeads.length > 0
             ? openBeads.map(renderBeadCard).join('')
             : renderEmptyState('No open beads', 'Create a bead via the API or bd CLI, then it will show up here.');
-    document.getElementById('in-progress-beads').innerHTML =
+    ipEl.innerHTML =
         inProgressBeads.length > 0
             ? inProgressBeads.map(renderBeadCard).join('')
             : renderEmptyState('Nothing in progress', 'Claim a bead to move it into progress.');
-    document.getElementById('closed-beads').innerHTML =
+    closedEl.innerHTML =
         closedBeads.length > 0
             ? closedBeads.map(renderBeadCard).join('')
             : renderEmptyState('No closed beads yet', 'Completed beads will appear here.');
@@ -1861,7 +1866,9 @@ function renderAgents() {
         `;
     }).join('');
 
-    document.getElementById('agent-list').innerHTML =
+    const agentListEl = document.getElementById('agent-list');
+    if (!agentListEl) return;
+    agentListEl.innerHTML =
         agents.length > 0
             ? html
             : renderEmptyState(
@@ -2522,7 +2529,9 @@ function renderPersonas() {
         </button>
     `).join('');
     
-    document.getElementById('persona-list').innerHTML =
+    const personaListEl = document.getElementById('persona-list');
+    if (!personaListEl) return;
+    personaListEl.innerHTML =
         html || renderEmptyState('No personas available', 'Add personas under ./personas to populate this list.');
 }
 
@@ -2591,7 +2600,9 @@ function renderDecisions() {
         `;
     }).join('');
 
-    document.getElementById('decision-list').innerHTML =
+    const decisionListEl = document.getElementById('decision-list');
+    if (!decisionListEl) return;
+    decisionListEl.innerHTML =
         html ||
         renderEmptyState('No pending decisions', 'Decision beads requiring input will appear here.');
 }
