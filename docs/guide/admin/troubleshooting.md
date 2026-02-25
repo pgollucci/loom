@@ -10,12 +10,9 @@ docker compose ps
 
 # Check logs for errors
 make logs
-
-# Verify Temporal is healthy
-docker compose logs temporal | tail -20
 ```
 
-Common causes: Temporal not ready (wait for health check), PostgreSQL connection failure, port conflicts.
+Common causes: PostgreSQL connection failure, port conflicts.
 
 ### Agents not picking up beads
 

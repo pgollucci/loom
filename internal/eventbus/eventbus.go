@@ -5,11 +5,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"go.temporal.io/sdk/workflow"
-
-	temporalclient "github.com/jordanhubbard/loom/internal/temporal/client"
-	"github.com/jordanhubbard/loom/pkg/config"
 )
 
 // EventType represents the type of event
@@ -70,12 +65,10 @@ type Subscriber struct {
 	Filter  func(*Event) bool // Optional filter function
 }
 
-// EventBus provides pub/sub event messaging using Temporal
+// EventBus provides in-memory pub/sub event messaging
 type EventBus struct {
-	client      *temporalclient.Client
 	subscribers map[string]*Subscriber
 	mu          sync.RWMutex
-	config      *config.TemporalConfig
 	ctx         context.Context
 	cancel      context.CancelFunc
 	buffer      chan *Event
@@ -87,21 +80,14 @@ type EventBus struct {
 }
 
 // NewEventBus creates a new event bus
-func NewEventBus(client *temporalclient.Client, cfg *config.TemporalConfig) *EventBus {
+func NewEventBus() *EventBus {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	bufferSize := cfg.EventBufferSize
-	if bufferSize <= 0 {
-		bufferSize = 1000
-	}
-
 	eb := &EventBus{
-		client:       client,
 		subscribers:  make(map[string]*Subscriber),
-		config:       cfg,
 		ctx:          ctx,
 		cancel:       cancel,
-		buffer:       make(chan *Event, bufferSize),
+		buffer:       make(chan *Event, 1000),
 		recentEvents: make([]*Event, 1000),
 	}
 
@@ -199,8 +185,6 @@ func (eb *EventBus) distributeEvent(event *Event) {
 	for _, sub := range eb.subscribers {
 		subs = append(subs, sub)
 	}
-	client := eb.client
-	cfg := eb.config
 	eb.mu.RUnlock()
 
 	for _, sub := range subs {
@@ -216,19 +200,6 @@ func (eb *EventBus) distributeEvent(event *Event) {
 			// Subscriber channel is full, skip
 		}
 	}
-
-	// When Temporal is enabled, also signal the global dispatcher workflow
-	// to wake immediately on new work.
-	if client == nil || cfg == nil || cfg.Host == "" {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	_ = client.SignalWorkflow(ctx, "dispatcher-global", "", "dispatcher.trigger", map[string]interface{}{
-		"event_type": string(event.Type),
-		"event_id":   event.ID,
-		"project_id": event.ProjectID,
-	})
 }
 
 // SubscriberCount returns the number of active subscribers.
@@ -322,39 +293,4 @@ func (eb *EventBus) PublishLogMessage(level, message, source, projectID string) 
 			"message": message,
 		},
 	})
-}
-
-// EventAggregatorWorkflow is a long-running workflow that aggregates events
-// This can be used to maintain event history in Temporal
-func EventAggregatorWorkflow(ctx workflow.Context, projectID string) error {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Event aggregator workflow started", "projectID", projectID)
-
-	// This workflow runs indefinitely and processes signals
-	selector := workflow.NewSelector(ctx)
-
-	// Handle event signals
-	var eventChannel workflow.ReceiveChannel = workflow.GetSignalChannel(ctx, "event")
-	selector.AddReceive(eventChannel, func(c workflow.ReceiveChannel, more bool) {
-		var event Event
-		c.Receive(ctx, &event)
-		logger.Info("Received event", "type", event.Type, "id", event.ID)
-
-		// In a real implementation, you might want to:
-		// - Store events in a workflow variable
-		// - Aggregate metrics
-		// - Trigger other workflows based on events
-	})
-
-	// Keep workflow running
-	for {
-		selector.Select(ctx)
-
-		// Check if workflow should continue
-		if workflow.GetInfo(ctx).GetCurrentHistoryLength() > 10000 {
-			// Start new workflow to avoid history growth
-			logger.Warn("Event aggregator history too large, should continue as new")
-			return workflow.NewContinueAsNewError(ctx, EventAggregatorWorkflow, projectID)
-		}
-	}
 }

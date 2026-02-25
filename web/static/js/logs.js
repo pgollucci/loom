@@ -6,7 +6,7 @@ const LogViewer = {
     logs: [],
     filters: {
         level: 'all', // all, debug, info, warn, error
-        source: 'all', // all, temporal, agent, provider, dispatcher, database, actions
+        source: 'all', // all, agent, provider, dispatcher, database, actions
         search: '',
         agent_id: '',
         bead_id: '',
@@ -119,7 +119,6 @@ const LogViewer = {
             
             <select id="log-source-filter" onchange="LogViewer.setFilter('source', this.value)">
                 <option value="all">All Sources</option>
-                <option value="temporal">Temporal</option>
                 <option value="agent">Agents</option>
                 <option value="dispatcher">Dispatcher</option>
                 <option value="database">Database</option>

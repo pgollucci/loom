@@ -23,7 +23,7 @@ All services communicate on a private `loom-network` bridge. Only exposed ports:
 
 - Automatic mTLS between all meshed services
 - Authorization policies restrict which services can communicate
-- Only the `loom` ServiceAccount can reach Temporal and the Connectors Service
+- Only the `loom` ServiceAccount can reach the Connectors Service
 - SPIFFE-based identity verification
 
 ## Secrets Management

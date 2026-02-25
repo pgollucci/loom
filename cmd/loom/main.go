@@ -56,23 +56,12 @@ func main() {
 		log.Fatalf("failed to load config from %s: %v", *configPath, err)
 	}
 
-	// Override with environment variables if set
-	if temporalHost := os.Getenv("TEMPORAL_HOST"); temporalHost != "" {
-		cfg.Temporal.Host = temporalHost
-		log.Printf("Using Temporal host from environment: %s", temporalHost)
-	}
-	if temporalNamespace := os.Getenv("TEMPORAL_NAMESPACE"); temporalNamespace != "" {
-		cfg.Temporal.Namespace = temporalNamespace
-		log.Printf("Using Temporal namespace from environment: %s", temporalNamespace)
-	}
-
 	arb, err := loom.New(cfg)
 	if err != nil {
 		log.Fatalf("failed to create loom: %v", err)
 	}
 
-	// Initialize key manager before Loom.Initialize() so Temporal activities
-	// can use it for provider API key retrieval during heartbeats.
+	// Initialize key manager before Loom.Initialize().
 	// Store in the persisted data volume so keys survive container restarts.
 	keyStorePath := filepath.Join(".", "data", "keys", ".keys.json")
 	km := keymanager.NewKeyManager(keyStorePath)

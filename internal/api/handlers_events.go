@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 )
 
 // handleEventStream handles SSE endpoint for real-time event updates

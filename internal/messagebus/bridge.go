@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/pkg/messages"
 	"github.com/nats-io/nats.go"
 )

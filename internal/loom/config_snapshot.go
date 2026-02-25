@@ -20,7 +20,6 @@ type ConfigSnapshot struct {
 	Agents           config.AgentsConfig        `json:"agents" yaml:"agents"`
 	Security         config.SecurityConfig      `json:"security" yaml:"security"`
 	WebUI            config.WebUIConfig         `json:"web_ui" yaml:"web_ui"`
-	Temporal         config.TemporalConfig      `json:"temporal" yaml:"temporal"`
 	Projects         []*models.Project          `json:"projects" yaml:"projects"`
 	Providers        []*internalmodels.Provider `json:"providers" yaml:"providers"`
 	AgentAssignments []*models.Agent            `json:"agent_assignments" yaml:"agent_assignments"`
@@ -46,7 +45,6 @@ func (a *Loom) GetConfigSnapshot(ctx context.Context) (*ConfigSnapshot, error) {
 		Agents:   cfg.Agents,
 		Security: cfg.Security,
 		WebUI:    cfg.WebUI,
-		Temporal: cfg.Temporal,
 	}
 
 	if a.modelCatalog != nil {
@@ -113,7 +111,6 @@ func (a *Loom) ApplyConfigSnapshot(ctx context.Context, snap *ConfigSnapshot) er
 		Agents:   snap.Agents,
 		Security: snap.Security,
 		WebUI:    snap.WebUI,
-		Temporal: snap.Temporal,
 	}
 	raw, err := json.Marshal(&stored)
 	if err != nil {
@@ -182,7 +179,6 @@ func (a *Loom) ApplyConfigSnapshot(ctx context.Context, snap *ConfigSnapshot) er
 	a.config.Agents = snap.Agents
 	a.config.Security = snap.Security
 	a.config.WebUI = snap.WebUI
-	a.config.Temporal = snap.Temporal
 
 	// Reload in-memory managers from the DB for immediate visibility in UI.
 	return a.ReloadFromDatabase(ctx)

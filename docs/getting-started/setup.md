@@ -12,9 +12,7 @@ Everything you need to get Loom running and create your first project.
 
 Loom always runs in Docker. The stack includes:
 - Loom application server (port 8080)
-- Temporal server (port 7233)
-- Temporal UI (port 8088)
-- PostgreSQL database for Temporal
+- PostgreSQL database
 
 ```bash
 # Start everything
@@ -36,21 +34,15 @@ make restart
 ## Connecting to the UI
 
 - **Loom Web UI**: http://localhost:8080
-- **Temporal UI**: http://localhost:8088 -- view workflow executions, inspect history, monitor active workflows
 
 ## Configuration
 
-Structural configuration is managed via `config.yaml` (server, temporal, agents, projects). Secrets like API keys are **never** stored in `config.yaml` -- see [Registering Providers](#registering-providers) below.
+Structural configuration is managed via `config.yaml` (server, agents, projects). Secrets like API keys are **never** stored in `config.yaml` -- see [Registering Providers](#registering-providers) below.
 
 ```yaml
 server:
   http_port: 8081    # Internal container port (Docker maps 8080 -> 8081)
   enable_http: true
-
-temporal:
-  host: temporal:7233  # Temporal service name within Docker network
-  namespace: default
-  task_queue: loom-tasks
 
 agents:
   max_concurrent: 6
@@ -146,7 +138,7 @@ Add this as a **deploy key with write access** in your git hosting service (GitH
 ```bash
 make build           # Build Go binary
 make test            # Run tests
-make test-docker     # Run tests in Docker with Temporal
+make test-docker     # Run tests in Docker
 make lint            # Run all linters
 make coverage        # Tests with coverage report
 ```
@@ -169,18 +161,9 @@ curl -N http://localhost:8080/api/v1/events/stream
 
 ```bash
 make logs                          # Follow loom logs
-docker compose logs -f temporal    # Temporal logs
 ```
 
 ## Troubleshooting
-
-### Temporal Connection Issues
-
-```bash
-docker compose ps temporal         # Is it running?
-docker compose logs temporal       # Check logs
-docker compose restart temporal    # Restart it
-```
 
 ### Providers Show "failed"
 

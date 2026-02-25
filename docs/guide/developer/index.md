@@ -48,7 +48,6 @@ pkg/
 - [Agent Actions](agent-actions.md) -- The agent action loop and available actions
 - [Autonomous Bug Fixing](auto-bug-fix.md) -- End-to-end autonomous bug fix pipeline
 - [Workflow System](workflows.md) -- Workflow engine internals
-- [Temporal Integration](temporal.md) -- Temporal workflows and activities
 - [Connectors](connectors.md) -- Connector framework and gRPC service
 - [Plugins](plugins.md) -- Plugin development
 - [Hot Reload](hot-reload.md) -- Development hot-reload support

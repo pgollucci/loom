@@ -9,7 +9,7 @@
 - **Orchestrate AI agents** with specialized roles (PM, Engineer, QA, DevOps, Designer, Code Reviewer)
 - **Manage distributed work** through beads (work items) with dependencies and priority
 - **Autonomously fix bugs** from detection through investigation, fix, verification, and PR creation
-- **Execute reliable workflows** via Temporal with human-in-the-loop approval gates
+- **Execute reliable workflows** with human-in-the-loop approval gates
 - **Bootstrap entire projects** from a Product Requirements Document (PRD)
 - **Monitor everything** with Prometheus metrics, Jaeger tracing, and Loki logging
 
@@ -33,7 +33,6 @@ flowchart LR
     NATS --> A1[Agent: Coder]
     NATS --> A2[Agent: Reviewer]
     NATS --> A3[Agent: QA]
-    API --> T[Temporal]
     API --> PG[(PostgreSQL)]
     API --> CS[Connectors Service]
     CS --> P[Prometheus]

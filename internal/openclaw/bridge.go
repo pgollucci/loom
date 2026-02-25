@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/pkg/config"
 )
 

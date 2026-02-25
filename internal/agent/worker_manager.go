@@ -14,7 +14,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/observability"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/telemetry"
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
 	"github.com/jordanhubbard/loom/pkg/models"
 	"go.opentelemetry.io/otel/attribute"

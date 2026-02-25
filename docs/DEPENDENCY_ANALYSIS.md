@@ -30,13 +30,9 @@ Imports 35+ internal packages but is not imported by any internal package (it's 
 ### Higher-Level Packages
 - `internal/actions` → build, containers, executor, files, git, gitops, linter, lsp, provider, testing
 - `internal/worker` → actions, database, memory, provider
-- `internal/agent` → actions, analytics, database, observability, provider, telemetry, temporal/eventbus, worker
-- `internal/dispatch` → agent, beads, containers, database, gitops, memory, observability, project, provider, swarm, telemetry, temporal/eventbus, worker, workflow
-
-### Temporal Subsystem
-- `internal/temporal` → observability, temporal/activities, temporal/eventbus, temporal/workflows
-- `internal/temporal/activities` → agent, beads, database, dispatch, executor, modelcatalog, motivation, provider, temporal/eventbus
-- `internal/temporal/workflows` → temporal/activities, temporal/eventbus
+- `internal/agent` → actions, analytics, database, observability, provider, telemetry, eventbus, worker
+- `internal/dispatch` → agent, beads, containers, database, gitops, memory, observability, project, provider, swarm, telemetry, eventbus, worker, workflow
+- `internal/ralph` → beads, database, dispatch
 
 ## Verification
 
@@ -61,11 +57,11 @@ The Loom codebase has a well-structured dependency hierarchy with no circular im
                            |
         +------------------+------------------+
         |                  |                  |
-   internal/dispatch  internal/temporal  internal/api
+   internal/dispatch  internal/ralph     internal/api
         |                  |
-   internal/agent    internal/temporal/activities
-        |                  |
-   internal/worker    internal/dispatch (shared)
+   internal/agent    internal/dispatch (shared)
+        |
+   internal/worker
         |
    internal/actions
         |

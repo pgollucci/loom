@@ -15,8 +15,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/messagebus"
 	"github.com/jordanhubbard/loom/internal/orchestrator"
 	"github.com/jordanhubbard/loom/internal/swarm"
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
-	"github.com/jordanhubbard/loom/pkg/config"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/pkg/messages"
 )
 
@@ -40,7 +39,7 @@ func TestE2E_BridgeForwardsLocalEventsToNATS(t *testing.T) {
 	mb := connectNATS(t)
 	defer mb.Close()
 
-	eb := eventbus.NewEventBus(nil, &config.TemporalConfig{EventBufferSize: 100})
+	eb := eventbus.NewEventBus()
 	defer eb.Close()
 
 	bridge := messagebus.NewBridgedMessageBus(mb, eb, "test-bridge-"+uuid.New().String()[:8])

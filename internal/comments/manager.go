@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/notifications"
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 )
 
 // Manager handles comment operations

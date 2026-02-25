@@ -1,4 +1,6 @@
-package activities
+// Package ralph implements the Ralph Loop — the relentless work-draining
+// maintenance engine that runs on a 10-second ticker.
+package ralph
 
 import (
 	"context"
@@ -14,16 +16,17 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
-// LoomActivities supplies activities for the Ralph Loop heartbeat.
-type LoomActivities struct {
+// Activities supplies the Ralph Loop maintenance operations.
+type Activities struct {
 	database   *database.Database
 	dispatcher *dispatch.Dispatcher
 	beadsMgr   *beads.Manager
 	agentMgr   *agent.WorkerManager
 }
 
-func NewLoomActivities(db *database.Database, d *dispatch.Dispatcher, b *beads.Manager, a *agent.WorkerManager) *LoomActivities {
-	return &LoomActivities{
+// New creates a new Activities instance.
+func New(db *database.Database, d *dispatch.Dispatcher, b *beads.Manager, a *agent.WorkerManager) *Activities {
+	return &Activities{
 		database:   db,
 		dispatcher: d,
 		beadsMgr:   b,
@@ -31,10 +34,10 @@ func NewLoomActivities(db *database.Database, d *dispatch.Dispatcher, b *beads.M
 	}
 }
 
-// LoomHeartbeatActivity is the Ralph Loop — the relentless work-draining engine.
-// Each beat: resets stuck agents, resolves stuck beads, then drains all
-// dispatchable work by calling DispatchOnce in a tight loop.
-func (a *LoomActivities) LoomHeartbeatActivity(ctx context.Context, beatCount int) error {
+// Beat executes one Ralph Loop beat.
+// Each beat: resets stuck agents, resolves stuck beads, then auto-recovers
+// provider-blocked beads every 10 beats (~100s).
+func (a *Activities) Beat(ctx context.Context, beatCount int) error {
 	start := time.Now()
 	log.Printf("[Ralph] Beat %d: starting (dispatcher=%v agentMgr=%v beadsMgr=%v)", beatCount, a.dispatcher != nil, a.agentMgr != nil, a.beadsMgr != nil)
 
@@ -49,20 +52,12 @@ func (a *LoomActivities) LoomHeartbeatActivity(ctx context.Context, beatCount in
 	stuckResolved := a.resolveStuckBeads()
 	log.Printf("[Ralph] Beat %d: phase2 done (stuckResolved=%d, elapsed=%v)", beatCount, stuckResolved, time.Since(start).Round(time.Millisecond))
 
-	// Phase 3: Drain all dispatchable work.
-	// NOTE: TaskExecutor (internal/taskexecutor) handles all bead execution
-	// directly via workerLoop → claimNextBead → ExecuteTaskWithLoop. The old
-	// dispatcher goroutines were tied to the Temporal activity context, causing
-	// mass "context canceled" errors every ~10s when the activity completed.
-	// Phase 3 is intentionally a no-op to avoid double-dispatch.
+	// Phase 3: TaskExecutor handles all bead execution via workerLoop →
+	// claimNextBead → ExecuteTaskWithLoop. This phase is intentionally a
+	// no-op to avoid double-dispatch.
 	dispatched := 0
 
 	// Phase 4: Auto-recover beads blocked due to transient provider failures.
-	// Provider errors (context canceled, 5xx, NATS disconnect) cause dispatch
-	// failures that accumulate until max_hops is reached and the bead is blocked.
-	// Once the underlying cause is fixed, these beads are permanently stuck
-	// unless explicitly recovered. We scan every ~10 beats (every ~100s) to
-	// reset eligible beads back to open so they can be retried.
 	recovered := 0
 	if beatCount%10 == 0 {
 		recovered = a.autoRecoverProviderBlockedBeads()
@@ -79,13 +74,8 @@ func (a *LoomActivities) LoomHeartbeatActivity(ctx context.Context, beatCount in
 }
 
 // autoRecoverProviderBlockedBeads scans blocked beads and resets those that
-// were blocked due to transient provider failures (context canceled, repeated
-// provider errors, NATS-related errors). These beads are safe to retry once
-// the underlying infrastructure issue is resolved.
-//
-// Beads blocked for auth failures, budget exhaustion, or hard dispatch limits
-// are intentionally left alone — those require human intervention.
-func (a *LoomActivities) autoRecoverProviderBlockedBeads() int {
+// were blocked due to transient provider failures.
+func (a *Activities) autoRecoverProviderBlockedBeads() int {
 	if a.beadsMgr == nil {
 		return 0
 	}
@@ -109,7 +99,6 @@ func (a *LoomActivities) autoRecoverProviderBlockedBeads() int {
 			continue
 		}
 
-		// Categorize the block reason.
 		isProviderTransient := strings.Contains(reason, "provider errors") ||
 			strings.Contains(reason, "context canceled") ||
 			strings.Contains(reason, "provider unavailable") ||
@@ -119,7 +108,6 @@ func (a *LoomActivities) autoRecoverProviderBlockedBeads() int {
 		isAuthBlocked := strings.Contains(reason, "auth") || strings.Contains(reason, "Authentication")
 		isBudgetBlocked := strings.Contains(reason, "budget") || strings.Contains(reason, "hard_dispatch_limit")
 
-		// Budget exhaustion always requires human intervention — skip.
 		if isBudgetBlocked {
 			continue
 		}
@@ -127,24 +115,17 @@ func (a *LoomActivities) autoRecoverProviderBlockedBeads() int {
 		blockedAt, _ := time.Parse(time.RFC3339, b.Context["ralph_blocked_at"])
 
 		if isProviderTransient {
-			// Recover provider-blocked beads after 30 minutes.
 			if !blockedAt.IsZero() && time.Since(blockedAt) < 30*time.Minute {
 				continue
 			}
 		} else if isAuthBlocked {
-			// Auth errors may be transient (key rotation, temporary outage, stale
-			// error history from a fixed provider). Retry after 2 hours with a
-			// clean error slate so the fresh run can succeed.
 			if !blockedAt.IsZero() && time.Since(blockedAt) < 2*time.Hour {
 				continue
 			}
 		} else {
-			// Unknown block reason — leave alone, require human intervention.
 			continue
 		}
 
-		// Reset to open with a fresh dispatch count so the bead gets a clean
-		// retry slate. Preserve all other context fields for debugging.
 		ctxReset := map[string]string{
 			"ralph_blocked_reason": "",
 			"ralph_blocked_at":     "",
@@ -170,22 +151,12 @@ func (a *LoomActivities) autoRecoverProviderBlockedBeads() int {
 	return recovered
 }
 
-// min returns the smaller of two ints (until Go 1.21 built-in min is available).
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// resolveStuckBeads finds beads with loop_detected=true that haven't been
-// resolved by Ralph yet, and auto-blocks them.
-func (a *LoomActivities) resolveStuckBeads() int {
+// resolveStuckBeads finds beads with loop_detected=true and auto-blocks them.
+func (a *Activities) resolveStuckBeads() int {
 	if a.beadsMgr == nil {
 		return 0
 	}
 
-	// Only query open/in-progress beads — closed beads can't be stuck.
 	openBeads, err := a.beadsMgr.ListBeads(map[string]interface{}{"status": models.BeadStatusOpen})
 	if err != nil {
 		return 0
@@ -204,7 +175,6 @@ func (a *LoomActivities) resolveStuckBeads() int {
 		if b.Context["loop_detected"] != "true" {
 			continue
 		}
-		// Skip if already resolved by Ralph or escalated to CEO
 		if b.Context["ralph_blocked_at"] != "" || b.Context["escalated_to_ceo_decision_id"] != "" {
 			continue
 		}
@@ -234,7 +204,7 @@ func (a *LoomActivities) resolveStuckBeads() int {
 	return resolved
 }
 
-func (a *LoomActivities) findDefaultTriageAgent(projectID string) string {
+func (a *Activities) findDefaultTriageAgent(projectID string) string {
 	if a.agentMgr == nil {
 		return ""
 	}
@@ -263,4 +233,11 @@ func (a *LoomActivities) findDefaultTriageAgent(projectID string) string {
 		}
 	}
 	return ""
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

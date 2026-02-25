@@ -15,11 +15,10 @@ cd loom
 make start
 ```
 
-This builds the container and starts the full stack (Loom, Temporal, PostgreSQL).
+This builds the container and starts the full stack (Loom, PostgreSQL).
 Wait about 30 seconds for everything to initialize, then open:
 
 - **Loom UI**: http://localhost:8080
-- **Temporal UI**: http://localhost:8088
 
 ## 2. Set Up a Provider
 

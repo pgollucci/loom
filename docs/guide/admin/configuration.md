@@ -30,17 +30,6 @@ database:
   postgres_db: loom
 ```
 
-## Temporal
-
-```yaml
-temporal:
-  host: temporal:7233
-  namespace: default
-  task_queue: loom-tasks
-  workflow_execution_timeout: 24h
-  workflow_task_timeout: 10s
-```
-
 ## Agents
 
 ```yaml
@@ -63,8 +52,6 @@ dispatch:
 | Variable | Description |
 |---|---|
 | `LOOM_PASSWORD` | Master password for UI login and key encryption |
-| `TEMPORAL_HOST` | Temporal server address (overrides config) |
-| `TEMPORAL_NAMESPACE` | Temporal namespace (overrides config) |
 | `NATS_URL` | NATS server URL |
 | `CONNECTORS_SERVICE_ADDR` | Remote connectors service gRPC address |
 | `OTEL_ENDPOINT` | OpenTelemetry collector endpoint |

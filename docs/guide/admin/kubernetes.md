@@ -11,7 +11,6 @@ deploy/k8s/
 │   ├── postgresql.yaml      # PostgreSQL StatefulSet
 │   ├── pgbouncer.yaml       # Connection pooler
 │   ├── nats.yaml            # NATS with JetStream
-│   ├── temporal.yaml        # Temporal server
 │   ├── loom.yaml            # Loom control plane
 │   ├── connectors-service.yaml  # Connectors microservice
 │   └── kustomization.yaml
@@ -51,7 +50,7 @@ make linkerd-dashboard
 ### Authorization Policies
 
 - Only meshed workloads in the `loom` namespace can access the Loom HTTP API
-- Only the `loom` ServiceAccount can call Temporal and the Connectors Service
+- Only the `loom` ServiceAccount can call the Connectors Service
 - All inter-service traffic is encrypted with mTLS
 
 ### Retry Budgets
@@ -59,7 +58,7 @@ make linkerd-dashboard
 - Read operations (GET) are retryable
 - Mutations (POST/PUT/DELETE) are not retried
 - 20% retry budget with 10 retries/second floor
-- Temporal long-poll operations have 60s timeouts
+- Long-poll operations have 60s timeouts
 
 ## Secrets
 

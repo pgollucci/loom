@@ -13,19 +13,14 @@ The current Loom architecture is a **monolithic application with partial contain
 
 ### ✅ What's Working
 
-1. **Temporal Integration**
-   - Workflow orchestration via Temporal
-   - Event-driven architecture foundation
-   - Distributed task execution
-
-2. **Partial Containerization**
+1. **Partial Containerization**
    - Per-project agent containers (`loom-project-agent`)
    - Docker Compose orchestration
    - Container-based isolation
 
 3. **Internal Message Bus**
    - `AgentMessageBus` for inter-agent communication
-   - Pub/sub pattern via Temporal EventBus
+   - Pub/sub pattern via in-memory EventBus
    - Message history and filtering
 
 4. **Connector Abstraction**
@@ -218,7 +213,7 @@ service DatabaseService {
 
 **Responsibilities:**
 - Dispatch beads to project agents
-- Coordinate workflows via Temporal
+- Coordinate workflows via the workflow engine
 - Monitor health and metrics
 - Manage connectors
 - Serve web UI
@@ -274,16 +269,6 @@ services:
 - Independent scalability
 
 ---
-
-#### **6. Temporal Workers**
-
-**Current:** Workers run in control plane container
-**Proposed:** Separate worker containers for scalability
-
-**Communication:**
-- Connect to Temporal Server
-- Publish progress to message bus
-- Call Database Service for persistence
 
 ---
 

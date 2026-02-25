@@ -11,7 +11,6 @@ Complete reference for all entities (data structures) in the Loom system.
 5. [Decision](#decision)
 6. [Persona](#persona)
 7. [Workflow](#workflow)
-8. [Temporal DSL Instruction](#temporal-dsl-instruction)
 
 ---
 
@@ -231,7 +230,7 @@ An LLM service endpoint. In practice, this is TokenHub -- I delegate all model r
 ### Health Check
 
 - **Initial**: Performed immediately on registration
-- **Periodic**: Every 30 seconds via Temporal heartbeat
+- **Periodic**: Every 30 seconds
 - **Check**: GET `/v1/models` endpoint
 - **Activation**: Automatic when first successful check
 - **Agent Resume**: Agents resume automatically when TokenHub becomes active
@@ -396,11 +395,6 @@ Detailed behavioral instructions and guidelines.
 - Limitations and guardrails
 - Escalation triggers
 
-## Temporal DSL (Optional)
-Can include <temporal>...</temporal> blocks for:
-- Workflows to trigger on certain conditions
-- Schedules for recurring tasks
-- Queries for status checks
 ```
 
 ### Example: CFO Persona
@@ -427,161 +421,19 @@ Responsible for financial oversight, budget approval, and cost management.
 - Cannot approve over $500,000 (needs CEO)
 - Must document all decisions
 - Escalate financial anomalies
-
-## Temporal DSL
-
-When approving large budgets:
-<temporal>
-WORKFLOW: LogBudgetApproval
-  INPUT: {"amount": 100000, "category": "infrastructure"}
-  WAIT: false
-END
-</temporal>
-
-Daily monitoring:
-<temporal>
-SCHEDULE: DailyBudgetReview
-  INTERVAL: 24h
-  INPUT: {"scope": "all_projects"}
-END
-</temporal>
 ```
 
 ---
 
 ## Workflow
 
-Temporal workflow definition representing a long-running business process.
+A multi-step process definition used by the workflow engine.
 
 ### Key Characteristics
 
 - **Durable**: Survives process crashes/restarts
-- **Reliable**: Built-in retry logic
-- **Observable**: Full history available
-- **Signalable**: Can receive updates while running
-- **Queryable**: Can report state on demand
-
-### Core Workflows
-
-| Workflow | Purpose | Interval | Inputs |
-|----------|---------|----------|--------|
-| `LoomHeartbeatWorkflow` | Master clock | 10s | - |
-| `DispatcherWorkflow` | Route work | 5s | Project ID (optional) |
-| `ProviderHeartbeatWorkflow` | Health checks | 30s | Provider ID |
-| `BeadProcessingWorkflow` | Execute bead | On-demand | Bead ID, Agent ID |
-| `DecisionWorkflow` | Escalation | On-demand | Decision details |
-
-### Workflow Lifecycle
-
-```
-Start
-  ↓
-Execute Activities
-  ↓
-Receive Signals
-  ↓
-Respond to Queries
-  ↓
-Decision
-  ├─ Retry: Go back to Execute
-  └─ Complete: Return Result
-```
-
----
-
-## Temporal DSL Instruction
-
-A parsed Temporal DSL command specifying an operation.
-
-### Model Definition
-
-**Type**: `TemporalInstruction` in `internal/temporal/dsl_types.go`
-
-**Fields**:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | enum | Instruction type (WORKFLOW, SCHEDULE, QUERY, etc.) |
-| `name` | string | Workflow/Activity name |
-| `workflow_id` | string | For QUERY/SIGNAL/CANCEL operations |
-| `input` | map | JSON input parameters |
-| `timeout` | duration | Execution timeout |
-| `retry` | int | Retry attempts |
-| `wait` | bool | Wait for completion |
-| `interval` | duration | For SCHEDULE instructions |
-| `query_type` | string | Query type name |
-| `signal_name` | string | Signal name |
-| `signal_data` | map | Signal payload |
-
-### Instruction Types
-
-**WORKFLOW**: Schedule a workflow
-```markdown
-<temporal>
-WORKFLOW: ProcessBatch
-  INPUT: {"batch_id": "123"}
-  TIMEOUT: 5m
-  WAIT: true
-END
-</temporal>
-```
-
-**SCHEDULE**: Recurring execution
-```markdown
-<temporal>
-SCHEDULE: HourlyCheck
-  INTERVAL: 1h
-  INPUT: {"type": "comprehensive"}
-END
-</temporal>
-```
-
-**QUERY**: Get workflow state
-```markdown
-<temporal>
-QUERY: wf-123
-  TYPE: get_status
-END
-</temporal>
-```
-
-**SIGNAL**: Send message to workflow
-```markdown
-<temporal>
-SIGNAL: wf-123
-  NAME: approve
-  DATA: {"amount": 50000}
-END
-</temporal>
-```
-
-**ACTIVITY**: Execute activity directly
-```markdown
-<temporal>
-ACTIVITY: FetchData
-  INPUT: {"source": "api"}
-  TIMEOUT: 2m
-END
-</temporal>
-```
-
-**CANCEL**: Stop workflow
-```markdown
-<temporal>
-CANCEL: wf-123
-END
-</temporal>
-```
-
-**LIST**: List running workflows
-```markdown
-<temporal>
-LIST
-END
-</temporal>
-```
-
-See `docs/TEMPORAL_DSL.md` for comprehensive DSL documentation.
+- **Observable**: Full execution history
+- **Composable**: Steps can chain and branch
 
 ---
 
@@ -625,14 +477,6 @@ See `docs/TEMPORAL_DSL.md` for comprehensive DSL documentation.
 │Decision      │
 └──────────────┘
 
-┌──────────────────────┐
-│Temporal Instruction  │
-└──────┬───────────────┘
-       │
-       ├─ WORKFLOW (starts) ──→ Workflow Execution
-       ├─ QUERY (queries)   ──→ Workflow State
-       ├─ SIGNAL (updates)  ──→ Running Workflow
-       └─ SCHEDULE (creates) → Recurring Execution
 ```
 
 ---
@@ -799,11 +643,6 @@ All entities are persisted to:
    - Source of truth for work definitions
    - Versioned in git
 
-3. **Temporal Server**
-   - Workflow execution state
-   - Full history of all operations
-   - Durable, recoverable
-
 ## Entity Lifecycle Summary
 
 | Entity | Created | Modified | Deleted | Persisted |
@@ -814,6 +653,6 @@ All entities are persisted to:
 | Project | config.yaml/UI | Config changes | UI | Database |
 | Decision | Agent escalation | Response | Auto-cleanup | Database |
 | Persona | File creation | Content edit | File delete | File + Database |
-| Workflow | Temporal DSL | Signals/queries | Timeout | Temporal |
+| Workflow | Workflow engine | Step completion | Timeout | Database |
 | Activity | On important events | Aggregation updates | Retention policy | Database |
 | Notification | Rule evaluation | Read status | User archive | Database |

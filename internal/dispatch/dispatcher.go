@@ -22,7 +22,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/telemetry"
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
 	"github.com/jordanhubbard/loom/internal/workflow"
 	"github.com/jordanhubbard/loom/pkg/messages"

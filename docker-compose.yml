@@ -1,23 +1,4 @@
 services:
-  # PostgreSQL database for Temporal
-  temporal-postgresql:
-    image: postgres:15-alpine
-    container_name: temporal-postgresql
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
-      POSTGRES_DB: temporal
-    networks:
-      - loom-network
-    volumes:
-      - temporal-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U temporal"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # PostgreSQL database for Loom
   loom-postgresql:
     image: postgres:15-alpine
@@ -38,53 +19,6 @@ services:
       retries: 5
     ports:
       - "5432:5432"  # Expose for development/debugging
-
-  # Temporal server with auto-setup
-  temporal:
-    image: temporalio/auto-setup:1.22.4
-    container_name: temporal
-    restart: unless-stopped
-    depends_on:
-      temporal-postgresql:
-        condition: service_healthy
-    environment:
-      - DB=postgresql
-      - DB_PORT=5432
-      - POSTGRES_USER=temporal
-      - POSTGRES_PWD=temporal
-      - POSTGRES_SEEDS=temporal-postgresql
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
-      - ENABLE_ES=false
-      - ES_SEEDS=
-      - ES_VERSION=
-    ports:
-      - "7233:7233"  # gRPC port
-    networks:
-      - loom-network
-    volumes:
-      - ./config/temporal:/etc/temporal/config/dynamicconfig
-    healthcheck:
-      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  # Temporal Web UI
-  temporal-ui:
-    image: temporalio/ui:2.21.3
-    container_name: temporal-ui
-    restart: unless-stopped
-    depends_on:
-      temporal:
-        condition: service_healthy
-    environment:
-      - TEMPORAL_ADDRESS=temporal:7233
-      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
-    ports:
-      - "8088:8080"  # Temporal UI on different port to avoid conflict with loom
-    networks:
-      - loom-network
 
   # TokenHub: LLM routing proxy with intelligent provider selection,
   # health tracking, failover, and Thompson Sampling.
@@ -124,7 +58,6 @@ services:
       - TOKENHUB_CORS_ORIGINS=*
       - TOKENHUB_RATE_LIMIT_RPS=120
       - TOKENHUB_RATE_LIMIT_BURST=240
-      # Temporal disabled — Loom has its own Temporal
       - TOKENHUB_TEMPORAL_ENABLED=false
     networks:
       - loom-network
@@ -203,8 +136,6 @@ services:
     container_name: loom
     restart: unless-stopped
     depends_on:
-      temporal:
-        condition: service_healthy
       nats:
         condition: service_healthy
       pgbouncer:
@@ -220,8 +151,6 @@ services:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITLAB_TOKEN=${GITLAB_TOKEN}
       - TZ=UTC
-      - TEMPORAL_HOST=temporal:7233
-      - TEMPORAL_NAMESPACE=default
       - NATS_URL=nats://nats:4222
       - CONFIG_PATH=/app/config.yaml
       - DOLT_PORT=3307
@@ -402,12 +331,6 @@ services:
       args:
         GITHUB_TOKEN: ${GITHUB_TOKEN}
     container_name: loom-test
-    depends_on:
-      temporal:
-        condition: service_healthy
-    environment:
-      - TEMPORAL_HOST=temporal:7233
-      - TEMPORAL_REQUIRED=true
     networks:
       - loom-network
     command: ["go", "test", "-v", "./..."]
@@ -514,7 +437,6 @@ networks:
     driver: bridge
 
 volumes:
-  temporal-db-data:
   loom-db:
   loom-db-postgres:
   nats-data:

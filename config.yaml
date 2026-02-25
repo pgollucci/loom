@@ -80,15 +80,6 @@ security:
   #   - "your-api-key-here"
   openclaw_enabled: false  # Per-project opt-in for openclaw integration
 
-temporal:
-  host: localhost:7233
-  namespace: default
-  task_queue: loom-tasks
-  workflow_execution_timeout: 24h
-  workflow_task_timeout: 10s
-  enable_event_bus: true
-  event_buffer_size: 1000
-
 cache:
   enabled: true               # Enable response caching
   default_ttl: 1h             # Default time-to-live for cache entries

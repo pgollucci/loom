@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/gitops"
@@ -227,16 +228,23 @@ func (bs *BootstrapService) copyTemplateFiles(projectPath string) error {
 
 // initializeBeads initializes the beads system for the project
 func (bs *BootstrapService) initializeBeads(ctx context.Context, projectPath string) error {
-	args := []string{"init"}
 	if bs.beadsBackend == "dolt" {
-		args = append(args, "--backend", "dolt")
-	}
-	cmd := exec.CommandContext(ctx, "bd", args...)
-	cmd.Dir = projectPath
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to run bd init: %w", err)
+		// Dolt backend: use bd init with dolt flag
+		cmd := exec.CommandContext(ctx, "bd", "init", "--backend", "dolt")
+		cmd.Dir = projectPath
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to run bd init: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
 
+	// YAML backend (default): create minimal .beads/ directory structure directly.
+	// bd init requires Dolt which may not be available; loom's YAML manager only needs
+	// the beads subdirectory to exist.
+	beadsDir := filepath.Join(projectPath, ".beads", "beads")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create beads directory: %w", err)
+	}
 	return nil
 }
 

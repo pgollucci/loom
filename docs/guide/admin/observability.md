@@ -29,7 +29,6 @@ flowchart LR
 | Grafana | `http://localhost:3000` | Dashboards (admin/admin) |
 | Jaeger | `http://localhost:16686` | Distributed tracing |
 | Prometheus | `http://localhost:9090` | Metrics queries and alerts |
-| Temporal UI | `http://localhost:8088` | Workflow monitoring |
 
 All of these are accessible from the observability menu (eye icon) in the Loom UI header.
 

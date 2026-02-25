@@ -61,17 +61,6 @@ security:
   webhook_secret: ""         # For GitHub webhook verification
 ```
 
-#### Temporal
-
-```yaml
-temporal:
-  host: localhost:7233
-  namespace: default
-  task_queue: loom-tasks
-  workflow_execution_timeout: 24h
-  enable_event_bus: true
-```
-
 #### Agents
 
 ```yaml
@@ -120,8 +109,6 @@ git:
 | Variable | Description | Default |
 |---|---|---|
 | `LOOM_PASSWORD` | Master password for key encryption and UI login | `loom-default-password` |
-| `TEMPORAL_HOST` | Temporal server address | `localhost:7233` |
-| `TEMPORAL_NAMESPACE` | Temporal namespace | `default` |
 
 Set `LOOM_PASSWORD` in a `.env` file at the project root or export it in your shell. **Always change the default password in production.**
 
@@ -496,17 +483,6 @@ curl http://localhost:8080/api/v1/logs/recent
 curl -N http://localhost:8080/api/v1/logs/stream    # Real-time log stream
 ```
 
-### Temporal UI
-
-The Temporal UI runs on port **8088** and provides visibility into workflow execution:
-
-- View running and completed workflows
-- Inspect workflow history and event logs
-- Monitor task queue depth
-- Debug failed workflows
-
-Access at: `http://localhost:8088`
-
 ### TokenHub UI
 
 TokenHub runs on port **8090** and shows LLM token flow:
@@ -518,7 +494,7 @@ TokenHub runs on port **8090** and shows LLM token flow:
 
 Access at: `http://localhost:8090`
 
-All observability endpoints (Loom, TokenHub, Grafana, Jaeger, Prometheus, Temporal) are also accessible from the eye icon menu in the Loom UI header.
+All observability endpoints (Loom, TokenHub, Grafana, Jaeger, Prometheus) are also accessible from the eye icon menu in the Loom UI header.
 
 ---
 
@@ -573,15 +549,6 @@ SSH keys will be automatically restored from the database on first use.
 
 ## Troubleshooting
 
-### Temporal Not Connecting
-
-**Symptoms:** Workflows don't start, heartbeat missing.
-
-1. Check Temporal is running: `docker compose ps temporal`
-2. Verify the host: `curl http://localhost:7233` should respond
-3. Check env overrides: `TEMPORAL_HOST`, `TEMPORAL_NAMESPACE`
-4. The fallback dispatch loop (every 10s) handles work even if Temporal is down
-
 ### TokenHub Health Failures
 
 **Symptoms:** Provider shows `error` or `failed` status.
@@ -627,4 +594,4 @@ SSH keys will be automatically restored from the database on first use.
 2. Check for blocked beads: dependencies may not be resolved
 3. Verify TokenHub is healthy and agents can reach it
 4. Check `dispatch.max_hops` — beads dispatched more than this many times are escalated to P0
-5. Review Temporal UI at `:8088` for workflow errors
+5. Check logs: `make logs`

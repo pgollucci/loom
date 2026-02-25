@@ -44,12 +44,10 @@ import (
 	"github.com/jordanhubbard/loom/internal/persona"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
+	"github.com/jordanhubbard/loom/internal/eventbus"
+	"github.com/jordanhubbard/loom/internal/ralph"
 	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/taskexecutor"
-	"github.com/jordanhubbard/loom/internal/temporal"
-	temporalactivities "github.com/jordanhubbard/loom/internal/temporal/activities"
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
-	"github.com/jordanhubbard/loom/internal/temporal/workflows"
 	"github.com/jordanhubbard/loom/internal/workflow"
 	"github.com/jordanhubbard/loom/pkg/config"
 	"github.com/jordanhubbard/loom/pkg/connectors"
@@ -79,7 +77,6 @@ type Loom struct {
 	database              *database.Database
 	dispatcher            *dispatch.Dispatcher
 	eventBus              *eventbus.EventBus
-	temporalManager       *temporal.Manager
 	modelCatalog          *modelcatalog.Catalog
 	gitopsManager         *gitops.Manager
 	shellExecutor         *executor.ShellExecutor
@@ -122,18 +119,6 @@ func New(cfg *config.Config) (*Loom, error) {
 
 	providerRegistry := provider.NewRegistry()
 
-	// Initialize Temporal manager if configured.
-	// Temporal is optional — loom degrades gracefully without it (no durable
-	// workflows, but the dispatch loop, agents, and NATS bus still operate).
-	var temporalMgr *temporal.Manager
-	if cfg.Temporal.Host != "" {
-		var err error
-		temporalMgr, err = temporal.NewManager(&cfg.Temporal)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize Temporal: %w", err)
-		}
-	}
-
 	// Initialize NATS message bus if configured
 	var messageBus interface{}
 	natsURL := os.Getenv("NATS_URL")
@@ -153,13 +138,8 @@ func New(cfg *config.Config) (*Loom, error) {
 		}
 	}
 
-	// Always have an event bus (Temporal-backed when enabled, otherwise in-memory only).
-	var eb *eventbus.EventBus
-	if temporalMgr != nil && temporalMgr.GetEventBus() != nil {
-		eb = temporalMgr.GetEventBus()
-	} else {
-		eb = eventbus.NewEventBus(nil, &cfg.Temporal)
-	}
+	// Initialize in-memory event bus.
+	eb := eventbus.NewEventBus()
 
 	// Bridge the in-memory EventBus to NATS for cross-container communication.
 	var bridge *messagebus.BridgedMessageBus
@@ -353,7 +333,6 @@ func New(cfg *config.Config) (*Loom, error) {
 		providerRegistry:      providerRegistry,
 		database:              db,
 		eventBus:              eb,
-		temporalManager:       temporalMgr,
 		modelCatalog:          modelCatalog,
 		gitopsManager:         gitopsMgr,
 		shellExecutor:         shellExec,
@@ -1048,28 +1027,25 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		}
 	}
 
-	// Register dispatch activities and start the Temporal worker if configured.
-
-	// Start Temporal worker if configured
-	log.Printf("[Loom] DEBUG: Starting Temporal worker")
-	if a.temporalManager != nil {
-		a.temporalManager.RegisterActivity(temporalactivities.NewDispatchActivities(a.dispatcher))
-		a.temporalManager.RegisterActivity(temporalactivities.NewProviderActivities(a.providerRegistry, a.database, a.eventBus, a.modelCatalog, a.keyManager))
-		a.temporalManager.RegisterActivity(temporalactivities.NewLoomActivities(a.database, a.dispatcher, a.beadsManager, a.agentManager))
-
-		if err := a.temporalManager.Start(); err != nil {
-			return fmt.Errorf("failed to start temporal: %w", err)
+	// Start the Ralph Loop — a plain goroutine ticker that runs maintenance
+	// every 10 seconds (resets stuck agents, auto-blocks looped beads, etc.).
+	ralphActs := ralph.New(a.database, a.dispatcher, a.beadsManager, a.agentManager)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		beatCount := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				beatCount++
+				if err := ralphActs.Beat(ctx, beatCount); err != nil {
+					log.Printf("[Ralph] Beat %d failed: %v", beatCount, err)
+				}
+			}
 		}
-
-		// Start the Ralph Loop (10 second interval) — drains all dispatchable work per beat
-		if err := a.temporalManager.StartLoomHeartbeatWorkflow(ctx, 10*time.Second); err != nil {
-			log.Printf("[Loom] ERROR: Failed to start Ralph Loop: %v", err)
-		}
-		// Start provider heartbeats (monitor provider health)
-		if err := a.startProviderHeartbeats(ctx); err != nil {
-			log.Printf("[Loom] ERROR: Failed to start provider heartbeats: %v", err)
-		}
-	}
+	}()
 
 	// Kick-start work on all open beads across registered projects.
 	a.kickstartOpenBeads(ctx)
@@ -1280,18 +1256,6 @@ func (a *Loom) kickstartOpenBeads(ctx context.Context) {
 				})
 			}
 
-			// Start Temporal workflow for the bead if Temporal is enabled
-			// Skip workflow assignment for system diagnostic beads to avoid blocking dispatch
-			isSystemBead := strings.Contains(strings.ToLower(b.Title), "system diagnostic") ||
-				strings.Contains(strings.ToLower(b.Title), "diagnostic check")
-			if a.temporalManager != nil && !isSystemBead {
-				if err := a.temporalManager.StartBeadWorkflow(ctx, b.ID, p.ID, b.Title, b.Description, int(b.Priority), b.Type); err != nil {
-					// Log error but continue with other beads
-					fmt.Printf("Warning: failed to kickstart bead workflow %s: %v\n", b.ID, err)
-					continue
-				}
-			}
-
 			totalKickstarted++
 		}
 	}
@@ -1328,13 +1292,8 @@ func (a *Loom) Shutdown() {
 		if a.doltCoordinator != nil {
 			a.doltCoordinator.Shutdown()
 		}
-		if a.temporalManager != nil {
-			a.temporalManager.Stop()
-		}
 		if a.eventBus != nil {
-			if a.temporalManager == nil || a.temporalManager.GetEventBus() != a.eventBus {
-				a.eventBus.Close()
-			}
+			a.eventBus.Close()
 		}
 		if a.messageBus != nil {
 			if mb, ok := a.messageBus.(*messagebus.NatsMessageBus); ok {
@@ -1345,11 +1304,6 @@ func (a *Loom) Shutdown() {
 			_ = a.database.Close()
 		}
 	})
-}
-
-// GetTemporalManager returns the Temporal manager
-func (a *Loom) GetTemporalManager() *temporal.Manager {
-	return a.temporalManager
 }
 
 func (a *Loom) GetEventBus() *eventbus.EventBus {
@@ -2418,13 +2372,6 @@ func (a *Loom) SpawnAgent(ctx context.Context, name, personaName, projectID stri
 		return nil, fmt.Errorf("failed to add agent to project: %w", err)
 	}
 
-	// Start Temporal workflow for agent if Temporal is enabled
-	if a.temporalManager != nil {
-		if err := a.temporalManager.StartAgentWorkflow(ctx, agent.ID, projectID, personaName, name); err != nil {
-			// Log error but don't fail agent creation
-			fmt.Printf("Warning: failed to start agent workflow: %v\n", err)
-		}
-	}
 
 	// Persist agent assignment to the configuration database.
 	if a.database != nil {
@@ -2450,9 +2397,6 @@ func (a *Loom) StopAgent(ctx context.Context, agentID string) error {
 	a.PersistProject(ag.ProjectID)
 	if a.database != nil {
 		_ = a.database.DeleteAgent(agentID)
-	}
-	if a.temporalManager != nil {
-		_ = a.temporalManager.SignalAgentWorkflow(ctx, agentID, "shutdown", "stopped")
 	}
 	return nil
 }
@@ -2541,7 +2485,6 @@ func (a *Loom) RegisterProvider(ctx context.Context, p *internalmodels.Provider,
 			},
 		})
 	}
-	_ = a.ensureProviderHeartbeat(ctx, p.ID)
 
 	// Immediately attempt to get models from the provider to validate and update status
 	log.Printf("Launching health check goroutine for provider: %s", p.ID)
@@ -2624,7 +2567,6 @@ func (a *Loom) UpdateProvider(ctx context.Context, p *internalmodels.Provider) (
 			},
 		})
 	}
-	_ = a.ensureProviderHeartbeat(ctx, p.ID)
 
 	return p, nil
 }
@@ -2662,14 +2604,11 @@ type ReplResult struct {
 	LatencyMs    int64  `json:"latency_ms"`
 }
 
-// RunReplQuery sends a high-priority query through Temporal using the best provider.
+// RunReplQuery sends a high-priority query to the best provider.
 // All CEO queries automatically create P0 beads to preserve state.
 func (a *Loom) RunReplQuery(ctx context.Context, message string) (*ReplResult, error) {
 	if strings.TrimSpace(message) == "" {
 		return nil, fmt.Errorf("message is required")
-	}
-	if a.temporalManager == nil {
-		return nil, fmt.Errorf("temporal manager not configured")
 	}
 	if a.database == nil {
 		return nil, fmt.Errorf("database not configured")
@@ -2722,15 +2661,36 @@ func (a *Loom) RunReplQuery(ctx context.Context, message string) (*ReplResult, e
 	}
 
 	systemPrompt := a.buildLoomPersonaPrompt()
-	input := workflows.ProviderQueryWorkflowInput{
-		ProviderID:   providerRecord.ID,
-		SystemPrompt: systemPrompt,
-		Message:      cleanMessage,
-		Temperature:  0.2,
-		MaxTokens:    1200,
+
+	regProvider, err := a.providerRegistry.Get(providerRecord.ID)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s not found in registry: %w", providerRecord.ID, err)
+	}
+	if regProvider.Protocol == nil {
+		return nil, fmt.Errorf("provider %s has no protocol configured", providerRecord.ID)
 	}
 
-	result, err := a.temporalManager.RunProviderQueryWorkflow(ctx, input)
+	model := providerRecord.SelectedModel
+	if model == "" {
+		model = providerRecord.Model
+	}
+	if model == "" {
+		model = providerRecord.ConfiguredModel
+	}
+
+	req := &provider.ChatCompletionRequest{
+		Model: model,
+		Messages: []provider.ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: cleanMessage},
+		},
+		Temperature: 0.2,
+		MaxTokens:   1200,
+	}
+
+	queryStart := time.Now()
+	resp, err := regProvider.Protocol.CreateChatCompletion(ctx, req)
+	latencyMs := time.Since(queryStart).Milliseconds()
 	if err != nil {
 		// Update bead with error if it was created
 		if beadID != "" {
@@ -2745,6 +2705,13 @@ func (a *Loom) RunReplQuery(ctx context.Context, message string) (*ReplResult, e
 		return nil, err
 	}
 
+	responseText := ""
+	if len(resp.Choices) > 0 {
+		responseText = resp.Choices[0].Message.Content
+	}
+	tokensUsed := resp.Usage.TotalTokens
+	responseModel := resp.Model
+
 	// Enforce strict JSON action output and execute actions
 	var actionResults []actions.Result
 	if a.actionRouter != nil {
@@ -2753,9 +2720,9 @@ func (a *Loom) RunReplQuery(ctx context.Context, message string) (*ReplResult, e
 			BeadID:    beadID,
 			ProjectID: a.config.GetSelfProjectID(),
 		}
-		env, parseErr := actions.DecodeLenient([]byte(result.Response))
+		env, parseErr := actions.DecodeLenient([]byte(responseText))
 		if parseErr != nil {
-			actionResult := a.actionRouter.AutoFileParseFailure(ctx, actx, parseErr, result.Response)
+			actionResult := a.actionRouter.AutoFileParseFailure(ctx, actx, parseErr, responseText)
 			actionResults = []actions.Result{actionResult}
 		} else {
 			actionResults, _ = a.actionRouter.Execute(ctx, env, actx)
@@ -2769,31 +2736,30 @@ func (a *Loom) RunReplQuery(ctx context.Context, message string) (*ReplResult, e
 			"context": map[string]string{
 				"source":      "ceo-repl",
 				"created_by":  "ceo",
-				"response":    result.Response,
+				"response":    responseText,
 				"actions":     string(actionsJSON),
 				"provider_id": providerRecord.ID,
-				"model":       result.Model,
-				"tokens_used": fmt.Sprintf("%d", result.TokensUsed),
+				"model":       responseModel,
+				"tokens_used": fmt.Sprintf("%d", tokensUsed),
 			},
 			"status": models.BeadStatusClosed,
 		})
 	}
 
-	model := result.Model
-	if model == "" {
-		model = providerRecord.SelectedModel
+	if responseModel == "" {
+		responseModel = providerRecord.SelectedModel
 	}
-	if model == "" {
-		model = providerRecord.Model
+	if responseModel == "" {
+		responseModel = providerRecord.Model
 	}
 	return &ReplResult{
 		BeadID:       beadID,
 		ProviderID:   providerRecord.ID,
 		ProviderName: providerRecord.Name,
-		Model:        model,
-		Response:     result.Response,
-		TokensUsed:   result.TokensUsed,
-		LatencyMs:    result.LatencyMs,
+		Model:        responseModel,
+		Response:     responseText,
+		TokensUsed:   tokensUsed,
+		LatencyMs:    latencyMs,
 	}, nil
 }
 
@@ -2871,30 +2837,6 @@ func (a *Loom) buildLoomPersonaPrompt() string {
 		strings.TrimSpace(standards),
 		actions.ActionPrompt,
 	)
-}
-
-func (a *Loom) startProviderHeartbeats(ctx context.Context) error {
-	if a.temporalManager == nil || a.database == nil {
-		return nil
-	}
-	providers, err := a.database.ListProviders()
-	if err != nil {
-		return err
-	}
-	for _, p := range providers {
-		if p == nil || p.ID == "" {
-			continue
-		}
-		_ = a.ensureProviderHeartbeat(ctx, p.ID)
-	}
-	return nil
-}
-
-func (a *Loom) ensureProviderHeartbeat(ctx context.Context, providerID string) error {
-	if a.temporalManager == nil || providerID == "" {
-		return nil
-	}
-	return a.temporalManager.StartProviderHeartbeatWorkflow(ctx, providerID, 30*time.Second)
 }
 
 // ListModelCatalog returns the recommended model catalog.
@@ -3011,20 +2953,6 @@ func (a *Loom) CreateBead(title, description string, priority models.BeadPriorit
 			"priority":    priority,
 			"assigned_to": bead.AssignedTo,
 		})
-	}
-
-	// Start Temporal workflow for bead if Temporal is enabled
-	// Skip workflow assignment for system diagnostic beads to avoid blocking dispatch
-	isSystemBead := strings.Contains(strings.ToLower(title), "system diagnostic") ||
-		strings.Contains(strings.ToLower(title), "diagnostic check")
-	if a.temporalManager != nil && !isSystemBead {
-		ctx := context.Background()
-		if err := a.temporalManager.StartBeadWorkflow(ctx, bead.ID, projectID, title, description, int(priority), beadType); err != nil {
-			// Log error but don't fail bead creation
-			fmt.Printf("Warning: failed to start bead workflow: %v\n", err)
-		}
-	} else if isSystemBead {
-		log.Printf("[Loom] Skipping workflow assignment for system diagnostic bead %s", bead.ID)
 	}
 
 	// Auto-approve low-risk code fix proposals to enable full autonomy
@@ -3341,14 +3269,6 @@ func (a *Loom) CreateDecisionBead(question, parentBeadID, requesterID string, op
 		})
 	}
 
-	// Start Temporal decision workflow if Temporal is enabled
-	if a.temporalManager != nil {
-		ctx := context.Background()
-		if err := a.temporalManager.StartDecisionWorkflow(ctx, decision.ID, projectID, question, requesterID, options); err != nil {
-			// Log error but don't fail decision creation
-			fmt.Printf("Warning: failed to start decision workflow: %v\n", err)
-		}
-	}
 
 	return decision, nil
 }

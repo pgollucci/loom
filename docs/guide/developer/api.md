@@ -20,9 +20,6 @@
 ### Running Containers
 ```
 - loom (port 8080) - HEALTHY
-- temporal (port 7233) - HEALTHY  
-- temporal-postgresql - HEALTHY
-- temporal-ui (port 8088) - HEALTHY
 ```
 
 ### Active Agents (Currently 10/10 - at capacity)

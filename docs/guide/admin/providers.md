@@ -23,7 +23,7 @@ For repeatable setup, use `bootstrap.local` or see the authoritative sample in t
 
 ## Health Monitoring
 
-I health-check TokenHub every 30 seconds via heartbeat workflows in Temporal. Provider states:
+I health-check TokenHub every 30 seconds. Provider states:
 
 - **pending** -- Just registered, first heartbeat not yet received
 - **healthy** -- Responding to chat completions successfully

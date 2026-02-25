@@ -7,16 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/pkg/config"
 )
 
 // newTestEventBus creates an in-memory event bus for testing.
 func newTestEventBus() *eventbus.EventBus {
-	return eventbus.NewEventBus(nil, &config.TemporalConfig{
-		EnableEventBus:  true,
-		EventBufferSize: 100,
-	})
+	return eventbus.NewEventBus()
 }
 
 func TestNewBridge_NilClient(t *testing.T) {

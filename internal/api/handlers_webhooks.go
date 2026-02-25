@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/jordanhubbard/loom/internal/motivation"
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 )
 
 // GitHubWebhookPayload represents a generic GitHub webhook payload

@@ -3,7 +3,7 @@ package messagebus
 import (
 	"testing"
 
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 )
 
 func TestIsAgentMessageEvent(t *testing.T) {

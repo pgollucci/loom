@@ -25,13 +25,6 @@ database:
   postgres_password: loom
   postgres_db: loom
 
-temporal:
-  host: temporal:7233
-  namespace: default
-  task_queue: loom-tasks
-  workflow_execution_timeout: 24h
-  workflow_task_timeout: 10s
-
 agents:
   max_concurrent: 10
   default_persona_path: ./personas
@@ -77,8 +70,6 @@ readiness:
 | Variable | Default | Description |
 |---|---|---|
 | `LOOM_PASSWORD` | (required) | Master password |
-| `TEMPORAL_HOST` | config value | Temporal gRPC address |
-| `TEMPORAL_NAMESPACE` | config value | Temporal namespace |
 | `NATS_URL` | | NATS server URL |
 | `CONNECTORS_SERVICE_ADDR` | | Remote connectors gRPC address |
 | `OTEL_ENDPOINT` | `otel-collector:4317` | OTel Collector gRPC endpoint |

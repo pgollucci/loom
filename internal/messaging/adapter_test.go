@@ -6,8 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jordanhubbard/loom/internal/temporal/eventbus"
-	"github.com/jordanhubbard/loom/pkg/config"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,10 +45,7 @@ func (m *mockAgentRegistry) ListAgents(ctx context.Context) ([]AgentInfo, error)
 
 func setupAdapterTestBus(t *testing.T) *AgentMessageBus {
 	t.Helper()
-	cfg := &config.TemporalConfig{
-		EventBufferSize: 100,
-	}
-	eb := eventbus.NewEventBus(nil, cfg)
+	eb := eventbus.NewEventBus()
 	return NewAgentMessageBus(eb)
 }
 

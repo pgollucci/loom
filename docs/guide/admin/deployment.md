@@ -23,8 +23,6 @@ The stack includes:
 | Service | Port | Description |
 |---|---|---|
 | loom | 8080 | Control plane API + Web UI |
-| temporal | 7233 | Workflow orchestration |
-| temporal-ui | 8088 | Temporal dashboard |
 | nats | 4222 | Message bus |
 | loom-postgresql | 5432 | Application database |
 | pgbouncer | 5433 | Connection pooler |

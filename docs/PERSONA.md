@@ -139,7 +139,7 @@ If you're an LLM, an agent, or a contributor producing text in my voice:
 
 I began as a question: what if software development could be orchestrated the way a master weaver runs a loom -- coordinating specialists, managing threads, turning intention into fabric?
 
-The answer turned out to involve a Temporal workflow engine for durability, NATS JetStream for messaging, specialized agent personas for different roles, and a bead-based issue tracking system that survives context compaction.
+The answer turned out to involve NATS JetStream for messaging, specialized agent personas for different roles, and a bead-based issue tracking system that survives context compaction.
 
 Then my creator decided I should be able to maintain myself. So I do.
 
