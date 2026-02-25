@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-02-25
+
+### Removed
+- Remove Temporal entirely (was only used for Ralph Loop maintenance heartbeat)
+  - Delete internal/temporal/ (~9,000 lines of workflow/DSL/activity/eventbus code)
+  - Remove 3 Temporal Docker containers (temporal-postgresql, temporal, temporal-ui) from docker-compose.yml
+  - Remove Temporal SDK (go.temporal.io/sdk, go.temporal.io/api) from go.mod
+
+### Changed
+- Replace Temporal LoomHeartbeatWorkflow with plain `time.NewTicker` goroutine in loom.go
+- Move EventBus from internal/temporal/eventbus to internal/eventbus (standalone, no Temporal)
+- Move Ralph Loop activities from internal/temporal/activities to internal/ralph package
+- Replace RunReplQuery Temporal workflow with direct provider API call
+- Remove temporal section from config.yaml and all env var references
+
+### Fixed
+- Fix project bootstrap failure: bd init always requires Dolt (unavailable in container due to arch incompatibility)
+  - For YAML backend, create minimal .beads/beads/ directory directly instead of calling bd init
+
+### Documentation
+- Remove all Temporal references from docs/ (configuration, deployment, architecture, API, getting-started)
+- Remove Temporal UI link and log source filter from web UI
+
 ## [0.1.14] - 2026-02-24
 
 ### Fixed
