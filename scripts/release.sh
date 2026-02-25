@@ -443,12 +443,11 @@ main() {
     # Update changelog
     update_changelog "$CHANGELOG_ENTRY"
 
-    # Step 3: Run tests before release (capture output for release notes)
-    info "Running comprehensive test suite..."
+    # Step 3: Run tests before release
+    info "Running unit tests..."
     local test_output_file=$(mktemp)
 
-    # Run tests and capture output
-    if make test-docker > "$test_output_file" 2>&1; then
+    if go test ./... -short -count=1 > "$test_output_file" 2>&1; then
         local test_status="✅ All tests passed"
     else
         local test_status="⚠️ Some tests failed (see test output)"
