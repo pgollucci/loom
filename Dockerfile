@@ -1,10 +1,12 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 
 ARG GITHUB_TOKEN
 
-# Install build dependencies (icu-dev for beads, gcc for bd CLI with Dolt support)
-RUN apk add --no-cache git ca-certificates tzdata gcc g++ musl-dev openssh-client icu-dev wget
+# Install build dependencies (libicu-dev for beads, gcc for bd CLI with Dolt support)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates tzdata gcc g++ libicu-dev openssh-client wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
@@ -55,18 +57,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o connectors-service \
     ./cmd/connectors-service
 
-# Runtime stage
-FROM alpine:latest
+# Runtime stage — Debian bookworm matches the builder stage (same libicu72 ABI)
+FROM debian:bookworm-slim
 
 # Install runtime dependencies including git, openssh, wget, Docker CLI, and C++ libs for bd with CGO
-RUN apk add --no-cache ca-certificates tzdata git openssh-client wget libstdc++ libgcc icu-libs docker-cli docker-compose
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates tzdata git openssh-client wget libstdc++6 libicu72 docker.io docker-compose \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user and docker group for Docker socket access
 # Use GID 988 to match host docker socket (may need adjustment on different systems)
-RUN addgroup -g 988 docker && \
-    addgroup -g 1000 loom && \
-    adduser -D -u 1000 -G loom loom && \
-    adduser loom docker
+# docker.io creates the docker group; adjust its GID then create the loom user
+RUN groupmod -g 988 docker && \
+    groupadd -g 1000 loom && \
+    useradd -u 1000 -g loom -m -s /bin/bash loom && \
+    usermod -aG docker loom
 
 # Set working directory
 WORKDIR /app
