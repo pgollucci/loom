@@ -32,7 +32,7 @@ context:
     loop_detected: "false"
     loop_iterations: "1"
     provider_id: tokenhub
-    provider_model: Qwen/Qwen2.5-Coder-32B-Instruct
+    provider_model: openai-gpt4
     redispatch_requested: "false"
     redispatch_requested_at: "2026-02-21T00:38:04Z"
     remediation_needed: "true"

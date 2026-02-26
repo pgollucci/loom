@@ -48,7 +48,7 @@ context:
     loop_iterations: "6"
     progress_summary: No progress data
     provider_id: tokenhub
-    provider_model: Qwen/Qwen2.5-Coder-32B-Instruct
+    provider_model: openai-gpt4
     ralph_blocked_at: ""
     ralph_blocked_reason: ""
     redispatch_requested: "false"
