@@ -585,7 +585,24 @@ function connectToEventStream() {
         eventSource.close();
     }
 
-    eventSource = new EventSource('/api/v1/events/stream');
+    const liveEventSource = new EventSource('/api/v1/events/stream');
+let iterationCounter = 0;
+let startTime = Date.now();
+
+liveEventSource.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    const liveUpdates = document.getElementById('live-updates');
+    const newEvent = document.createElement('div');
+    newEvent.textContent = `Event: ${data.type}, Message: ${data.message}`;
+    liveUpdates.appendChild(newEvent);
+    liveUpdates.scrollTop = liveUpdates.scrollHeight;
+
+    // Update iteration counter and elapsed time
+    iterationCounter++;
+    const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('iteration-counter').textContent = `Iterations: ${iterationCounter}`;
+    document.getElementById('elapsed-time').textContent = `Elapsed Time: ${elapsedTime}s`;
+};
 
     eventSource.addEventListener('bead.status_change', (e) => {
         const data = JSON.parse(e.data);

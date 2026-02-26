@@ -324,9 +324,15 @@
         <div id="conv-detail" class="conv-detail-panel">
             <div class="empty-state"><p>Select a node in the graph</p></div>
         </div>
-        <div id="live-pane" class="conv-live-pane">
+<div id="live-pane" class="conv-live-pane">
             <h3>Live Updates</h3>
             <div id="live-updates"></div>
+            <div id="iteration-counter" class="small"></div>
+            <div id="elapsed-time" class="small"></div>
+            <div class="live-message-input">
+                <textarea id="live-message" placeholder="Inject a message into the active conversation..."></textarea>
+                <button type="button" id="send-live-message" class="secondary">Send Message</button>
+            </div>
         </div>
     </div>
     <div id="conv-legend" class="conv-legend">
