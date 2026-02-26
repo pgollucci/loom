@@ -124,6 +124,11 @@ func (w *Watchdog) checkRalphBlockage(ctx context.Context) {
 	}
 
 	// Placeholder for additional health checks
+	// Example: Log a message if a health issue is detected
+	log.Println("[Watchdog] Health issue detected: Example issue")
+
+	// Create a P0 bead assigned to the CEO if an issue is detected
+	w.createP0BeadForCEO("Example issue detected")
 }
 
 // createAlertBead creates a P0 bead assigned to the CEO

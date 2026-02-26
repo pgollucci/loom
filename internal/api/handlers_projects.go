@@ -360,7 +360,8 @@ func (s *Server) handleBootstrapProject(w http.ResponseWriter, r *http.Request) 
 	// Bootstrap the project
 	result, err := bootstrapService.Bootstrap(r.Context(), req)
 	if err != nil {
-		s.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Bootstrap failed: %v", err))
+		log.Printf("[Bootstrap] Error: %v", err)
+s.respondError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
