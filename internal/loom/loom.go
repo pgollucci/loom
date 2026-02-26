@@ -1062,8 +1062,11 @@ func (a *Loom) Initialize(ctx context.Context) error {
 	// FIX #1: Start motivation engine evaluation loop
 	// The motivation engine creates beads automatically based on conditions
 	// (idle detection, deadline monitoring, budget thresholds, etc.)
-	if a.motivationEngine != nil {
-		if err := a.motivationEngine.Start(ctx); err != nil {
+	if a.motivationEngine == nil {
+		// Initialize the motivation engine if not already initialized
+		a.motivationEngine = motivation.NewEngine(motivation.DefaultConfig())
+	}
+	if err := a.motivationEngine.Start(ctx); err != nil {
 			log.Printf("[Loom] Warning: Failed to start motivation engine: %v", err)
 		} else {
 			log.Printf("[Loom] Motivation engine started successfully")

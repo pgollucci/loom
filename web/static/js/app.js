@@ -2616,34 +2616,79 @@ function renderCeoDashboard() {
     const agents = state.agents || [];
     const decisions = state.decisions || [];
 
-    // Populate the CEO REPL agent dropdown
+    // Populate the CEO REPL agent dropdown with ALL agents grouped by project
     const agentSelect = document.getElementById('ceo-repl-agent-select');
     if (agentSelect) {
-        const projectId = uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
-        const projectAgents = agents.filter(a => a.project_id === projectId);
         const currentValue = agentSelect.value;
         
-        // Clear existing options except the first one (General Query)
-        while (agentSelect.options.length > 1) {
-            agentSelect.remove(1);
+        // Clear all existing options and optgroups except the first option (General Query)
+        while (agentSelect.children.length > 1) {
+            agentSelect.removeChild(agentSelect.lastChild);
         }
         
-        // Add agents from the current project
-        for (const agent of projectAgents) {
-            const option = document.createElement('option');
-            option.value = agent.id;
-            const displayName = agent.name || agent.role || agent.persona_name || agent.id;
-            const status = agent.status ? ` (${agent.status})` : '';
-            option.textContent = displayName + status;
-            agentSelect.appendChild(option);
+        // Group agents by project
+        const agentsByProject = {};
+        const unassignedAgents = [];
+        
+        for (const agent of agents) {
+            if (agent.project_id) {
+                if (!agentsByProject[agent.project_id]) {
+                    agentsByProject[agent.project_id] = [];
+                }
+                agentsByProject[agent.project_id].push(agent);
+            } else {
+                unassignedAgents.push(agent);
+            }
+        }
+        
+        // Add agents grouped by project using optgroup elements
+        for (const project of projects) {
+            const projectAgents = agentsByProject[project.id] || [];
+            if (projectAgents.length === 0) continue;
+            
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = project.name || project.id;
+            
+            for (const agent of projectAgents) {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                const displayName = agent.name || agent.role || agent.persona_name || agent.id;
+                const status = agent.status ? ` (${agent.status})` : '';
+                option.textContent = displayName + status;
+                optgroup.appendChild(option);
+            }
+            
+            agentSelect.appendChild(optgroup);
+        }
+        
+        // Add unassigned agents if any
+        if (unassignedAgents.length > 0) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = 'Unassigned';
+            
+            for (const agent of unassignedAgents) {
+                const option = document.createElement('option');
+                option.value = agent.id;
+                const displayName = agent.name || agent.role || agent.persona_name || agent.id;
+                const status = agent.status ? ` (${agent.status})` : '';
+                option.textContent = displayName + status;
+                optgroup.appendChild(option);
+            }
+            
+            agentSelect.appendChild(optgroup);
         }
         
         // Restore previous selection if still valid
-        if (currentValue && Array.from(agentSelect.options).some(o => o.value === currentValue)) {
-            agentSelect.value = currentValue;
+        if (currentValue) {
+            const allOptions = agentSelect.querySelectorAll('option');
+            for (const opt of allOptions) {
+                if (opt.value === currentValue) {
+                    agentSelect.value = currentValue;
+                    break;
+                }
+            }
         }
     }
-
     // Populate the CEO REPL project dropdown for agent assignment
     const projectSelect = document.getElementById('ceo-repl-project-select');
     if (projectSelect) {

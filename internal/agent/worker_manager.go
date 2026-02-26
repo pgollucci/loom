@@ -186,6 +186,7 @@ func (m *WorkerManager) SpawnAgentWorker(ctx context.Context, name, personaName,
 		ProjectID:   projectID,
 		StartedAt:   time.Now(),
 		LastActive:  time.Now(),
+		CurrentBead: "",
 	}
 
 	m.agents[agentID] = agent
