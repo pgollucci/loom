@@ -26,7 +26,7 @@ type ProviderConfig struct {
 	SuccessRequests        int64     `json:"success_requests,omitempty"`
 }
 
-type MetricsCallback func(providerID string, success bool, latencyMs int64, totalTokens int64)
+type MetricsCallback func(providerID string, success bool, latencyMs int64, totalTokens int64, errorCount int64)
 
 type Registry struct {
 	mu              sync.RWMutex
@@ -213,7 +213,11 @@ func (r *Registry) SendChatCompletionStream(ctx context.Context, providerID stri
 
 	latencyMs := time.Since(start).Milliseconds()
 	if r.metricsCallback != nil {
-		r.metricsCallback(providerID, err == nil, latencyMs, 0)
+		errorCount := int64(0)
+		if err != nil {
+			errorCount = 1
+		}
+		r.metricsCallback(providerID, err == nil, latencyMs, 0, errorCount)
 	}
 
 	return err
@@ -268,7 +272,11 @@ func (r *Registry) SendChatCompletion(ctx context.Context, providerID string, re
 	r.mu.RUnlock()
 
 	if callback != nil {
-		callback(providerID, success, latencyMs, totalTokens)
+		errorCount := int64(0)
+		if !success {
+			errorCount = 1
+		}
+		callback(providerID, success, latencyMs, totalTokens, errorCount)
 	}
 
 	return resp, err
