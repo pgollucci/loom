@@ -13,6 +13,7 @@ import (
 // GET /api/v1/conversations/{id} - Get full conversation
 // DELETE /api/v1/conversations/{id} - Delete session
 // POST /api/v1/conversations/{id}/reset - Reset conversation history
+// POST /api/v1/conversations/{id}/inject - Inject a message into the conversation
 func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 	db := s.app.GetDatabase()
 	if db == nil {
@@ -37,6 +38,16 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleResetConversation(w, r, sessionID, db)
+		return
+	}
+
+	// Check for inject endpoint
+	if len(parts) == 2 && parts[1] == "inject" {
+		if r.Method != http.MethodPost {
+			s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+			return
+		}
+		s.handleInjectMessage(w, r, sessionID, db)
 		return
 	}
 

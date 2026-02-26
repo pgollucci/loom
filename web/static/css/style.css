@@ -1720,10 +1720,54 @@ button.small {
 /* Conversations Layout */
 .conversations-layout {
     display: grid;
-    grid-template-columns: 350px 1fr;
+    grid-template-columns: 350px 1fr 300px;
     gap: 1rem;
     height: calc(100vh - 300px);
     min-height: 500px;
+}
+
+.conv-live-pane {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--card-bg);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    overflow-y: auto;
+}
+
+.conv-live-pane h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    color: var(--primary-color);
+}
+
+#live-updates {
+    flex: 1;
+    overflow-y: auto;
+    background-color: var(--light-bg);
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+
+#live-updates > div {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border-color);
+    word-break: break-word;
+}
+
+#live-updates > div:last-child {
+    border-bottom: none;
+}
+
+#iteration-counter,
+#elapsed-time {
+    padding: 0.25rem 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
 }
 
 .conversations-list {

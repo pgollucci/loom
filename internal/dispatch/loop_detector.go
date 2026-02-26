@@ -219,7 +219,7 @@ func (ld *LoopDetector) checkRepeatedErrors(bead *models.Bead) (bool, string) {
 	}
 
 	if rateLimitErrors >= 5 {
-		return true, fmt.Sprintf("Repeated rate limit errors (%d attempts) - exhausted provider quota", rateLimitErrors)
+		return true, fmt.Sprintf("Repeated rate limit errors (%d attempts) - exhausted provider quota. Consider increasing the budget or resetting the counter.", rateLimitErrors)
 	}
 
 	if sameErrorCount >= 5 {
