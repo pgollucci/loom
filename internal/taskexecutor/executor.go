@@ -187,8 +187,16 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 		default:
 		}
 
+		// Acquire semaphore slot for concurrency limiting
+		select {
+		case <-ctx.Done():
+			return
+		case e.semaphore <- struct{}{}:
+		}
+
 		bead := e.claimNextBead(ctx, projectID, workerID)
 		if bead == nil {
+			<-e.semaphore // Release semaphore slot
 			idleRounds++
 			if idleRounds >= maxIdleRounds {
 				log.Printf("[TaskExecutor] Worker %s idle for %ds, going to sleep",
@@ -206,6 +214,7 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 		idleRounds = 0
 		log.Printf("[TaskExecutor] Worker %s claimed bead %s (%s)", workerID, bead.ID, bead.Title)
 		if needsBackoff := e.executeBead(ctx, bead, workerID); needsBackoff {
+			<-e.semaphore // Release semaphore slot
 			// Provider error (502, 429, context canceled): pause before
 			// claiming the next bead to avoid hammering tokenhub rate limits.
 			select {
@@ -213,6 +222,8 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 				return
 			case <-time.After(providerErrorBackoff):
 			}
+		} else {
+			<-e.semaphore // Release semaphore slot
 		}
 	}
 }

@@ -402,6 +402,10 @@ func truncateMessages(messages []provider.ChatMessage, fraction float64) []provi
 // callWithContextRetry calls CreateChatCompletion and retries with
 // progressively smaller message windows on ContextLengthError.
 // Returns the response and the final messages used (which may be truncated).
+func isTemporaryError(err error) bool {
+	return strings.Contains(err.Error(), "502") || strings.Contains(err.Error(), "503")
+}
+
 func (w *Worker) callWithContextRetry(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, []provider.ChatMessage, error) {
 	// Attempt 1: use messages as-is
 	var resp *provider.ChatCompletionResponse
