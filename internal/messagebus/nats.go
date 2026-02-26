@@ -435,7 +435,7 @@ func (mb *NatsMessageBus) Unsubscribe(subject string) error {
 // next startup. A 5-second deadline prevents blocking shutdown indefinitely.
 func (mb *NatsMessageBus) Close() error {
 	done := make(chan error, 1)
-	go func() { done <- mb.conn.Drain() }()
+	go func() { done <- mb.conn.Drain(nats.DrainTimeout(5 * time.Second)) }()
 
 	select {
 	case err := <-done:
