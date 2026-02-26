@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-02-25
+
+### Added
+- `EnsureDefaultAgents` public API on `*Loom` — bootstrapped projects now get a full org chart (all roles) created immediately on `POST /api/v1/projects/bootstrap`
+- Three-level debug instrumentation system (`debug_level: off|standard|extreme` in config.yaml)
+
+### Fixed
+- Provider activation on restart: providers loaded from DB on startup are now re-probed via chat-completion health check so they transition from `unhealthy` → `active` without manual intervention
+- Provider activation on update: `UpdateProvider` now re-probes immediately so endpoint/key edits take effect right away
+- New project button: wired to `showBootstrapProjectModal()` (bootstrap flow with description field and deploy key); added "Register Existing" secondary button for bare registration
+- Bootstrap success screen: SSH deploy key shown prominently with copy button and GitHub instructions
+- Git `index.lock` races: added per-project mutex in beads `Manager` to serialize concurrent git operations
+- Git add pathspec failure for beads loaded from main worktree: `SaveBeadToGit` now derives file path from `m.beadFiles` and copies to beads worktree when needed
+- Three UI null-pointer errors on page load: `renderKanban`, `renderAgents`, `renderPersonas`, `renderDecisions` now guard against missing DOM elements
+- SSE streams: prevent `ERR_INCOMPLETE_CHUNKED_ENCODING` by flushing properly
+
+### Changed
+- Slug-based project IDs: `POST /api/v1/projects/bootstrap` generates URL-safe slugs from project name (e.g. "My App" → `my-app`) instead of sequential `proj-N` IDs
+
 ## [0.1.15] - 2026-02-25
 
 ### Removed
