@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-02-26
+
+### Added
+- `docs/LOOM_ARCHITECTURE.md`: comprehensive agent reference injected into every agent's bead context, covering bead lifecycle, deadlock patterns (6 types with escape strategies), agent roles, execution environment, and system invariants
+- Architecture doc + `LESSONS.md` now injected via `buildBeadContext()` in TaskExecutor — agents have full system awareness
+- Internal executor fields (`dispatch_count`, `error_history`, `loop_detected`, etc.) excluded from agent prompts to reduce noise
+
+### Fixed
+- Agent-generated build errors: orphaned code outside function bodies in `handlers_conversation.go`, broken `Execute` closures in `perpetual.go` (illegal import inside function literal), undefined variables `projectID`/`err`/`dr` in `loom.go`, duplicate method declarations in `database` package, unused import in `linter`, missing types in `github/types.go`, duplicate `ListFailedWorkflowRuns` in `github/client.go`
+- Loop-detected beads now properly set to `blocked` (not `open`), stopping infinite TaskExecutor recycling
+
 ## [0.1.17] - 2026-02-26
 
 ### Fixed
