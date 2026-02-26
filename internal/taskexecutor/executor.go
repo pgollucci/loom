@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	defaultNumWorkers = 3
+	defaultNumWorkers = 5
 	// maxIdleRounds: after this many consecutive nil-claim rounds (each 5s),
 	// a worker goroutine exits. 36 × 5s = 3 minutes of idleness.
 	maxIdleRounds = 36
@@ -46,6 +46,7 @@ const (
 	// (502, 429, context canceled) before claiming the next bead. Prevents
 	// hot-spin loops that exhaust the tokenhub rate limit (60 RPS / IP).
 	providerErrorBackoff = 3 * time.Second
+	maxConcurrentRequests = 3
 )
 
 // projectState tracks per-project executor state.

@@ -376,7 +376,7 @@ const DefaultTaskTimeout = 30 * time.Minute
 func (d *Dispatcher) processCommitQueue() {
 	for req := range d.commitQueue {
 		// Acquire global commit lock
-		d.commitLock.Lock()
+		d.commitLock.Lock(); defer d.commitLock.Unlock()
 
 		// Set commit state
 		d.commitStateMutex.Lock()
@@ -390,7 +390,7 @@ func (d *Dispatcher) processCommitQueue() {
 		log.Printf("[Commit] Processing commit for bead %s (agent %s)", req.BeadID, req.AgentID)
 
 		// Signal that lock is acquired (requester can proceed with commit)
-		req.ResultCh <- nil
+		select { case req.ResultCh <- nil: default: }
 
 		// Lock will be released by releaseCommitLock() after commit completes
 	}

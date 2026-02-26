@@ -351,3 +351,50 @@ func (c *Client) ListWorkflowRuns(ctx context.Context, workflow string) ([]Workf
 	}
 	return runs, nil
 }
+
+// ListFailedWorkflowRuns returns workflow runs with failure or action_required status on the default branch.
+func (c *Client) ListFailedWorkflowRuns(ctx context.Context) ([]WorkflowRun, error) {
+	args := []string{"run", "list", "--limit", "20",
+		"--json", "databaseId,displayTitle,status,conclusion,url,createdAt,updatedAt,headBranch"}
+	out, err := c.gh(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	type ghRun struct {
+		DatabaseID   int64  `json:"databaseId"`
+		DisplayTitle string `json:"displayTitle"`
+		Status       string `json:"status"`
+		Conclusion   string `json:"conclusion"`
+		URL          string `json:"url"`
+		HeadBranch   string `json:"headBranch"`
+	}
+	var raw []ghRun
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("parse run list: %w", err)
+	}
+
+	// Get the default branch to filter for runs on the default branch only
+	repoInfo, err := c.GetRepoInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get repo info: %w", err)
+	}
+
+	runs := make([]WorkflowRun, 0)
+	for _, r := range raw {
+		// Only include runs on the default branch
+		if r.HeadBranch != repoInfo.DefaultBranch {
+			continue
+		}
+		// Include runs with failure or action_required status
+		if r.Status == "failure" || r.Status == "action_required" {
+			runs = append(runs, WorkflowRun{
+				ID:         r.DatabaseID,
+				Name:       r.DisplayTitle,
+				Status:     r.Status,
+				Conclusion: r.Conclusion,
+				URL:        r.URL,
+			})
+		}
+	}
+	return runs, nil
+}

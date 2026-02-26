@@ -302,37 +302,41 @@
             </div>
         </section>
 
-        <!-- Conversations Section -->
-        <section id="conversations" class="view-panel" role="tabpanel" aria-label="Conversations" hidden>
-            <h2><span aria-hidden="true">💬</span> Agent Conversations</h2>
-            <p class="small" style="margin-bottom: 1rem;">Interactive action-flow graph. Click a node to see details. Zoom and pan to explore.</p>
-            <div class="toolbar" role="region" aria-label="Conversation controls">
-                <div class="toolbar-row">
-                    <div class="field">
-                        <label for="conv-project-select">Project</label>
-                        <select id="conv-project-select"></select>
-                    </div>
-                    <div class="field">
-                        <label for="conv-select">Conversation</label>
-                        <select id="conv-select"></select>
-                    </div>
-                    <button type="button" class="secondary" id="conv-reset-view" title="Reset graph view">Reset View</button>
-                </div>
+<!-- Conversations Section -->
+<section id="conversations" class="view-panel" role="tabpanel" aria-label="Conversations" hidden>
+    <h2><span aria-hidden="true">💬</span> Agent Conversations</h2>
+    <p class="small" style="margin-bottom: 1rem;">Interactive action-flow graph. Click a node to see details. Zoom and pan to explore.</p>
+    <div class="toolbar" role="region" aria-label="Conversation controls">
+        <div class="toolbar-row">
+            <div class="field">
+                <label for="conv-project-select">Project</label>
+                <select id="conv-project-select"></select>
             </div>
-            <div id="conversations-container" class="conv-graph-layout">
-                <div id="conv-graph" class="conv-graph-canvas"></div>
-                <div id="conv-detail" class="conv-detail-panel">
-                    <div class="empty-state"><p>Select a node in the graph</p></div>
-                </div>
+            <div class="field">
+                <label for="conv-select">Conversation</label>
+                <select id="conv-select"></select>
             </div>
-            <div id="conv-legend" class="conv-legend">
-                <span><span class="conv-legend-dot" style="background:#16a34a;"></span> Success</span>
-                <span><span class="conv-legend-dot" style="background:#dc2626;"></span> Error</span>
-                <span><span class="conv-legend-dot" style="background:#d97706;"></span> Text / Parse fail</span>
-                <span><span class="conv-legend-dot" style="background:#2563eb;"></span> System</span>
-                <span><span class="conv-legend-dot" style="background:#7c3aed;"></span> Done / Commit</span>
-            </div>
-        </section>
+            <button type="button" class="secondary" id="conv-reset-view" title="Reset graph view">Reset View</button>
+        </div>
+    </div>
+    <div id="conversations-container" class="conv-graph-layout">
+        <div id="conv-graph" class="conv-graph-canvas"></div>
+        <div id="conv-detail" class="conv-detail-panel">
+            <div class="empty-state"><p>Select a node in the graph</p></div>
+        </div>
+        <div id="live-pane" class="conv-live-pane">
+            <h3>Live Updates</h3>
+            <div id="live-updates"></div>
+        </div>
+    </div>
+    <div id="conv-legend" class="conv-legend">
+        <span><span class="conv-legend-dot" style="background:#16a34a;"></span> Success</span>
+        <span><span class="conv-legend-dot" style="background:#dc2626;"></span> Error</span>
+        <span><span class="conv-legend-dot" style="background:#d97706;"></span> Text / Parse fail</span>
+        <span><span class="conv-legend-dot" style="background:#2563eb;"></span> System</span>
+        <span><span class="conv-legend-dot" style="background:#7c3aed;"></span> Done / Commit</span>
+    </div>
+</section>
 
         <!-- Personas Section -->
         <section id="personas" class="view-panel" role="tabpanel" aria-label="Personas" hidden>

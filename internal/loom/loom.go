@@ -821,20 +821,22 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		// Run asynchronously so a slow Docker build/pull does not block startup.
 		if p.UseContainer {
 			projCopy := *p
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						fmt.Fprintf(os.Stderr, "[Loom] PANIC in EnsureProjectContainer for %s: %v\n", projCopy.ID, r)
-					}
-				}()
-				fmt.Fprintf(os.Stderr, "[Loom] Spawning isolated container for project %s (async)\n", projCopy.ID)
-				bgCtx := context.Background()
-				if err := a.containerOrchestrator.EnsureProjectContainer(bgCtx, &projCopy); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: Failed to start container for project %s: %v\n", projCopy.ID, err)
-				} else {
-					fmt.Fprintf(os.Stderr, "[Loom] Project %s container started successfully\n", projCopy.ID)
+go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(os.Stderr, "[Loom] PANIC in EnsureProjectContainer for %s: %v\n", projCopy.ID, r)
 				}
 			}()
+			fmt.Fprintf(os.Stderr, "[Loom] Spawning isolated container for project %s (async)\n", projCopy.ID)
+			bgCtx := context.Background()
+			if err := a.containerOrchestrator.EnsureProjectContainer(bgCtx, &projCopy); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to start container for project %s: %v\n", projCopy.ID, err)
+			} else {
+				fmt.Fprintf(os.Stderr, "[Loom] Project %s container started successfully\n", projCopy.ID)
+			}
+			// Add a mechanism to signal completion or error
+			// For example, using a channel to notify when done
+		}()
 		}
 
 		// Start git-based federation (replaces Dolt)
@@ -1045,6 +1047,8 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				}
 			}
 		}
+		// Add a mechanism to signal completion or error
+		// For example, using a channel to notify when done
 	}()
 
 	// Kick-start work on all open beads across registered projects.

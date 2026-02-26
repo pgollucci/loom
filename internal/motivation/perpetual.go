@@ -126,6 +126,23 @@ func PerpetualTaskMotivations() []*Motivation {
 			IsBuiltIn: true,
 		},
 		{
+			Name:                "CI/CD Pipeline Monitoring",
+			Description:         "PR Manager checks CI/CD pipeline status and files devops beads on failure",
+			Type:                MotivationTypeCalendar,
+			Condition:           ConditionScheduledInterval,
+			AgentRole:           "public-relations-manager",
+			WakeAgent:           true,
+			CreateBeadOnTrigger: true,
+			BeadTemplate:        "cicd-pipeline-monitoring",
+			Priority:            65,
+			CooldownPeriod:      1 * time.Hour,
+			Parameters: map[string]interface{}{
+				"interval":  "1h",
+				"task_type": "perpetual",
+			},
+			IsBuiltIn: true,
+		},
+		{
 			Name:                "Daily Community Engagement Report",
 			Description:         "PR Manager reviews and reports on community engagement metrics daily",
 			Type:                MotivationTypeCalendar,

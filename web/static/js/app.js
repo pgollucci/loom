@@ -2260,6 +2260,8 @@ async function sendReplQuery() {
 // Assign agent to project from CEO REPL
 async function assignAgentFromCeoRepl() {
     const agentSelect = document.getElementById('ceo-repl-agent-select');
+const projectSelect = document.getElementById('ceo-repl-project-select');
+const projectSelect = document.getElementById('ceo-repl-project-select');
     const projectSelect = document.getElementById('ceo-repl-project-select');
     
     const agentId = agentSelect ? agentSelect.value : '';
@@ -2321,6 +2323,7 @@ async function sendCeoReplQuery() {
 
     // Check if an agent is selected from the dropdown
     const selectedAgentId = agentSelect ? agentSelect.value : '';
+const selectedProjectId = projectSelect ? projectSelect.value : '';
     if (selectedAgentId) {
         // Find the selected agent and dispatch to them
         const selectedAgent = (state.agents || []).find(a => a.id === selectedAgentId);
@@ -2343,7 +2346,7 @@ async function sendCeoReplQuery() {
 
 // Dispatch a task to a specific agent selected from the dropdown
 async function ceoReplDispatchToAgentById(agent, taskMessage, responseEl, sendBtn) {
-    const projectId = agent.project_id || uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
+    const projectId = selectedProjectId || agent.project_id || uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
     if (!projectId) {
         responseEl.innerHTML = '<span style="color:var(--danger-color)">No project selected. Select a project first.</span>';
         return;
@@ -2616,7 +2619,30 @@ function renderCeoDashboard() {
     const agents = state.agents || [];
     const decisions = state.decisions || [];
 
-    // Populate the CEO REPL agent dropdown with ALL agents grouped by project
+    // Populate the CEO REPL project dropdown for agent assignment
+if (projectSelect) {
+    const currentValue = projectSelect.value;
+    
+    // Clear existing options except the first one
+    while (projectSelect.options.length > 1) {
+        projectSelect.remove(1);
+    }
+    
+    // Add all projects
+    for (const project of (state.projects || [])) {
+        const option = document.createElement('option');
+        option.value = project.id;
+        option.textContent = project.name || project.id;
+        projectSelect.appendChild(option);
+    }
+    
+    // Restore previous selection if still valid
+    if (currentValue && Array.from(projectSelect.options).some(o => o.value === currentValue)) {
+        projectSelect.value = currentValue;
+    }
+}
+
+// Populate the CEO REPL agent dropdown with ALL agents grouped by project
     const agentSelect = document.getElementById('ceo-repl-agent-select');
     if (agentSelect) {
         const currentValue = agentSelect.value;
