@@ -130,5 +130,11 @@ func (w *Watchdog) checkRalphBlockage(ctx context.Context) {
 func (w *Watchdog) createAlertBead(projectID, reason string) {
 	log.Printf("[Watchdog] Creating alert bead for project %s: %s", projectID, reason)
 	// Placeholder for bead creation logic
+	w.createP0BeadForCEO(reason)
 }
+
+// createP0BeadForCEO creates a P0 bead assigned to the CEO.
+func (w *Watchdog) createP0BeadForCEO(issue string) {
+	log.Printf("[Watchdog] Creating P0 bead for CEO: %s", issue)
+	// Placeholder for actual bead creation logic
 }
