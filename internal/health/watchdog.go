@@ -46,16 +46,61 @@ func (w *Watchdog) checkHealth(ctx context.Context) {
 	log.Println("[Watchdog] Performing health check")
 
 	// Check for projects with 0 in_progress beads and N+ open beads for >30 minutes
-	// Check context-canceled error rate
-	// Check for zombie beads
-	// Check if Ralph is blocking >50% of a project's beads
+	w.checkStuckProjects(ctx)
 
-	// Implement health checks
-	projects, err := w.beadsMgr.ListProjects()
-	if err != nil {
-		log.Printf("[Watchdog] Error listing projects: %v", err)
+	// Check context-canceled error rate
+	w.checkContextCanceledRate(ctx)
+
+	// Check for zombie beads
+	w.checkZombieBeads(ctx)
+
+	// Check if Ralph is blocking >50% of a project's beads
+	w.checkRalphBlockage(ctx)
+}
+
+// checkStuckProjects checks for projects with 0 in_progress beads and N+ open beads for >30 minutes.
+func (w *Watchdog) checkStuckProjects(ctx context.Context) {
+	if w.beadsMgr == nil {
 		return
 	}
+
+	// Get all projects and check their bead status
+	// This is a placeholder for the actual implementation
+	log.Println("[Watchdog] Checking for stuck projects")
+}
+
+// checkContextCanceledRate checks if the context-canceled error rate is above a threshold.
+func (w *Watchdog) checkContextCanceledRate(ctx context.Context) {
+	if w.beadsMgr == nil {
+		return
+	}
+
+	// Check error history for context-canceled errors
+	// This is a placeholder for the actual implementation
+	log.Println("[Watchdog] Checking context-canceled error rate")
+}
+
+// checkZombieBeads checks for beads that are in_progress but stale (>30 minutes).
+func (w *Watchdog) checkZombieBeads(ctx context.Context) {
+	if w.beadsMgr == nil {
+		return
+	}
+
+	// Get all in_progress beads and check their age
+	// This is a placeholder for the actual implementation
+	log.Println("[Watchdog] Checking for zombie beads")
+}
+
+// checkRalphBlockage checks if Ralph is blocking >50% of a project's beads.
+func (w *Watchdog) checkRalphBlockage(ctx context.Context) {
+	if w.beadsMgr == nil {
+		return
+	}
+
+	// Get all blocked beads and check if >50% are blocked by Ralph
+	// This is a placeholder for the actual implementation
+	log.Println("[Watchdog] Checking Ralph blockage")
+}
 
 	for _, project := range projects {
 		openBeads, err := w.beadsMgr.ListBeads(map[string]interface{}{"status": "open", "project_id": project.ID})

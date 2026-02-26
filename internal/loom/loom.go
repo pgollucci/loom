@@ -130,7 +130,7 @@ func New(cfg *config.Config) (*Loom, error) {
 		}
 		mb, err := messagebus.NewNatsMessageBus(mbCfg)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize NATS message bus: %w", err)
+			log.Printf("Warning: failed to initialize NATS message bus: %v", err)
 			// Don't fail startup if NATS is unavailable - allow graceful degradation
 		} else {
 			messageBus = mb
@@ -158,7 +158,7 @@ func New(cfg *config.Config) (*Loom, error) {
 		var err error
 		db, err = database.NewPostgres(cfg.Database.DSN)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize postgres: %w", err)
+			log.Printf("Warning: failed to initialize postgres: %v (running without persistence)", err)
 		}
 		log.Printf("Initialized postgres database from config DSN")
 	} else if cfg.Database.Type != "" {
@@ -3818,7 +3818,7 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 			// Phase 2: Dispatch work to idle agents
 			dispatched := 0
 			for i := 0; i < 50; i++ {
-				dr, err := a.dispatcher.DispatchOnce(ctx, "")
+				a.taskExecutor.Start(ctx, projectID)
 				if err != nil || dr == nil || !dr.Dispatched {
 					debugWrite("/tmp/dispatch-loop-result.txt", []byte(fmt.Sprintf("dispatched=%d err=%v dr=%v\n", dispatched, err, dr != nil && dr.Dispatched)))
 					break
@@ -3990,7 +3990,7 @@ func (a *Loom) ResumeAgentsWaitingForProvider(ctx context.Context, providerID st
 
 	// Trigger dispatch to pick up any waiting beads
 	if a.dispatcher != nil {
-		_, _ = a.dispatcher.DispatchOnce(ctx, "")
+	a.taskExecutor.Start(ctx, projectID)
 	}
 
 	return nil
