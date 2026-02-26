@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-02-26
+
+### Fixed
+- Loop-detected beads now set to `blocked` instead of `open`, stopping infinite executor recycling
+- Agent-generated build errors: duplicate `motivation_state_provider.go`, wrong module path `loom-project/loom`, broken `motivation.NewEngine` call with wrong signature, invalid `conn.Drain()` argument in NATS
+- `motivation_provider.go`: rewritten with correct API calls (`ListBeads`, `GetPendingDecisions`, direct agent manager iteration for idle agents)
+
 ## [0.1.16] - 2026-02-25
 
 ### Added
