@@ -308,8 +308,11 @@ services:
       - CONFIG_PATH=/app/config/connectors.yaml
       - HEALTH_INTERVAL=30s
       - OTEL_ENDPOINT=otel-collector:4317
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     ports:
       - "50051:50051"  # gRPC
+      - "8082:8080"    # GitHub webhook receiver
     networks:
       - loom-network
     volumes:
@@ -322,6 +325,41 @@ services:
       retries: 3
     labels:
       linkerd.io/inject: enabled
+
+  # Agent Service: Public Relations Manager -- monitors GitHub issues and PRs
+  loom-agent-pr-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: loom:latest
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+      loom:
+        condition: service_healthy
+    environment:
+      - PROJECT_ID=${PROJECT_ID:-loom}
+      - CONTROL_PLANE_URL=http://loom:8081
+      - NATS_URL=nats://nats:4222
+      - AGENT_ROLE=public-relations-manager
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - ACTION_LOOP_ENABLED=true
+      - MAX_LOOP_ITERATIONS=20
+      - WORK_DIR=/workspace
+      - OTEL_ENDPOINT=otel-collector:4317
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    networks:
+      - loom-network
+    volumes:
+      - agent-pr-manager-workspace:/workspace
+    entrypoint: ["/app/loom-project-agent"]
+    labels:
+      linkerd.io/inject: enabled
+    deploy:
+      replicas: ${PR_MANAGER_REPLICAS:-1}
 
   loom-test:
     build:

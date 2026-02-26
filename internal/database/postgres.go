@@ -31,9 +31,14 @@ func NewPostgres(dsn string) (*Database, error) {
 		return nil, fmt.Errorf("failed to open postgres: %w", err)
 	}
 
+	defer func() {
+		if err != nil {
+			db.Close()
+		}
+	}()
+
 	// Test connection
 	if err := db.Ping(); err != nil {
-		db.Close()
 		return nil, fmt.Errorf("failed to ping postgres: %w", err)
 	}
 

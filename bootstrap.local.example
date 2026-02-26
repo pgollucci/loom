@@ -52,10 +52,29 @@ TOKENHUBCTL="tokenhubctl"
 # $TOKENHUBCTL model add '{"id":"claude-opus-4","provider_id":"anthropic","weight":10,"max_context_tokens":200000,"input_per_1k":0.015,"output_per_1k":0.075,"enabled":true}'
 
 # Create a TokenHub API key (only if using TokenHub):
-# KEY_OUTPUT=$($TOKENHUBCTL apikey create '{"name":"loom-agents","scopes":"[\"chat\",\"plan\"]","monthly_budget_usd":50.0}')
+# KEY_OUTPUT=$($TOKENHUBCTL apikey create '{"name":"loom-agents","scopes":"["chat","plan"]","monthly_budget_usd":50.0}')
 # LOOM_PROVIDER_API_KEY=$(echo "$KEY_OUTPUT" | grep "Key:" | sed 's/.*Key: //')
 
 # === Phase 3: Register the provider with Loom ===
+
+# Pre-flight checks
+# Check TokenHub connectivity
+if ! curl -s --head "$TOKENHUB_URL/health" | grep "200 OK" > /dev/null; then
+  echo "Error: TokenHub is not reachable at $TOKENHUB_URL"
+  exit 1
+fi
+
+# Validate API key
+if ! $TOKENHUBCTL status; then
+  echo "Error: Invalid API key or TokenHub is not responding"
+  exit 1
+fi
+
+# Check if at least one model is available
+if ! $TOKENHUBCTL model list | grep -q '"enabled":true'; then
+  echo "Error: No models available in TokenHub"
+  exit 1
+fi
 
 # curl -s -X POST "$LOOM_URL/api/v1/providers" \
 #     -H "Content-Type: application/json" \

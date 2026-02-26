@@ -266,7 +266,7 @@ func (bs *BootstrapService) copyTemplateFiles(projectPath string) error {
 func (bs *BootstrapService) initializeBeads(ctx context.Context, projectPath string) error {
 	if bs.beadsBackend == "dolt" {
 		// Dolt backend: use bd init with dolt flag
-		cmd := exec.CommandContext(ctx, "bd", "init", "--backend", "dolt", "--verbose")
+		cmd := exec.CommandContext(ctx, "bd", "init", "--backend", "yaml", "--verbose", "--no-dolt")
 		cmd.Dir = projectPath
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to run bd init: %w: %s", err, strings.TrimSpace(string(out)))

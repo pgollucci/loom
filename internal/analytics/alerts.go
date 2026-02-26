@@ -172,7 +172,7 @@ func (ac *AlertChecker) checkMonthlyBudget(ctx context.Context) *Alert {
 		return nil
 	}
 
-	if stats.TotalCostUSD > ac.config.MonthlyBudgetUSD*0.9 {
+	if stats.TotalCostUSD > ac.config.MonthlyBudgetUSD {
 		return &Alert{
 			ID:          fmt.Sprintf("alert-monthly-%d", time.Now().Unix()),
 			UserID:      ac.config.UserID,
