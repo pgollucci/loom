@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-02-26
+
+### Added
+- add CI/CD monitor (CIMon) that auto-files P0 beads for GitHub Actions failures
+
+### Fixed
+- silence spurious docker compose env var warnings
+- resolve CI lint failures and openclaw data race
+- repair pre-existing test and vet failures across the tree
+- clear conversation history on redispatch and handle parse_failures properly
+
 ## [0.1.19] - 2026-02-26
 
 ### Fixed
