@@ -41,11 +41,12 @@ type CreatePRRequest struct {
 
 // WorkflowRun represents a GitHub Actions workflow run.
 type WorkflowRun struct {
-	ID         int64
-	Name       string
-	Status     string
-	Conclusion string
-	URL        string
+	ID           int64
+	Name         string // displayTitle (commit/PR title that triggered the run)
+	WorkflowName string // workflow definition name, e.g. "CI" or "Build and Test"
+	Status       string
+	Conclusion   string
+	URL          string
 }
 
 // RepoInfo represents basic information about a GitHub repository.

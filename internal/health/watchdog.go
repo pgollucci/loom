@@ -12,16 +12,16 @@ import (
 
 // Watchdog periodically checks the system health and creates alerts if needed.
 type Watchdog struct {
-	beadsMgr   *beads.Manager
-	metricsMgr *metrics.Metrics
+	beadsMgr    *beads.Manager
+	metricsMgr  *metrics.Metrics
 	providerReg *provider.Registry
 }
 
 // NewWatchdog creates a new Watchdog instance.
 func NewWatchdog(beadsMgr *beads.Manager, metricsMgr *metrics.Metrics, providerReg *provider.Registry) *Watchdog {
 	return &Watchdog{
-		beadsMgr:   beadsMgr,
-		metricsMgr: metricsMgr,
+		beadsMgr:    beadsMgr,
+		metricsMgr:  metricsMgr,
 		providerReg: providerReg,
 	}
 }

@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jordanhubbard/loom/internal/dispatch"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/messagebus"
 	"github.com/jordanhubbard/loom/internal/orchestrator"
 	"github.com/jordanhubbard/loom/internal/swarm"
-	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/pkg/messages"
 )
 

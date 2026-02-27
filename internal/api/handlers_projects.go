@@ -361,7 +361,7 @@ func (s *Server) handleBootstrapProject(w http.ResponseWriter, r *http.Request) 
 	result, err := bootstrapService.Bootstrap(r.Context(), req)
 	if err != nil {
 		log.Printf("[Bootstrap] Error: %v", err)
-s.respondError(w, http.StatusInternalServerError, "Internal server error")
+		s.respondError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 

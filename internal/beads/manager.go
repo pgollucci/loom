@@ -34,9 +34,9 @@ type Manager struct {
 	projectBeadsPaths map[string]string // Project ID -> beads worktree path (avoids last-writer-wins)
 
 	// Git-centric storage fields (per-project)
-	gitConfigs  map[string]*GitConfig   // Project ID -> git configuration
-	gitMu       sync.Mutex              // Protects gitLocks map
-	gitLocks    map[string]*sync.Mutex  // Per-project mutex to serialize git operations
+	gitConfigs map[string]*GitConfig  // Project ID -> git configuration
+	gitMu      sync.Mutex             // Protects gitLocks map
+	gitLocks   map[string]*sync.Mutex // Per-project mutex to serialize git operations
 }
 
 // GitConfig stores git storage configuration for a project

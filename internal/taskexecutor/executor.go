@@ -45,7 +45,7 @@ const (
 	// providerErrorBackoff: how long a worker pauses after a provider error
 	// (502, 429, context canceled) before claiming the next bead. Prevents
 	// hot-spin loops that exhaust the tokenhub rate limit (60 RPS / IP).
-	providerErrorBackoff = 3 * time.Second
+	providerErrorBackoff  = 3 * time.Second
 	maxConcurrentRequests = 3
 )
 

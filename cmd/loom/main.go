@@ -19,6 +19,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/audit"
 	"github.com/jordanhubbard/loom/internal/auth"
 	"github.com/jordanhubbard/loom/internal/automerge"
+	"github.com/jordanhubbard/loom/internal/cimon"
 	internalconnectors "github.com/jordanhubbard/loom/internal/connectors"
 	"github.com/jordanhubbard/loom/internal/hotreload"
 	"github.com/jordanhubbard/loom/internal/keymanager"
@@ -147,6 +148,19 @@ func main() {
 	if autoMergeInterval > 0 {
 		autoMergeRunner := automerge.NewRunner(arb)
 		go autoMergeRunner.Start(runCtx, time.Duration(autoMergeInterval)*time.Minute)
+	}
+
+	// CI/CD monitor: check GitHub Actions for failures every 30 minutes by default.
+	// Set CI_MON_INTERVAL_MINUTES=0 to disable.
+	ciMonInterval := 30
+	if interval := os.Getenv("CI_MON_INTERVAL_MINUTES"); interval != "" {
+		if n, err := fmt.Sscanf(interval, "%d", &ciMonInterval); err == nil && n == 1 {
+			log.Printf("CI monitor interval set to %d minutes", ciMonInterval)
+		}
+	}
+	if ciMonInterval > 0 {
+		ciMonRunner := cimon.NewRunner(arb, arb, time.Duration(ciMonInterval)*time.Minute)
+		go ciMonRunner.Start(runCtx)
 	}
 
 	// Initialize auth manager (JWT + API key support)

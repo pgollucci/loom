@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 
-	loompkg "github.com/jordanhubbard/loom/internal/loom"
 	"github.com/jordanhubbard/loom/internal/eventbus"
+	loompkg "github.com/jordanhubbard/loom/internal/loom"
 )
 
 // handleConfig handles GET/PUT /api/v1/config (JSON).

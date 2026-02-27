@@ -16,13 +16,13 @@ import (
 	"github.com/jordanhubbard/loom/internal/beads"
 	"github.com/jordanhubbard/loom/internal/containers"
 	"github.com/jordanhubbard/loom/internal/database"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/gitops"
 	"github.com/jordanhubbard/loom/internal/memory"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/telemetry"
-	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/worker"
 	"github.com/jordanhubbard/loom/internal/workflow"
 	"github.com/jordanhubbard/loom/pkg/messages"
@@ -376,7 +376,8 @@ const DefaultTaskTimeout = 30 * time.Minute
 func (d *Dispatcher) processCommitQueue() {
 	for req := range d.commitQueue {
 		// Acquire global commit lock
-		d.commitLock.Lock(); defer d.commitLock.Unlock()
+		d.commitLock.Lock()
+		defer d.commitLock.Unlock()
 
 		// Set commit state
 		d.commitStateMutex.Lock()
@@ -390,7 +391,10 @@ func (d *Dispatcher) processCommitQueue() {
 		log.Printf("[Commit] Processing commit for bead %s (agent %s)", req.BeadID, req.AgentID)
 
 		// Signal that lock is acquired (requester can proceed with commit)
-		select { case req.ResultCh <- nil: default: }
+		select {
+		case req.ResultCh <- nil:
+		default:
+		}
 
 		// Lock will be released by releaseCommitLock() after commit completes
 	}

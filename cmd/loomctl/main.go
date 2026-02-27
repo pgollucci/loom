@@ -319,7 +319,7 @@ func newBeadCommand() *cobra.Command {
 	cmd.AddCommand(newBeadClaimCommand())
 	cmd.AddCommand(newBeadPokeCommand())
 	cmd.AddCommand(newBeadUpdateCommand())
-cmd.AddCommand(newBeadBulkUpdateCommand())
+	cmd.AddCommand(newBeadBulkUpdateCommand())
 	cmd.AddCommand(newBeadDeleteCommand())
 	cmd.AddCommand(newBeadErrorsCommand())
 	cmd.AddCommand(newBeadUnblockCommand())

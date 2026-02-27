@@ -105,7 +105,7 @@ func PerpetualTaskMotivations() []*Motivation {
 		},
 
 		// ============================================
-// PR Manager Perpetual Tasks
+		// PR Manager Perpetual Tasks
 		// ============================================
 		{
 			Name:                "CI/CD Pipeline Monitoring",

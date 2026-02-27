@@ -12,8 +12,8 @@ import (
 // HealthReportGenerator generates daily health reports
 // covering various metrics and anomalies.
 type HealthReportGenerator struct {
-	db       *database.Database
-	logMgr   *logging.Manager
+	db     *database.Database
+	logMgr *logging.Manager
 }
 
 // NewHealthReportGenerator creates a new HealthReportGenerator
@@ -86,7 +86,6 @@ func (h *HealthReportGenerator) GenerateDailyReport(ctx context.Context) (string
 	// Placeholder for actual implementation
 	// anomalies := detectAnomalies()
 	// report += fmt.Sprintf("Anomalies: %v\n", anomalies)
-
 
 	return report, nil
 }

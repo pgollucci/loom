@@ -27,7 +27,9 @@ func newContainerListCommand() *cobra.Command {
 			fmt.Println("Listing containers...")
 			client := newClient()
 			params := url.Values{}
-			if len(args) > 0 { params.Set("project", args[0]) }
+			if len(args) > 0 {
+				params.Set("project", args[0])
+			}
 			resp, err := client.get("/containers", params)
 			if err != nil {
 				return fmt.Errorf("failed to list containers: %w", err)

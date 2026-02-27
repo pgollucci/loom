@@ -409,20 +409,20 @@ func isTemporaryError(err error) bool {
 func (w *Worker) callWithContextRetry(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, []provider.ChatMessage, error) {
 	// Attempt 1: use messages as-is
 	var resp *provider.ChatCompletionResponse
-var err error
-for retries := 0; retries < 3; retries++ {
-	resp, err = w.provider.Protocol.CreateChatCompletion(ctx, req)
-	if err == nil {
-		break
+	var err error
+	for retries := 0; retries < 3; retries++ {
+		resp, err = w.provider.Protocol.CreateChatCompletion(ctx, req)
+		if err == nil {
+			break
+		}
+		if isTemporaryError(err) {
+			backoffDuration := time.Duration(1<<retries) * time.Second
+			log.Printf("Temporary error encountered, retrying in %v...", backoffDuration)
+			time.Sleep(backoffDuration)
+		} else {
+			break
+		}
 	}
-	if isTemporaryError(err) {
-		backoffDuration := time.Duration(1<<retries) * time.Second
-		log.Printf("Temporary error encountered, retrying in %v...", backoffDuration)
-		time.Sleep(backoffDuration)
-	} else {
-		break
-	}
-}
 	if err == nil {
 		return resp, req.Messages, nil
 	}

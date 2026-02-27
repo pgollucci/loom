@@ -320,7 +320,7 @@ func (c *Client) MergePR(ctx context.Context, number int, method string) error {
 // Pass an empty workflow to list all runs.
 func (c *Client) ListWorkflowRuns(ctx context.Context, workflow string) ([]WorkflowRun, error) {
 	args := []string{"run", "list", "--limit", "10",
-		"--json", "databaseId,displayTitle,status,conclusion,url,createdAt,updatedAt"}
+		"--json", "databaseId,displayTitle,workflowName,status,conclusion,url,createdAt,updatedAt"}
 	if workflow != "" {
 		args = append(args, "--workflow", workflow)
 	}
@@ -331,6 +331,7 @@ func (c *Client) ListWorkflowRuns(ctx context.Context, workflow string) ([]Workf
 	type ghRun struct {
 		DatabaseID   int64  `json:"databaseId"`
 		DisplayTitle string `json:"displayTitle"`
+		WorkflowName string `json:"workflowName"`
 		Status       string `json:"status"`
 		Conclusion   string `json:"conclusion"`
 		URL          string `json:"url"`
@@ -342,11 +343,12 @@ func (c *Client) ListWorkflowRuns(ctx context.Context, workflow string) ([]Workf
 	runs := make([]WorkflowRun, 0, len(raw))
 	for _, r := range raw {
 		runs = append(runs, WorkflowRun{
-			ID:         r.DatabaseID,
-			Name:       r.DisplayTitle,
-			Status:     r.Status,
-			Conclusion: r.Conclusion,
-			URL:        r.URL,
+			ID:           r.DatabaseID,
+			Name:         r.DisplayTitle,
+			WorkflowName: r.WorkflowName,
+			Status:       r.Status,
+			Conclusion:   r.Conclusion,
+			URL:          r.URL,
 		})
 	}
 	return runs, nil
@@ -355,7 +357,7 @@ func (c *Client) ListWorkflowRuns(ctx context.Context, workflow string) ([]Workf
 // ListFailedWorkflowRuns returns the last N failed runs for a workflow file (e.g. "ci.yml").
 func (c *Client) ListFailedWorkflowRuns(ctx context.Context, workflow string) ([]WorkflowRun, error) {
 	args := []string{"run", "list", "--limit", "10",
-		"--json", "databaseId,displayTitle,status,conclusion,url,createdAt,updatedAt",
+		"--json", "databaseId,displayTitle,workflowName,status,conclusion,url,createdAt,updatedAt",
 		"--status", "failure"}
 	if workflow != "" {
 		args = append(args, "--workflow", workflow)
@@ -367,6 +369,7 @@ func (c *Client) ListFailedWorkflowRuns(ctx context.Context, workflow string) ([
 	type ghRun struct {
 		DatabaseID   int64  `json:"databaseId"`
 		DisplayTitle string `json:"displayTitle"`
+		WorkflowName string `json:"workflowName"`
 		Status       string `json:"status"`
 		Conclusion   string `json:"conclusion"`
 		URL          string `json:"url"`
@@ -378,13 +381,13 @@ func (c *Client) ListFailedWorkflowRuns(ctx context.Context, workflow string) ([
 	runs := make([]WorkflowRun, 0, len(raw))
 	for _, r := range raw {
 		runs = append(runs, WorkflowRun{
-			ID:         r.DatabaseID,
-			Name:       r.DisplayTitle,
-			Status:     r.Status,
-			Conclusion: r.Conclusion,
-			URL:        r.URL,
+			ID:           r.DatabaseID,
+			Name:         r.DisplayTitle,
+			WorkflowName: r.WorkflowName,
+			Status:       r.Status,
+			Conclusion:   r.Conclusion,
+			URL:          r.URL,
 		})
 	}
 	return runs, nil
 }
-

@@ -216,6 +216,7 @@ type ProjectConfig struct {
 	ID              string            `yaml:"id"`
 	Name            string            `yaml:"name"`
 	GitRepo         string            `yaml:"git_repo"`      // No more "." - always a git URL
+	GitHubRepo      string            `yaml:"github_repo"`   // "owner/repo" for GitHub API (CI monitor, PR ops)
 	Branch          string            `yaml:"branch"`        // Main branch (default: "main")
 	BeadsPath       string            `yaml:"beads_path"`    // Path within beads worktree
 	BeadsBranch     string            `yaml:"beads_branch"`  // Branch for beads (default: "beads-sync")

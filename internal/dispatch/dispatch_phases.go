@@ -827,7 +827,9 @@ func (d *Dispatcher) applyLoopMetadata(ctxUpdates map[string]string, candidate *
 		ctxUpdates["remediation_requested_at"] = time.Now().UTC().Format(time.RFC3339)
 		log.Printf("[Dispatcher] Agent stuck on bead %s (reason: %s), remediation needed",
 			candidate.ID, result.LoopTerminalReason)
-		if !isProviderError(result.Error) { go d.createRemediationBead(candidate, ag, result) }
+		if !isProviderError(result.Error) {
+			go d.createRemediationBead(candidate, ag, result)
+		}
 	}
 }
 

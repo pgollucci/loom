@@ -24,6 +24,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/decision"
 	"github.com/jordanhubbard/loom/internal/dispatch"
+	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/executor"
 	"github.com/jordanhubbard/loom/internal/files"
 	"github.com/jordanhubbard/loom/internal/gitops"
@@ -44,7 +45,6 @@ import (
 	"github.com/jordanhubbard/loom/internal/persona"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
-	"github.com/jordanhubbard/loom/internal/eventbus"
 	"github.com/jordanhubbard/loom/internal/ralph"
 	"github.com/jordanhubbard/loom/internal/swarm"
 	"github.com/jordanhubbard/loom/internal/taskexecutor"
@@ -234,7 +234,7 @@ func New(cfg *config.Config) (*Loom, error) {
 		agentMgr.SetAgentPersister(db)
 		// Enable conversation context support for multi-turn conversations
 		// Deprecated: WorkerPool is deprecated in favor of taskexecutor workers.
-	// agentMgr.GetWorkerPool().SetDatabase(db)
+		// agentMgr.GetWorkerPool().SetDatabase(db)
 	}
 
 	// Initialize shell executor if database is available
@@ -520,6 +520,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 					ID:              p.ID,
 					Name:            p.Name,
 					GitRepo:         p.GitRepo,
+					GitHubRepo:      p.GitHubRepo,
 					Branch:          p.Branch,
 					BeadsPath:       p.BeadsPath,
 					GitAuthMethod:   models.GitAuthMethod(p.GitAuthMethod),
@@ -542,6 +543,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 					ID:              p.ID,
 					Name:            p.Name,
 					GitRepo:         p.GitRepo,
+					GitHubRepo:      p.GitHubRepo,
 					Branch:          p.Branch,
 					BeadsPath:       p.BeadsPath,
 					GitAuthMethod:   models.GitAuthMethod(p.GitAuthMethod),
@@ -564,6 +566,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				ID:              p.ID,
 				Name:            p.Name,
 				GitRepo:         p.GitRepo,
+				GitHubRepo:      p.GitHubRepo,
 				Branch:          p.Branch,
 				BeadsPath:       p.BeadsPath,
 				GitAuthMethod:   models.GitAuthMethod(p.GitAuthMethod),
@@ -596,6 +599,7 @@ func (a *Loom) Initialize(ctx context.Context) error {
 				ID:              p.ID,
 				Name:            p.Name,
 				GitRepo:         p.GitRepo,
+				GitHubRepo:      p.GitHubRepo,
 				Branch:          p.Branch,
 				BeadsPath:       normalizeBeadsPath(p.BeadsPath),
 				GitAuthMethod:   normalizeGitAuthMethod(p.GitRepo, models.GitAuthMethod(p.GitAuthMethod)),
@@ -822,22 +826,22 @@ func (a *Loom) Initialize(ctx context.Context) error {
 		// Run asynchronously so a slow Docker build/pull does not block startup.
 		if p.UseContainer {
 			projCopy := *p
-go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					fmt.Fprintf(os.Stderr, "[Loom] PANIC in EnsureProjectContainer for %s: %v\n", projCopy.ID, r)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Fprintf(os.Stderr, "[Loom] PANIC in EnsureProjectContainer for %s: %v\n", projCopy.ID, r)
+					}
+				}()
+				fmt.Fprintf(os.Stderr, "[Loom] Spawning isolated container for project %s (async)\n", projCopy.ID)
+				bgCtx := context.Background()
+				if err := a.containerOrchestrator.EnsureProjectContainer(bgCtx, &projCopy); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: Failed to start container for project %s: %v\n", projCopy.ID, err)
+				} else {
+					fmt.Fprintf(os.Stderr, "[Loom] Project %s container started successfully\n", projCopy.ID)
 				}
+				// Add a mechanism to signal completion or error
+				// For example, using a channel to notify when done
 			}()
-			fmt.Fprintf(os.Stderr, "[Loom] Spawning isolated container for project %s (async)\n", projCopy.ID)
-			bgCtx := context.Background()
-			if err := a.containerOrchestrator.EnsureProjectContainer(bgCtx, &projCopy); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to start container for project %s: %v\n", projCopy.ID, err)
-			} else {
-				fmt.Fprintf(os.Stderr, "[Loom] Project %s container started successfully\n", projCopy.ID)
-			}
-			// Add a mechanism to signal completion or error
-			// For example, using a channel to notify when done
-		}()
 		}
 
 		// Start git-based federation (replaces Dolt)
@@ -1069,7 +1073,6 @@ go func() {
 			log.Printf("Registered %d default motivations", a.motivationRegistry.Count())
 		}
 	}
-
 
 	// FIX #4: Ensure at least one project has beads for work to flow
 	// If no beads exist across all projects, create a diagnostic bead
@@ -2377,7 +2380,6 @@ func (a *Loom) SpawnAgent(ctx context.Context, name, personaName, projectID stri
 		return nil, fmt.Errorf("failed to add agent to project: %w", err)
 	}
 
-
 	// Persist agent assignment to the configuration database.
 	if a.database != nil {
 		_ = a.database.UpsertAgent(agent)
@@ -3278,7 +3280,6 @@ func (a *Loom) CreateDecisionBead(question, parentBeadID, requesterID string, op
 		})
 	}
 
-
 	return decision, nil
 }
 
@@ -3822,7 +3823,6 @@ func (a *Loom) StartDispatchLoop(ctx context.Context, interval time.Duration) {
 					log.Printf("[DispatchLoop] Reset %d stuck agent(s) (inconsistent=%d, timeout=%d)", totalReset, inconsistentReset, timeoutReset)
 				}
 			}
-
 
 		}
 	}

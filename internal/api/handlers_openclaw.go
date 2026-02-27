@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jordanhubbard/loom/internal/openclaw"
 	"github.com/jordanhubbard/loom/internal/eventbus"
+	"github.com/jordanhubbard/loom/internal/openclaw"
 )
 
 // handleOpenClawWebhook receives inbound messages from the OpenClaw gateway.
