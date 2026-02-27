@@ -131,7 +131,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     image: loom:latest
     container_name: loom
     restart: unless-stopped
@@ -147,9 +147,9 @@ services:
       - "8081:8081"
       - "3307:3307"
     environment:
-      - LOOM_PASSWORD=${LOOM_PASSWORD}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - LOOM_PASSWORD=${LOOM_PASSWORD:-}            # optional: web UI password; blank = no password
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}              # optional: enables GitHub repo access and CI monitor
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}              # optional: enables GitLab repo access
       - TZ=UTC
       - NATS_URL=nats://nats:4222
       - CONFIG_PATH=/app/config.yaml
@@ -166,8 +166,8 @@ services:
       # (embedded TokenHub, standalone TokenHub, direct OpenAI, vLLM, etc.)
       # When using an external provider, the Makefile sets this to the host gateway.
       - LOOM_PROVIDER_URL=${LOOM_PROVIDER_URL:-http://tokenhub:8080}
-      - LOOM_PROVIDER_API_KEY=${LOOM_PROVIDER_API_KEY}
-      - TOKENHUB_ADMIN_TOKEN=${TOKENHUB_ADMIN_TOKEN}
+      - LOOM_PROVIDER_API_KEY=${LOOM_PROVIDER_API_KEY:-}  # optional: auth key for LOOM_PROVIDER_URL; blank if using embedded TokenHub without auth
+      - TOKENHUB_ADMIN_TOKEN=${TOKENHUB_ADMIN_TOKEN:-}  # optional: blank = TokenHub auto-generates one at startup
     networks:
       - loom-network
     extra_hosts:
@@ -207,9 +207,9 @@ services:
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=coder
-      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL (e.g. http://tokenhub:8080/v1)
       - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
-      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY:-}      # required for agents: API key for PROVIDER_ENDPOINT
       - ACTION_LOOP_ENABLED=true
       - MAX_LOOP_ITERATIONS=25
       - WORK_DIR=/workspace
@@ -241,9 +241,9 @@ services:
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=reviewer
-      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL
       - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
-      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY:-}      # required for agents: API key for PROVIDER_ENDPOINT
       - ACTION_LOOP_ENABLED=true
       - MAX_LOOP_ITERATIONS=15
       - WORK_DIR=/workspace
@@ -275,9 +275,9 @@ services:
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=qa
-      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL
       - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
-      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY:-}      # required for agents: API key for PROVIDER_ENDPOINT
       - ACTION_LOOP_ENABLED=true
       - MAX_LOOP_ITERATIONS=10
       - WORK_DIR=/workspace
@@ -308,8 +308,8 @@ services:
       - CONFIG_PATH=/app/config/connectors.yaml
       - HEALTH_INTERVAL=30s
       - OTEL_ENDPOINT=otel-collector:4317
-      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}  # optional: validates inbound GitHub webhook signatures
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}                     # optional: enables GitHub API access for connectors
     ports:
       - "50051:50051"  # gRPC
       - "8082:8080"    # GitHub webhook receiver
@@ -343,14 +343,14 @@ services:
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=public-relations-manager
-      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT}
+      - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL
       - PROVIDER_MODEL=${PROVIDER_MODEL:-qwen3-235b-a22b}
-      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY:-}      # required for agents: API key for PROVIDER_ENDPOINT
       - ACTION_LOOP_ENABLED=true
       - MAX_LOOP_ITERATIONS=20
       - WORK_DIR=/workspace
       - OTEL_ENDPOINT=otel-collector:4317
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     networks:
       - loom-network
     volumes:
@@ -367,7 +367,7 @@ services:
       dockerfile: Dockerfile
       target: builder
       args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     container_name: loom-test
     networks:
       - loom-network
@@ -485,3 +485,4 @@ volumes:
   agent-coder-workspace:
   agent-reviewer-workspace:
   agent-qa-workspace:
+  agent-pr-manager-workspace:
