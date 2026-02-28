@@ -528,6 +528,11 @@ async function apiCall(endpoint, options = {}) {
     }
 }
 
+// Ensure shared scripts can call apiCall regardless of script scoping semantics.
+if (typeof window !== 'undefined') {
+    window.apiCall = apiCall;
+}
+
 async function ensureAuth(forcePrompt = false) {
     // Skip authentication if it's disabled
     if (!AUTH_ENABLED) {
