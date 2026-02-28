@@ -1442,18 +1442,24 @@ function renderKanban() {
 
     const filtered = getFilteredBeads();
     const openBeads = filtered.filter((b) => b.status === 'open');
+    const blockedBeads = filtered.filter((b) => b.status === 'blocked');
     const inProgressBeads = filtered.filter((b) => b.status === 'in_progress');
     const closedBeads = filtered.filter((b) => b.status === 'closed');
 
     const openEl = document.getElementById('open-beads');
+    const blockedEl = document.getElementById('blocked-beads');
     const ipEl = document.getElementById('in-progress-beads');
     const closedEl = document.getElementById('closed-beads');
-    if (!openEl || !ipEl || !closedEl) return;
+    if (!openEl || !blockedEl || !ipEl || !closedEl) return;
 
     openEl.innerHTML =
         openBeads.length > 0
             ? openBeads.map(renderBeadCard).join('')
             : renderEmptyState('No open beads', 'Create a bead via the API or bd CLI, then it will show up here.');
+    blockedEl.innerHTML =
+        blockedBeads.length > 0
+            ? blockedBeads.map(renderBeadCard).join('')
+            : renderEmptyState('No blocked beads', 'Blocked beads will appear here when work is waiting on dependencies or intervention.');
     ipEl.innerHTML =
         inProgressBeads.length > 0
             ? inProgressBeads.map(renderBeadCard).join('')
