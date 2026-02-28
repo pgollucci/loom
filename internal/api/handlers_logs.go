@@ -58,7 +58,6 @@ func (s *Server) HandleLogsRecent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Log subsystem can be disabled in some startup modes.
 	if s.logManager == nil {
 		s.respondJSON(w, http.StatusOK, map[string]interface{}{
 			"logs":  []logging.LogEntry{},
@@ -99,11 +98,30 @@ func (s *Server) HandleLogsStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	if s.logManager == nil {
-		http.Error(w, "log manager unavailable", http.StatusServiceUnavailable)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
+	if s.logManager == nil {
+		// Keep SSE alive to avoid 503 loops in the UI when logs are unavailable.
+		fmt.Fprintf(w, "event: connected\ndata: {\"message\":\"Log stream connected (log manager unavailable)\"}\n\n")
+		flusher.Flush()
+
+		ctx := r.Context()
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				fmt.Fprintf(w, ": heartbeat\n\n")
+				flusher.Flush()
+			}
+		}
+	}
 	// Parse filters from query params
 	levelFilter := r.URL.Query().Get("level")
 	sourceFilter := r.URL.Query().Get("source")
@@ -142,13 +160,6 @@ func (s *Server) HandleLogsStream(w http.ResponseWriter, r *http.Request) {
 
 	s.logManager.AddHandler(handler)
 
-	// Send logs to client
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
-	}
-
 	// Send initial recent logs
 	recentLogs := s.logManager.GetRecent(50, levelFilter, sourceFilter, agentFilter, beadFilter, projectFilter, time.Time{}, time.Time{})
 	for _, entry := range recentLogs {
@@ -162,7 +173,7 @@ func (s *Server) HandleLogsStream(w http.ResponseWriter, r *http.Request) {
 
 	// Stream new logs
 	ctx := r.Context()
-	ticker := time.NewTicker(30 * time.Second) // Heartbeat
+	ticker := time.NewTicker(10 * time.Second) // Heartbeat
 	defer ticker.Stop()
 
 	for {
