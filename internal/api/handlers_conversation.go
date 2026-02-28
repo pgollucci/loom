@@ -196,12 +196,6 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	db := s.app.GetDatabase()
-	if db == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
-		return
-	}
-
 	// Get query parameters
 	projectID := r.URL.Query().Get("project_id")
 	limitStr := r.URL.Query().Get("limit")
@@ -221,6 +215,16 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	// If no project_id specified, require it
 	if projectID == "" {
 		s.respondError(w, http.StatusBadRequest, "project_id parameter is required")
+		return
+	}
+
+	db := s.app.GetDatabase()
+	if db == nil {
+		s.respondJSON(w, http.StatusOK, map[string]interface{}{
+			"project_id":    projectID,
+			"limit":         limit,
+			"conversations": []interface{}{},
+		})
 		return
 	}
 
