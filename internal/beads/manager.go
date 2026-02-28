@@ -385,7 +385,9 @@ func (m *Manager) ListBeads(filters map[string]interface{}) ([]*models.Bead, err
 
 // UpdateBead updates a bead
 func (m *Manager) UpdateBead(id string, updates map[string]interface{}) error {
-	// Update in-memory state with write lock
+	// Resolve the beads path before acquiring the write lock.
+	beadsPath := m.getBeadsPathForBead(id)
+
 	m.mu.Lock()
 
 	bead, ok := m.beads[id]
@@ -397,10 +399,8 @@ func (m *Manager) UpdateBead(id string, updates map[string]interface{}) error {
 	previousAssigned := bead.AssignedTo
 	assignedUpdated := false
 
-	// Apply updates
 	if status, ok := updates["status"].(models.BeadStatus); ok {
 		bead.Status = status
-		// Set closed_at timestamp if closing
 		if status == models.BeadStatusClosed && bead.ClosedAt == nil {
 			now := time.Now()
 			bead.ClosedAt = &now
@@ -408,7 +408,6 @@ func (m *Manager) UpdateBead(id string, updates map[string]interface{}) error {
 		if status != models.BeadStatusClosed {
 			bead.ClosedAt = nil
 		}
-		// When resetting to open, clear any stale assignment unless explicitly overridden
 		if status == models.BeadStatusOpen {
 			if _, hasAssigned := updates["assigned_to"]; !hasAssigned {
 				bead.AssignedTo = ""
@@ -473,26 +472,38 @@ func (m *Manager) UpdateBead(id string, updates map[string]interface{}) error {
 		})
 	}
 
-	// Release lock before expensive I/O operations
-	// SaveBeadToGit has its own locking for safe concurrent access
+	// Persist to filesystem while holding the lock so the in-memory state
+	// another goroutine observes is backed by disk.
+	if beadsPath == "" {
+		beadsPath = m.beadsPath
+	}
+	if err := m.saveBeadToFilesystemLocked(bead, beadsPath); err != nil {
+		log.Printf("[BeadManager] UpdateBead persist failed for %s: %v", id, err)
+	}
 	m.mu.Unlock()
 
-	// Save to filesystem and git (without holding the main lock)
-	if err := m.SaveBeadToGit(context.Background(), bead, m.GetProjectBeadsPath(bead.ProjectID)); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save bead to git: %v\n", err)
+	// Git commit/push runs outside the lock — it's slow but has its own
+	// per-project git lock to prevent concurrent git index corruption.
+	if err := m.SaveBeadToGit(context.Background(), bead, beadsPath); err != nil {
+		log.Printf("[BeadManager] SaveBeadToGit failed for %s: %v", id, err)
 	}
 
 	return nil
 }
 
-// ClaimBead assigns a bead to an agent
+// ClaimBead atomically assigns a bead to an agent. The in-memory state
+// is updated and persisted under the same lock. If persistence fails,
+// the in-memory state is rolled back so we never diverge.
 func (m *Manager) ClaimBead(beadID, agentID string) error {
-	// Update in-memory state with write lock
+	// Resolve beads path before acquiring write lock (GetProjectBeadsPath
+	// takes a read lock internally).
+	beadsPath := m.getBeadsPathForBead(beadID)
+
 	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	bead, ok := m.beads[beadID]
 	if !ok {
-		m.mu.Unlock()
 		err := fmt.Errorf("bead not found %s: %w", beadID, ErrBeadNotFound)
 		observability.Error("bead.claim", map[string]interface{}{
 			"agent_id": agentID,
@@ -502,7 +513,6 @@ func (m *Manager) ClaimBead(beadID, agentID string) error {
 	}
 
 	if bead.AssignedTo != "" && bead.AssignedTo != agentID {
-		m.mu.Unlock()
 		err := fmt.Errorf("bead already claimed by agent %s: %w", bead.AssignedTo, ErrBeadAlreadyClaimed)
 		observability.Error("bead.claim", map[string]interface{}{
 			"agent_id":    agentID,
@@ -513,9 +523,26 @@ func (m *Manager) ClaimBead(beadID, agentID string) error {
 		return err
 	}
 
+	// Snapshot for rollback
+	prevAssigned := bead.AssignedTo
+	prevStatus := bead.Status
+	prevUpdated := bead.UpdatedAt
+
 	bead.AssignedTo = agentID
 	bead.Status = models.BeadStatusInProgress
 	bead.UpdatedAt = time.Now()
+
+	// Persist while still holding the lock. If this fails, roll back so
+	// in-memory state stays consistent with what's on disk.
+	if beadsPath == "" {
+		beadsPath = m.beadsPath
+	}
+	if err := m.saveBeadToFilesystemLocked(bead, beadsPath); err != nil {
+		bead.AssignedTo = prevAssigned
+		bead.Status = prevStatus
+		bead.UpdatedAt = prevUpdated
+		return fmt.Errorf("claim persist failed for bead %s: %w", beadID, err)
+	}
 
 	observability.Info("bead.claim", map[string]interface{}{
 		"agent_id":   agentID,
@@ -524,14 +551,19 @@ func (m *Manager) ClaimBead(beadID, agentID string) error {
 		"status":     "claimed",
 	})
 
-	// Release lock before I/O operations
-	m.mu.Unlock()
-
-	if err := m.SaveBeadToFilesystem(bead, m.GetProjectBeadsPath(bead.ProjectID)); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save bead to filesystem: %v\n", err)
-	}
-
 	return nil
+}
+
+// getBeadsPathForBead resolves the beads filesystem path for a given bead ID.
+// Safe to call without holding m.mu.
+func (m *Manager) getBeadsPathForBead(beadID string) string {
+	m.mu.RLock()
+	bead, ok := m.beads[beadID]
+	m.mu.RUnlock()
+	if !ok {
+		return m.beadsPath
+	}
+	return m.GetProjectBeadsPath(bead.ProjectID)
 }
 
 // ReassignBead forcibly reassigns a bead to a new agent, overriding any
@@ -1024,35 +1056,56 @@ func (m *Manager) loadBeadsFromBD(projectID, beadsPath string) error {
 func (m *Manager) SaveBeadToFilesystem(bead *models.Bead, beadsPath string) error {
 	beadsDir := filepath.Join(beadsPath, "beads")
 
-	// Ensure directory exists
 	if err := os.MkdirAll(beadsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create beads directory: %w", err)
 	}
 
-	// Preserve existing bead file path if we loaded it from disk, to avoid creating duplicates.
-	// Use read lock to safely access beadFiles map
 	m.mu.RLock()
 	beadPath, exists := m.beadFiles[bead.ID]
 	m.mu.RUnlock()
 
 	if !exists || beadPath == "" {
-		// Generate filename from bead ID and title
 		filename := fmt.Sprintf("%s-%s.yaml", bead.ID, sanitizeFilename(bead.Title))
 		beadPath = filepath.Join(beadsDir, filename)
 
-		// Use write lock to update beadFiles map
 		m.mu.Lock()
 		m.beadFiles[bead.ID] = beadPath
 		m.mu.Unlock()
 	}
 
-	// Marshal to YAML
 	data, err := yaml.Marshal(bead)
 	if err != nil {
 		return fmt.Errorf("failed to marshal bead: %w", err)
 	}
 
-	// Write to file
+	if err := os.WriteFile(beadPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write bead file: %w", err)
+	}
+
+	return nil
+}
+
+// saveBeadToFilesystemLocked is like SaveBeadToFilesystem but callable when
+// the caller already holds m.mu (write lock). Avoids nested lock acquisition.
+func (m *Manager) saveBeadToFilesystemLocked(bead *models.Bead, beadsPath string) error {
+	beadsDir := filepath.Join(beadsPath, "beads")
+
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create beads directory: %w", err)
+	}
+
+	beadPath, exists := m.beadFiles[bead.ID]
+	if !exists || beadPath == "" {
+		filename := fmt.Sprintf("%s-%s.yaml", bead.ID, sanitizeFilename(bead.Title))
+		beadPath = filepath.Join(beadsDir, filename)
+		m.beadFiles[bead.ID] = beadPath
+	}
+
+	data, err := yaml.Marshal(bead)
+	if err != nil {
+		return fmt.Errorf("failed to marshal bead: %w", err)
+	}
+
 	if err := os.WriteFile(beadPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write bead file: %w", err)
 	}
