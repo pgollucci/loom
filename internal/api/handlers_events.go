@@ -34,6 +34,11 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		s.respondError(w, http.StatusInternalServerError, "Streaming not supported")
+		return
+	}
 
 	// Get optional filters from query params
 	projectID := r.URL.Query().Get("project_id")
@@ -55,14 +60,18 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request) {
 	defer eventBus.Unsubscribe(subscriberID)
 
 	// Send initial connection event
-	fmt.Fprintf(w, "event: connected\n")
-	fmt.Fprintf(w, "data: {\"message\": \"Connected to event stream\"}\n\n")
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
+	if _, err := fmt.Fprintf(w, "event: connected\n"); err != nil {
+		return
 	}
+	if _, err := fmt.Fprintf(w, "data: {\"message\": \"Connected to event stream\"}\n\n"); err != nil {
+		return
+	}
+	flusher.Flush()
 
 	// Stream events to client
 	ctx := r.Context()
+	keepalive := time.NewTicker(10 * time.Second)
+	defer keepalive.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -80,18 +89,19 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			fmt.Fprintf(w, "event: %s\n", event.Type)
-			fmt.Fprintf(w, "data: %s\n\n", data)
-
-			if flusher, ok := w.(http.Flusher); ok {
-				flusher.Flush()
+			if _, err := fmt.Fprintf(w, "event: %s\n", event.Type); err != nil {
+				return
 			}
-		case <-time.After(30 * time.Second):
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-keepalive.C:
 			// Send keepalive ping
-			fmt.Fprintf(w, ": keepalive\n\n")
-			if flusher, ok := w.(http.Flusher); ok {
-				flusher.Flush()
+			if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+				return
 			}
+			flusher.Flush()
 		}
 	}
 }
