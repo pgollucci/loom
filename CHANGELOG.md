@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-02-27
+
+### Added
+- full agent autonomy and CEO experience fixes
+
+### Fixed
+- Makefile health-check and URLs use wrong port
+- close 5 critical executor design flaws
+
 ## [0.1.20] - 2026-02-26
 
 ### Added

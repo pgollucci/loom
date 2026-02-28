@@ -102,8 +102,8 @@ run:
 	@$(MAKE) -s bootstrap
 	@echo ""
 	@echo "Loom is running:"
-	@echo "  UI:    http://localhost:8080"
-	@echo "  API:   http://localhost:8080/api/v1/system/state"
+	@echo "  UI:    http://localhost:8081"
+	@echo "  API:   http://localhost:8081/api/v1/system/state"
 	@echo "  Logs:  make logs"
 	@echo "  Stop:  make stop"
 
@@ -123,7 +123,7 @@ bootstrap:
 	@if [ -f bootstrap.local ]; then \
 		echo "Waiting for loom to be healthy..."; \
 		for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
-			status=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8080/health 2>/dev/null | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4); \
+			status=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8081/health 2>/dev/null | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4); \
 			if [ "$$status" = "healthy" ]; then \
 				echo "Loom is healthy, running bootstrap.local..."; \
 				chmod +x bootstrap.local && ./bootstrap.local; \
@@ -160,7 +160,7 @@ status:
 		printf " %s %-35s %s\n" "$$sym" "$$name" "$$label"; \
 	done || echo " ✗ No containers found. Run 'make start' to launch loom."
 	@echo ""
-	@health=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8080/health 2>/dev/null); \
+	@health=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8081/health 2>/dev/null); \
 	if [ -n "$$health" ]; then \
 		status=$$(echo "$$health" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown"); \
 		if [ "$$status" = "healthy" ]; then \
