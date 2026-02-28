@@ -17,14 +17,11 @@ import (
 	"encoding/json"
 	"errors"
 
-	"sort"
-
 	"github.com/google/uuid"
 	"github.com/jordanhubbard/loom/internal/actions"
 	"github.com/jordanhubbard/loom/internal/beads"
 	"github.com/jordanhubbard/loom/internal/database"
 	"github.com/jordanhubbard/loom/internal/dispatch"
-	"github.com/jordanhubbard/loom/internal/persona"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
 	"github.com/jordanhubbard/loom/internal/worker"
@@ -58,10 +55,6 @@ type projectState struct {
 	watcherRunning bool
 	// wakeCh is sent on to immediately unblock a sleeping watcher.
 	wakeCh chan struct{}
-	// execMu serializes bead execution per project. Multiple workers can
-	// poll and claim beads concurrently, but only one can execute filesystem
-	// operations (git, file edits, builds) at a time to prevent corruption.
-	execMu sync.Mutex
 }
 
 // Executor is the direct bead execution engine.
@@ -70,7 +63,6 @@ type Executor struct {
 	beadManager      *beads.Manager
 	actionRouter     *actions.Router
 	projectManager   *project.Manager
-	personaManager   *persona.Manager
 	db               *database.Database
 	lessonsProvider  worker.LessonsProvider
 	numWorkers       int
@@ -97,13 +89,6 @@ func New(
 		projectStates:    make(map[string]*projectState),
 		semaphore:        make(chan struct{}, maxConcurrentRequests),
 	}
-}
-
-// SetPersonaManager wires in the persona loader for rich agent instructions.
-func (e *Executor) SetPersonaManager(pm *persona.Manager) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.personaManager = pm
 }
 
 // SetLessonsProvider wires in the lessons provider for build failure learning.
@@ -228,26 +213,17 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 
 		idleRounds = 0
 		log.Printf("[TaskExecutor] Worker %s claimed bead %s (%s)", workerID, bead.ID, bead.Title)
-
-		// Acquire per-project execution lock. Workers can claim beads
-		// concurrently but must serialize filesystem operations (git,
-		// file edits, builds) to prevent workspace corruption.
-		e.mu.Lock()
-		state := e.getOrCreateState(projectID)
-		e.mu.Unlock()
-		state.execMu.Lock()
-
-		needsBackoff := e.executeBead(ctx, bead, workerID)
-
-		state.execMu.Unlock()
-		<-e.semaphore // Release semaphore slot
-
-		if needsBackoff {
+		if needsBackoff := e.executeBead(ctx, bead, workerID); needsBackoff {
+			<-e.semaphore // Release semaphore slot
+			// Provider error (502, 429, context canceled): pause before
+			// claiming the next bead to avoid hammering tokenhub rate limits.
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(providerErrorBackoff):
 			}
+		} else {
+			<-e.semaphore // Release semaphore slot
 		}
 	}
 }
@@ -372,7 +348,6 @@ func runShell(ctx context.Context, cmd string) error {
 }
 
 // claimNextBead returns the next available bead for the project, or nil.
-// Beads are sorted by priority (P0 first) so urgent work is claimed first.
 func (e *Executor) claimNextBead(ctx context.Context, projectID, workerID string) *models.Bead {
 	_ = ctx // reserved for future use
 	readyBeads, err := e.beadManager.GetReadyBeads(projectID)
@@ -381,21 +356,12 @@ func (e *Executor) claimNextBead(ctx context.Context, projectID, workerID string
 		return nil
 	}
 
-	// Sort by priority ascending (P0=0 is most urgent).
-	sort.Slice(readyBeads, func(i, j int) bool {
-		if readyBeads[i] == nil || readyBeads[j] == nil {
-			return readyBeads[i] != nil
-		}
-		return readyBeads[i].Priority < readyBeads[j].Priority
-	})
-
 	for _, b := range readyBeads {
 		if b == nil {
 			continue
 		}
-		// Decision beads that explicitly require human authority (real-world
-		// spending, token purchases, etc.) are not auto-claimable.
-		if b.Type == "decision" && b.Context["requires_human"] == "true" {
+		// Skip decision beads — they require human input
+		if b.Type == "decision" {
 			continue
 		}
 		// Rescue zombie in-progress beads. Ephemeral executor IDs (exec-<project>-<uuid>)
@@ -458,16 +424,6 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 	prov := providers[0]
 
 	personaName := personaForBead(bead)
-	var loadedPersona *models.Persona
-	if e.personaManager != nil {
-		loadedPersona, _ = e.personaManager.LoadPersona(personaName)
-	}
-	if loadedPersona == nil {
-		loadedPersona = &models.Persona{
-			Name:      personaName,
-			Character: personas[personaName],
-		}
-	}
 	agent := &models.Agent{
 		ID:          workerID,
 		Name:        personaName,
@@ -475,7 +431,10 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 		ProjectID:   bead.ProjectID,
 		ProviderID:  prov.Config.ID,
 		Status:      "working",
-		Persona:     loadedPersona,
+		Persona: &models.Persona{
+			Name:      personaName,
+			Character: personas[personaName],
+		},
 	}
 
 	w := worker.NewWorker(workerID, agent, prov)

@@ -3848,12 +3848,6 @@ func (a *Loom) StartTaskExecutor(ctx context.Context) {
 		}
 	}
 
-	// Wire in the persona manager so workers use rich persona definitions
-	// instead of the hardcoded fallback map.
-	if a.personaManager != nil {
-		exec.SetPersonaManager(a.personaManager)
-	}
-
 	a.taskExecutor = exec
 
 	// Start watcher + initial workers for all currently registered projects
