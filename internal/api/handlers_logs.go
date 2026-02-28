@@ -58,6 +58,15 @@ func (s *Server) HandleLogsRecent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Log subsystem can be disabled in some startup modes.
+	if s.logManager == nil {
+		s.respondJSON(w, http.StatusOK, map[string]interface{}{
+			"logs":  []logging.LogEntry{},
+			"count": 0,
+		})
+		return
+	}
+
 	logs, err = s.logManager.Query(limit, level, source, agentID, beadID, projectID, since, until)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to query logs: %v", err), http.StatusInternalServerError)
@@ -89,6 +98,11 @@ func (s *Server) HandleLogsStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if s.logManager == nil {
+		http.Error(w, "log manager unavailable", http.StatusServiceUnavailable)
+		return
+	}
 
 	// Parse filters from query params
 	levelFilter := r.URL.Query().Get("level")
@@ -209,6 +223,11 @@ func (s *Server) HandleLogsExport(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Invalid 'end_time' parameter: %v", err), http.StatusBadRequest)
 			return
 		}
+	}
+
+	if s.logManager == nil {
+		http.Error(w, "log manager unavailable", http.StatusServiceUnavailable)
+		return
 	}
 
 	// Query logs
