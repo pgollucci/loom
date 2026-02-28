@@ -242,6 +242,11 @@ section h2 {
     gap: 1.5rem;
 }
 
+/* Keep the Kanban board itself on one desktop row with 4 status columns. */
+#kanban .kanban-container {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .kanban-column {
     background-color: var(--light-bg);
     padding: 1rem;
