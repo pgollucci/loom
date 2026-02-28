@@ -2302,8 +2302,6 @@ async function sendReplQuery() {
 // Assign agent to project from CEO REPL
 async function assignAgentFromCeoRepl() {
     const agentSelect = document.getElementById('ceo-repl-agent-select');
-const projectSelect = document.getElementById('ceo-repl-project-select');
-const projectSelect = document.getElementById('ceo-repl-project-select');
     const projectSelect = document.getElementById('ceo-repl-project-select');
     
     const agentId = agentSelect ? agentSelect.value : '';
@@ -2355,6 +2353,7 @@ async function sendCeoReplQuery() {
     const responseEl = document.getElementById('ceo-repl-response');
     const sendBtn = document.getElementById('ceo-repl-send');
     const agentSelect = document.getElementById('ceo-repl-agent-select');
+    const projectSelect = document.getElementById('ceo-repl-project-select');
     if (!input || !responseEl || !sendBtn) return;
 
     const message = (input.value || '').trim();
@@ -2365,12 +2364,12 @@ async function sendCeoReplQuery() {
 
     // Check if an agent is selected from the dropdown
     const selectedAgentId = agentSelect ? agentSelect.value : '';
-const selectedProjectId = projectSelect ? projectSelect.value : '';
+    const selectedProjectId = projectSelect ? projectSelect.value : '';
     if (selectedAgentId) {
         // Find the selected agent and dispatch to them
         const selectedAgent = (state.agents || []).find(a => a.id === selectedAgentId);
         if (selectedAgent) {
-            return ceoReplDispatchToAgentById(selectedAgent, message, responseEl, sendBtn);
+            return ceoReplDispatchToAgentById(selectedAgent, message, responseEl, sendBtn, selectedProjectId);
         }
     }
 
@@ -2387,7 +2386,7 @@ const selectedProjectId = projectSelect ? projectSelect.value : '';
 }
 
 // Dispatch a task to a specific agent selected from the dropdown
-async function ceoReplDispatchToAgentById(agent, taskMessage, responseEl, sendBtn) {
+async function ceoReplDispatchToAgentById(agent, taskMessage, responseEl, sendBtn, selectedProjectId = '') {
     const projectId = selectedProjectId || agent.project_id || uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
     if (!projectId) {
         responseEl.innerHTML = '<span style="color:var(--danger-color)">No project selected. Select a project first.</span>';
