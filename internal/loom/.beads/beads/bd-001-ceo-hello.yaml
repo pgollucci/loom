@@ -3,13 +3,13 @@ entitymetadata:
     attributes: {}
     migratedat: null
     migratedfrom: ""
-id: bd-002
+id: bd-001
 type: task
-title: Test
-description: desc
+title: 'CEO: hello'
+description: hello
 status: open
-priority: 1
-projectid: proj-9
+priority: 0
+projectid: ""
 assignedto: ""
 blockedby: []
 blocks: []
@@ -17,10 +17,12 @@ relatedto: []
 parent: ""
 children: []
 tags: []
-context: {}
+context:
+    created_by: ceo
+    source: ceo-repl
 duedate: null
 milestoneid: ""
 estimatedtime: 0
-createdat: 2026-02-27T19:17:54.48017-05:00
-updatedat: 2026-02-27T19:17:54.48017-05:00
+createdat: 2026-02-27T19:17:22.874523-05:00
+updatedat: 2026-02-27T19:17:22.874752-05:00
 closedat: null

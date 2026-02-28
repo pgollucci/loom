@@ -18,7 +18,6 @@ import (
 	"github.com/jordanhubbard/loom/internal/api"
 	"github.com/jordanhubbard/loom/internal/audit"
 	"github.com/jordanhubbard/loom/internal/auth"
-	"github.com/jordanhubbard/loom/internal/automerge"
 	"github.com/jordanhubbard/loom/internal/cimon"
 	internalconnectors "github.com/jordanhubbard/loom/internal/connectors"
 	"github.com/jordanhubbard/loom/internal/hotreload"
@@ -139,15 +138,8 @@ func main() {
 		go selfAuditRunner.Start(runCtx)
 	}
 
-	autoMergeInterval := 0
 	if interval := os.Getenv("AUTO_MERGE_INTERVAL_MINUTES"); interval != "" {
-		if n, err := fmt.Sscanf(interval, "%d", &autoMergeInterval); err == nil && n == 1 {
-			log.Printf("Auto-merge enabled with %d minute interval", autoMergeInterval)
-		}
-	}
-	if autoMergeInterval > 0 {
-		autoMergeRunner := automerge.NewRunner(arb)
-		go autoMergeRunner.Start(runCtx, time.Duration(autoMergeInterval)*time.Minute)
+		log.Printf("AUTO_MERGE_INTERVAL_MINUTES=%q is set, but Loom self-merge is disabled by policy; use GitHub Actions queue to merge after CI passes", interval)
 	}
 
 	// CI/CD monitor: check GitHub Actions for failures every 30 minutes by default.

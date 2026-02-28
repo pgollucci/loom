@@ -185,53 +185,7 @@ providers: []
   #          "api_key":"sk-..."}'
   # See bootstrap.local.example for a template.
 
-projects:
-  - id: loom
-    name: Loom
-    git_repo: "https://github.com/jordanhubbard/loom.git"  # HTTPS for token-based auth
-    branch: develop
-    beads_path: "/.beads"  # Path within beads worktree
-    beads_branch: "beads-sync"  # Branch for beads storage
-    use_worktrees: true  # Enable git worktree isolation
-    use_container: false  # TaskExecutor runs in-process; no per-project container needed
-    git_auth_method: token  # Use token authentication (GITHUB_TOKEN or GITLAB_TOKEN env var)
-    git_strategy: direct
-    is_perpetual: true
-    is_sticky: true
-    context:
-      build_command: "go build"
-      test_command: "go test ./..."
-      description: "The Loom project itself - perpetual self-improvement"
-  - id: aviation
-    name: Aviation
-    git_repo: "https://github.com/jordanhubbard/Aviation.git"
-    branch: main
-    beads_path: ".beads"
-    beads_branch: "beads-sync"
-    use_worktrees: true
-    use_container: true
-    git_auth_method: token
-    git_strategy: direct
-    is_perpetual: true
-    is_sticky: true
-    context:
-      description: "Aviation project"
-  - id: tokenhub
-    name: TokenHub
-    git_repo: "https://github.com/jordanhubbard/tokenhub.git"
-    branch: main
-    beads_path: ".beads"
-    beads_branch: "beads-sync"
-    use_worktrees: true
-    use_container: true
-    git_auth_method: token
-    git_strategy: direct
-    is_perpetual: true
-    is_sticky: true
-    context:
-      build_command: "go build ./cmd/tokenhub"
-      test_command: "go test ./..."
-      description: "LLM routing proxy - provider selection, health tracking, failover, and Thompson Sampling"
+projects: []
   # - id: example-project
   #   name: Example Project
   #   git_repo: /path/to/repo

@@ -155,7 +155,7 @@ services:
       - CONFIG_PATH=/app/config.yaml
       - DOLT_PORT=3307
       - DB_TYPE=postgres
-      - POSTGRES_HOST=pgbouncer
+      - POSTGRES_HOST=${POSTGRES_HOST:-pgbouncer}
       - POSTGRES_PORT=5432
       - POSTGRES_USER=loom
       - POSTGRES_PASSWORD=loom
@@ -168,6 +168,11 @@ services:
       - LOOM_PROVIDER_URL=${LOOM_PROVIDER_URL:-http://tokenhub:8080}
       - LOOM_PROVIDER_API_KEY=${LOOM_PROVIDER_API_KEY:-}  # optional: auth key for LOOM_PROVIDER_URL; blank if using embedded TokenHub without auth
       - TOKENHUB_ADMIN_TOKEN=${TOKENHUB_ADMIN_TOKEN:-}  # optional: blank = TokenHub auto-generates one at startup
+      - LOOM_DISABLE_SELF_PROJECT=${LOOM_DISABLE_SELF_PROJECT:-1}
+      - LOOM_FORCE_TEXT_MODE=${LOOM_FORCE_TEXT_MODE:-1}
+      - LOOM_MAX_PROMPT_TOKENS=${LOOM_MAX_PROMPT_TOKENS:-6000}
+      - LOOM_LLM_REQUEST_DELAY_MS=${LOOM_LLM_REQUEST_DELAY_MS:-5000}
+      - LOOM_PROVIDER_ERROR_BACKOFF_SECS=${LOOM_PROVIDER_ERROR_BACKOFF_SECS:-45}
     networks:
       - loom-network
     extra_hosts:
@@ -176,9 +181,6 @@ services:
     volumes:
       # Persist SQLite database and project clones across container restarts
       - loom-db:/app/data
-      # Mount known_hosts for git SSH operations (read-only)
-      # Loom uses its own per-project SSH deploy keys (stored encrypted in DB)
-      - ~/.ssh/known_hosts:/home/loom/.ssh/known_hosts:ro
       # Mount Docker socket for per-project container orchestration
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
@@ -203,7 +205,7 @@ services:
       loom:
         condition: service_healthy
     environment:
-      - PROJECT_ID=${PROJECT_ID:-loom}
+      - PROJECT_ID=${PROJECT_ID:-proj-1}
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=coder
@@ -237,7 +239,7 @@ services:
       loom:
         condition: service_healthy
     environment:
-      - PROJECT_ID=${PROJECT_ID:-loom}
+      - PROJECT_ID=${PROJECT_ID:-proj-1}
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=reviewer
@@ -271,7 +273,7 @@ services:
       loom:
         condition: service_healthy
     environment:
-      - PROJECT_ID=${PROJECT_ID:-loom}
+      - PROJECT_ID=${PROJECT_ID:-proj-1}
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=qa
@@ -339,7 +341,7 @@ services:
       loom:
         condition: service_healthy
     environment:
-      - PROJECT_ID=${PROJECT_ID:-loom}
+      - PROJECT_ID=${PROJECT_ID:-proj-1}
       - CONTROL_PLANE_URL=http://loom:8081
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=public-relations-manager

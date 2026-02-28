@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -293,6 +295,19 @@ const (
 	TruncationFractionLow    = 0.0   // Fraction for low truncation
 )
 
+func estimateTokens(content string) int {
+	if content == "" {
+		return 0
+	}
+	// Use a conservative estimate (3 chars/token) so we trim early enough for
+	// providers with stricter effective request limits.
+	n := len(content) / 3
+	if n <= 0 {
+		return 1
+	}
+	return n
+}
+
 // handleTokenLimits truncates messages if they exceed model token limits
 func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.ChatMessage {
 	// Get model token limit (default to 100K if not specified)
@@ -302,7 +317,7 @@ func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.C
 	// Calculate current tokens (rough estimate: 1 token ~= 4 characters)
 	totalTokens := 0
 	for _, msg := range messages {
-		totalTokens += len(msg.Content) / 4
+		totalTokens += estimateTokens(msg.Content)
 	}
 
 	if totalTokens <= maxTokens {
@@ -315,7 +330,7 @@ func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.C
 	}
 
 	systemMsg := messages[0] // Assume first message is system
-	systemTokens := len(systemMsg.Content) / 4
+	systemTokens := estimateTokens(systemMsg.Content)
 
 	// Find how many recent messages we can keep
 	recentTokens := 0
@@ -323,7 +338,7 @@ func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.C
 
 	// Work backwards to find where to truncate
 	for i := len(messages) - 1; i > 0; i-- {
-		msgTokens := len(messages[i].Content) / 4
+		msgTokens := estimateTokens(messages[i].Content)
 		if systemTokens+recentTokens+msgTokens > maxTokens {
 			// Can't fit this message
 			startIndex = i + 1
@@ -354,11 +369,16 @@ func (w *Worker) handleTokenLimits(messages []provider.ChatMessage) []provider.C
 // Uses the provider's discovered context window (from heartbeat) if available,
 // falling back to a conservative default.
 func (w *Worker) getModelTokenLimit() int {
+	limit := DefaultTokenLimit
 	if w.provider.Config.ContextWindow > 0 {
-		return w.provider.Config.ContextWindow
+		limit = w.provider.Config.ContextWindow
 	}
-	// Conservative default if heartbeat hasn't discovered the context window yet
-	return 32768
+	if capStr := strings.TrimSpace(os.Getenv("LOOM_MAX_PROMPT_TOKENS")); capStr != "" {
+		if capVal, err := strconv.Atoi(capStr); err == nil && capVal > 0 && capVal < limit {
+			limit = capVal
+		}
+	}
+	return limit
 }
 
 // truncateMessages drops older conversation messages to reduce token count.
@@ -616,6 +636,7 @@ type LoopConfig struct {
 	LessonsProvider LessonsProvider
 	DB              *database.Database
 	TextMode        bool // Use simple text-based actions (~10 commands) instead of JSON (60+)
+	RequestDelay    time.Duration
 	// OnProgress is called after each successful iteration so the caller can
 	// update heartbeat timestamps and prevent stuck-agent timeouts on long tasks.
 	OnProgress func()
@@ -779,6 +800,18 @@ func (w *Worker) ExecuteTaskWithLoop(ctx context.Context, task *Task, config *Lo
 			loopResult.CompletedAt = time.Now()
 			return loopResult, ctx.Err()
 		default:
+		}
+
+		if config.RequestDelay > 0 && iteration > 0 {
+			select {
+			case <-ctx.Done():
+				loopResult.TerminalReason = "context_canceled"
+				loopResult.Iterations = iteration
+				loopResult.Actions = allActions
+				loopResult.CompletedAt = time.Now()
+				return loopResult, ctx.Err()
+			case <-time.After(config.RequestDelay):
+			}
 		}
 
 		// Handle token limits

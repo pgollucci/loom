@@ -528,6 +528,11 @@ async function apiCall(endpoint, options = {}) {
     }
 }
 
+// Ensure shared scripts can call apiCall regardless of script scoping semantics.
+if (typeof window !== 'undefined') {
+    window.apiCall = apiCall;
+}
+
 async function ensureAuth(forcePrompt = false) {
     // Skip authentication if it's disabled
     if (!AUTH_ENABLED) {
@@ -706,7 +711,19 @@ async function loadProjects() {
 }
 
 async function loadPersonas() {
-    state.personas = await apiCall('/personas');
+    const personas = await apiCall('/personas');
+    state.personas = uniquePersonas(personas);
+}
+
+function uniquePersonas(personas) {
+    const seen = new Set();
+    const list = Array.isArray(personas) ? personas : [];
+    return list.filter((p) => {
+        const name = p && typeof p.name === 'string' ? p.name.trim() : '';
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+    });
 }
 
 async function loadDecisions() {
@@ -973,7 +990,7 @@ function extractRoleName(personaName) {
 
 async function showAddAgentToProjectModal(projectId) {
     // Get available personas (the "org chart")
-    const personas = state.personas || [];
+    const personas = uniquePersonas(state.personas);
     if (personas.length === 0) {
         showToast('No personas available. Add personas to the personas directory first.', 'error');
         return;
@@ -1419,11 +1436,13 @@ function renderKanban() {
     const openBeads = filtered.filter((b) => b.status === 'open');
     const inProgressBeads = filtered.filter((b) => b.status === 'in_progress');
     const closedBeads = filtered.filter((b) => b.status === 'closed');
+    const blockedBeads = filtered.filter((b) => b.status === 'blocked');
 
     const openEl = document.getElementById('open-beads');
     const ipEl = document.getElementById('in-progress-beads');
     const closedEl = document.getElementById('closed-beads');
-    if (!openEl || !ipEl || !closedEl) return;
+    const blockedEl = document.getElementById('blocked-beads');
+    if (!openEl || !ipEl || !closedEl || !blockedEl) return;
 
     openEl.innerHTML =
         openBeads.length > 0
@@ -1437,6 +1456,10 @@ function renderKanban() {
         closedBeads.length > 0
             ? closedBeads.map(renderBeadCard).join('')
             : renderEmptyState('No closed beads yet', 'Completed beads will appear here.');
+    blockedEl.innerHTML =
+        blockedBeads.length > 0
+            ? blockedBeads.map(renderBeadCard).join('')
+            : renderEmptyState('No blocked beads', 'Blocked beads will appear here when dispatch hits a hard failure.');
 }
 
 function initKanbanDnD() {
@@ -2260,8 +2283,6 @@ async function sendReplQuery() {
 // Assign agent to project from CEO REPL
 async function assignAgentFromCeoRepl() {
     const agentSelect = document.getElementById('ceo-repl-agent-select');
-const projectSelect = document.getElementById('ceo-repl-project-select');
-const projectSelect = document.getElementById('ceo-repl-project-select');
     const projectSelect = document.getElementById('ceo-repl-project-select');
     
     const agentId = agentSelect ? agentSelect.value : '';
@@ -2313,6 +2334,7 @@ async function sendCeoReplQuery() {
     const responseEl = document.getElementById('ceo-repl-response');
     const sendBtn = document.getElementById('ceo-repl-send');
     const agentSelect = document.getElementById('ceo-repl-agent-select');
+    const projectSelect = document.getElementById('ceo-repl-project-select');
     if (!input || !responseEl || !sendBtn) return;
 
     const message = (input.value || '').trim();
@@ -2323,12 +2345,12 @@ async function sendCeoReplQuery() {
 
     // Check if an agent is selected from the dropdown
     const selectedAgentId = agentSelect ? agentSelect.value : '';
-const selectedProjectId = projectSelect ? projectSelect.value : '';
+    const selectedProjectId = projectSelect ? projectSelect.value : '';
     if (selectedAgentId) {
         // Find the selected agent and dispatch to them
         const selectedAgent = (state.agents || []).find(a => a.id === selectedAgentId);
         if (selectedAgent) {
-            return ceoReplDispatchToAgentById(selectedAgent, message, responseEl, sendBtn);
+            return ceoReplDispatchToAgentById(selectedAgent, message, responseEl, sendBtn, selectedProjectId);
         }
     }
 
@@ -2340,12 +2362,75 @@ const selectedProjectId = projectSelect ? projectSelect.value : '';
         return ceoReplDispatchToAgent(agentQuery, taskMessage, responseEl, sendBtn);
     }
 
+    // If this looks like an execution task and a project is selected, dispatch a bead.
+    if (selectedProjectId && isTaskLikeCeoPrompt(message)) {
+        return ceoReplDispatchGeneralTask(message, selectedProjectId, responseEl, sendBtn);
+    }
+
     // General query — use streaming chat completion
-    return ceoReplStreamQuery(message, responseEl, sendBtn);
+    return ceoReplStreamQuery(message, responseEl, sendBtn, selectedProjectId);
+}
+
+function isTaskLikeCeoPrompt(message) {
+    const m = (message || '').toLowerCase();
+    const taskSignals = [
+        'commit', 'pr ', 'pull request', 'implement', 'fix', 'write', 'create',
+        'update', 'add ', 'run ci', 'github actions', 'docs/', 'README', 'test'
+    ];
+    return taskSignals.some((s) => m.includes(s));
+}
+
+function pickDefaultProjectAgent(projectId) {
+    const projectAgents = (state.agents || []).filter((a) => a.project_id === projectId);
+    if (projectAgents.length === 0) return null;
+
+    const byRole = (role) => projectAgents.find((a) => (a.role || '').toLowerCase() === role && a.status === 'idle')
+        || projectAgents.find((a) => (a.role || '').toLowerCase() === role);
+
+    return byRole('project-manager')
+        || byRole('engineering-manager')
+        || projectAgents.find((a) => a.status === 'idle')
+        || projectAgents[0];
+}
+
+async function ceoReplDispatchGeneralTask(taskMessage, projectId, responseEl, sendBtn) {
+    const defaultAgent = pickDefaultProjectAgent(projectId);
+    if (defaultAgent) {
+        return ceoReplDispatchToAgentById(defaultAgent, taskMessage, responseEl, sendBtn, projectId);
+    }
+
+    // No agent available; create unassigned bead in selected project.
+    try {
+        setBusy('ceo-repl', true);
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Dispatching…';
+        responseEl.textContent = '';
+
+        const bead = await apiCall('/beads', {
+            method: 'POST',
+            skipAutoFile: true,
+            body: JSON.stringify({
+                title: taskMessage.substring(0, 100),
+                description: taskMessage,
+                type: 'task',
+                priority: 1,
+                project_id: projectId
+            })
+        });
+
+        responseEl.innerHTML = `<strong style="color:var(--success-color)">Task dispatched!</strong>\n\nBead: <code>${escapeHtml(bead.id)}</code>\nProject: <strong>${escapeHtml(projectId)}</strong>\n\nNo suitable agent was selected, so the dispatcher will claim it automatically.`;
+        setTimeout(() => loadAll(), 1000);
+    } catch (e) {
+        responseEl.innerHTML = `<span style="color:var(--danger-color)">Failed to dispatch: ${escapeHtml(e.message)}</span>`;
+    } finally {
+        setBusy('ceo-repl', false);
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+    }
 }
 
 // Dispatch a task to a specific agent selected from the dropdown
-async function ceoReplDispatchToAgentById(agent, taskMessage, responseEl, sendBtn) {
+async function ceoReplDispatchToAgentById(agent, taskMessage, responseEl, sendBtn, selectedProjectId = '') {
     const projectId = selectedProjectId || agent.project_id || uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
     if (!projectId) {
         responseEl.innerHTML = '<span style="color:var(--danger-color)">No project selected. Select a project first.</span>';
@@ -2459,16 +2544,16 @@ async function ceoReplDispatchToAgent(agentQuery, taskMessage, responseEl, sendB
 }
 
 // Stream a general CEO query via chat completion
-async function ceoReplStreamQuery(message, responseEl, sendBtn) {
+async function ceoReplStreamQuery(message, responseEl, sendBtn, selectedProjectId = '') {
     try {
         setBusy('ceo-repl', true);
         sendBtn.disabled = true;
-        sendBtn.textContent = 'Streaming…';
+        sendBtn.textContent = 'Thinking…';
         responseEl.textContent = '';
-        responseEl.classList.add('streaming');
+        responseEl.classList.remove('complete');
 
         // Build context about current project state
-        const projectId = uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
+        const projectId = selectedProjectId || uiState.project.selectedId || ((state.projects || [])[0] || {}).id || '';
         const project = state.projects.find(p => p.id === projectId);
         const projectAgents = (state.agents || []).filter(a => a.project_id === projectId);
         const agentSummary = projectAgents.map(a => `${a.name || a.role} (${a.status}${a.current_bead ? ', working on ' + a.current_bead : ''})`).join(', ');
@@ -2477,40 +2562,30 @@ async function ceoReplStreamQuery(message, responseEl, sendBtn) {
             in_progress: (state.beads || []).filter(b => b.status === 'in_progress' && b.project_id === projectId).length,
         };
 
-        const systemPrompt = `You are the CEO dashboard assistant for Loom, an autonomous agent orchestration system.
-Current project: ${project ? project.name : 'unknown'} (${projectId})
+        const contextualMessage = `Current project: ${project ? project.name : 'unknown'} (${projectId})
 Agents: ${agentSummary || 'none'}
 Beads: ${beadCounts.open} open, ${beadCounts.in_progress} in progress
 
-To dispatch a task to an agent, the user should type: agent_name: task description
-For example: "code reviewer: Review the authentication module for security issues"
+User request: ${message}`;
 
-Answer questions concisely about the system state, agents, and beads.`;
-
-        const requestBody = {
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: message }
-            ]
-        };
-
-        await createStreamingRequest('/chat/completions', requestBody, {
-            useStreaming: true,
-            onChunk: (chunk, fullContent) => {
-                responseEl.textContent = fullContent;
-                responseEl.scrollTop = responseEl.scrollHeight;
-            },
-            onComplete: () => {
-                responseEl.classList.remove('streaming');
-                responseEl.classList.add('complete');
-            },
-            onError: (error) => {
-                responseEl.classList.remove('streaming');
-                responseEl.textContent += '\n\n[Error: ' + error + ']';
-            }
+        const res = await apiCall('/repl', {
+            method: 'POST',
+            body: JSON.stringify({ message: contextualMessage })
         });
+
+        let output = res?.response || '';
+        try {
+            const parsed = JSON.parse(output);
+            if (parsed && typeof parsed === 'object' && parsed.notes) {
+                output = parsed.notes;
+            }
+        } catch {
+            // Keep raw response text
+        }
+
+        responseEl.textContent = output || 'No response returned.';
+        responseEl.classList.add('complete');
     } catch (e) {
-        responseEl.classList.remove('streaming');
         responseEl.textContent = 'Request failed: ' + (e.message || 'Unknown error');
     } finally {
         setBusy('ceo-repl', false);
@@ -2521,7 +2596,7 @@ Answer questions concisely about the system state, agents, and beads.`;
 
 function renderPersonas() {
     // Filter out templates persona (it does nothing for now)
-    const visiblePersonas = state.personas.filter(p => p.name !== 'templates');
+    const visiblePersonas = uniquePersonas(state.personas).filter(p => p.name !== 'templates');
     const html = visiblePersonas.map(persona => `
         <button type="button" class="persona-card" onclick="editPersona('${escapeHtml(persona.name)}')" aria-label="Edit persona: ${escapeHtml(persona.name)}">
             <h3>🎭 ${escapeHtml(persona.name)}</h3>
@@ -2619,30 +2694,7 @@ function renderCeoDashboard() {
     const agents = state.agents || [];
     const decisions = state.decisions || [];
 
-    // Populate the CEO REPL project dropdown for agent assignment
-if (projectSelect) {
-    const currentValue = projectSelect.value;
-    
-    // Clear existing options except the first one
-    while (projectSelect.options.length > 1) {
-        projectSelect.remove(1);
-    }
-    
-    // Add all projects
-    for (const project of (state.projects || [])) {
-        const option = document.createElement('option');
-        option.value = project.id;
-        option.textContent = project.name || project.id;
-        projectSelect.appendChild(option);
-    }
-    
-    // Restore previous selection if still valid
-    if (currentValue && Array.from(projectSelect.options).some(o => o.value === currentValue)) {
-        projectSelect.value = currentValue;
-    }
-}
-
-// Populate the CEO REPL agent dropdown with ALL agents grouped by project
+    // Populate the CEO REPL agent dropdown with ALL agents grouped by project
     const agentSelect = document.getElementById('ceo-repl-agent-select');
     if (agentSelect) {
         const currentValue = agentSelect.value;
@@ -2873,7 +2925,7 @@ function showSpawnAgentModal() {
     const personaSelect = document.getElementById('agent-persona');
     const projectSelect = document.getElementById('agent-project');
     
-    personaSelect.innerHTML = state.personas.map(p => 
+    personaSelect.innerHTML = uniquePersonas(state.personas).map(p => 
         `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`
     ).join('');
     

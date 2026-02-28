@@ -42,6 +42,7 @@ DOCKER_RUN := docker run --rm \
 TOKENHUB_RUNNING := $(shell curl -sf --connect-timeout 2 --max-time 3 http://localhost:8090/healthz > /dev/null 2>&1 && echo yes || echo no)
 DOCKER_HOST_GATEWAY := $(shell docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || echo 172.17.0.1)
 EXTERNAL_PROVIDER_URL := http://$(DOCKER_HOST_GATEWAY):8090
+LOOM_HTTP_URL ?= http://localhost:8081
 
 all: build
 
@@ -123,7 +124,7 @@ bootstrap:
 	@if [ -f bootstrap.local ]; then \
 		echo "Waiting for loom to be healthy..."; \
 		for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
-			status=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8080/health 2>/dev/null | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4); \
+			status=$$(curl -s --connect-timeout 2 --max-time 5 "$(LOOM_HTTP_URL)/health" 2>/dev/null | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4); \
 			if [ "$$status" = "healthy" ]; then \
 				echo "Loom is healthy, running bootstrap.local..."; \
 				chmod +x bootstrap.local && ./bootstrap.local; \
@@ -160,7 +161,7 @@ status:
 		printf " %s %-35s %s\n" "$$sym" "$$name" "$$label"; \
 	done || echo " ✗ No containers found. Run 'make start' to launch loom."
 	@echo ""
-	@health=$$(curl -s --connect-timeout 2 --max-time 5 http://localhost:8080/health 2>/dev/null); \
+	@health=$$(curl -s --connect-timeout 2 --max-time 5 "$(LOOM_HTTP_URL)/health" 2>/dev/null); \
 	if [ -n "$$health" ]; then \
 		status=$$(echo "$$health" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown"); \
 		if [ "$$status" = "healthy" ]; then \

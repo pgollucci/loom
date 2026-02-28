@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,7 +46,7 @@ const (
 	// providerErrorBackoff: how long a worker pauses after a provider error
 	// (502, 429, context canceled) before claiming the next bead. Prevents
 	// hot-spin loops that exhaust the tokenhub rate limit (60 RPS / IP).
-	providerErrorBackoff  = 3 * time.Second
+	defaultProviderErrorBackoff = 3 * time.Second
 	maxConcurrentRequests = 3
 )
 
@@ -220,12 +221,24 @@ func (e *Executor) workerLoop(ctx context.Context, projectID string) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(providerErrorBackoff):
+			case <-time.After(providerErrorBackoffDuration()):
 			}
 		} else {
 			<-e.semaphore // Release semaphore slot
 		}
 	}
+}
+
+func providerErrorBackoffDuration() time.Duration {
+	secsStr := strings.TrimSpace(os.Getenv("LOOM_PROVIDER_ERROR_BACKOFF_SECS"))
+	if secsStr == "" {
+		return defaultProviderErrorBackoff
+	}
+	secs, err := strconv.Atoi(secsStr)
+	if err != nil || secs <= 0 {
+		return defaultProviderErrorBackoff
+	}
+	return time.Duration(secs) * time.Second
 }
 
 // watcherLoop runs forever for a project. It wakes workers when new beads arrive,
@@ -466,6 +479,7 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 		LessonsProvider: e.lessonsProvider,
 		DB:              e.db,
 		TextMode:        !isFullModeCapable(prov),
+		RequestDelay:    loopRequestDelay(),
 		OnProgress: func() {
 			_ = e.beadManager.UpdateBead(bead.ID, map[string]interface{}{
 				"updated_at": time.Now().UTC(),
@@ -513,6 +527,18 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 		})
 	}
 	return false
+}
+
+func loopRequestDelay() time.Duration {
+	msStr := strings.TrimSpace(os.Getenv("LOOM_LLM_REQUEST_DELAY_MS"))
+	if msStr == "" {
+		return 0
+	}
+	ms, err := strconv.Atoi(msStr)
+	if err != nil || ms <= 0 {
+		return 0
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 // handleBeadError records the error in bead context and detects dispatch loops.
@@ -677,13 +703,14 @@ func buildBeadContext(bead *models.Bead, proj *models.Project) string {
 You are an autonomous coding agent. Your job is to MAKE CHANGES, COMMIT, and PUSH.
 
 WORKFLOW:
-1. Locate: read AGENTS.md, LESSONS.md, relevant files (iterations 1-3)
-2. Change: edit or write files (iterations 4-15)
-3. Verify: build and test (iterations 16-18)
-4. Land: git_commit, git_push, close_bead/done (iterations 19-21)
+1. Locate only what you need.
+2. Make the smallest correct change.
+3. Verify with focused checks.
+4. Land via git_commit + git_push.
+5. Close via close_bead or done.
 
 CRITICAL RULES:
-- You have 100 iterations. Use them.
+- Use the FEWEST iterations possible.
 - ALWAYS git_commit after making changes.
 - ALWAYS git_push after committing.
 - ALWAYS close_bead or done when the task is complete.
@@ -734,6 +761,11 @@ func readProjectFile(workDir, filename string, maxLen int) string {
 // isFullModeCapable returns true for frontier/large models that support
 // the full 60+ action JSON schema. Small/local models use text mode (14 actions).
 func isFullModeCapable(prov *provider.RegisteredProvider) bool {
+	if strings.EqualFold(os.Getenv("LOOM_FORCE_TEXT_MODE"), "1") ||
+		strings.EqualFold(os.Getenv("LOOM_FORCE_TEXT_MODE"), "true") ||
+		strings.EqualFold(os.Getenv("LOOM_FORCE_TEXT_MODE"), "yes") {
+		return false
+	}
 	if prov == nil || prov.Config == nil {
 		return false
 	}

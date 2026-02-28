@@ -307,13 +307,8 @@ func (c *Client) CreatePR(ctx context.Context, req CreatePRRequest) (*PullReques
 }
 
 // MergePR merges a pull request. method: "merge", "rebase", "squash".
-func (c *Client) MergePR(ctx context.Context, number int, method string) error {
-	if method == "" {
-		method = "merge"
-	}
-	flag := "--" + method
-	_, err := c.gh(ctx, "pr", "merge", fmt.Sprintf("%d", number), flag, "--auto")
-	return err
+func (c *Client) MergePR(_ context.Context, number int, _ string) error {
+	return fmt.Errorf("loom self-merge is disabled by policy; merge PR #%d via GitHub Actions queue after CI passes", number)
 }
 
 // ListWorkflowRuns returns the last N runs for a workflow file (e.g. "ci.yml").

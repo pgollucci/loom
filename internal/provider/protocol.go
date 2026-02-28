@@ -178,7 +178,7 @@ func (p *OpenAIProvider) CreateChatCompletion(ctx context.Context, req *ChatComp
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
 		bodyStr := string(respBody)
-		if resp.StatusCode == http.StatusBadRequest && isContextLengthError(bodyStr) {
+		if (resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusRequestEntityTooLarge) && isContextLengthError(bodyStr) {
 			return nil, &ContextLengthError{StatusCode: resp.StatusCode, Body: bodyStr}
 		}
 		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, bodyStr)

@@ -621,7 +621,10 @@ func (a *Loom) Initialize(ctx context.Context) error {
 			break
 		}
 	}
-	if !hasLoomProject {
+	disableSelfProject := strings.EqualFold(os.Getenv("LOOM_DISABLE_SELF_PROJECT"), "1") ||
+		strings.EqualFold(os.Getenv("LOOM_DISABLE_SELF_PROJECT"), "true") ||
+		strings.EqualFold(os.Getenv("LOOM_DISABLE_SELF_PROJECT"), "yes")
+	if !hasLoomProject && !disableSelfProject {
 		projectValues = append(projectValues, models.Project{
 			ID:            "loom",
 			Name:          "Loom",
@@ -2733,8 +2736,14 @@ func (a *Loom) RunReplQuery(ctx context.Context, message string) (*ReplResult, e
 		}
 		env, parseErr := actions.DecodeLenient([]byte(responseText))
 		if parseErr != nil {
-			actionResult := a.actionRouter.AutoFileParseFailure(ctx, actx, parseErr, responseText)
-			actionResults = []actions.Result{actionResult}
+			// CEO REPL supports informational responses ("actions": []).
+			// Avoid auto-filing parse-failure beads for empty-action replies.
+			if strings.Contains(responseText, "\"actions\": []") || strings.Contains(responseText, "\"actions\":[]") {
+				actionResults = []actions.Result{}
+			} else {
+				actionResult := a.actionRouter.AutoFileParseFailure(ctx, actx, parseErr, responseText)
+				actionResults = []actions.Result{actionResult}
+			}
 		} else {
 			actionResults, _ = a.actionRouter.Execute(ctx, env, actx)
 		}
