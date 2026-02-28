@@ -19,6 +19,14 @@ const LogViewer = {
     autoScroll: true,
     eventSource: null,
 
+    api(endpoint, options = {}) {
+        const fn = (typeof window !== 'undefined' && typeof window.apiCall === 'function')
+            ? window.apiCall
+            : (typeof apiCall === 'function' ? apiCall : null);
+        if (!fn) throw new ReferenceError('apiCall is not defined');
+        return fn(endpoint, options);
+    },
+
     init() {
         this.startPolling();
         this.setupEventHandlers();
@@ -28,7 +36,7 @@ const LogViewer = {
         try {
             const params = this.buildQueryParams();
             params.set('limit', '200');
-            const response = await apiCall(`/logs/recent?${params.toString()}`, { suppressToast: true });
+            const response = await this.api(`/logs/recent?${params.toString()}`, { suppressToast: true });
             if (response && response.logs) {
                 this.addLogs(response.logs);
             }
@@ -40,8 +48,8 @@ const LogViewer = {
     async fetchSystemMetrics() {
         try {
             const [status, agents] = await Promise.all([
-                apiCall('/system/status', { suppressToast: true }),
-                apiCall('/agents', { suppressToast: true })
+                this.api('/system/status', { suppressToast: true }),
+                this.api('/agents', { suppressToast: true })
             ]);
             
             return { status, agents };
