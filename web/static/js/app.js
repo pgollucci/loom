@@ -1871,6 +1871,46 @@ function renderCeoBeads() {
 
 function renderAgents() {
     const q = (uiState.agent.search || '').trim().toLowerCase();
+    
+    // Helper function to get bead title by ID
+    function getBeadTitle(beadId) {
+        if (!beadId) return '';
+        const bead = state.beads.find(b => b.id === beadId);
+        return bead ? bead.title : beadId;
+    }
+    
+    // Helper function to get performance grade color
+    function getGradeColor(grade) {
+        const gradeColors = {
+            'A': '#16a34a',  // green
+            'B': '#2563eb',  // blue
+            'C': '#eab308',  // yellow
+            'D': '#ea580c',  // orange
+            'F': '#dc2626'   // red
+        };
+        return gradeColors[grade] || '#94a3b8';
+    }
+    
+    // Helper function to get status color (from d3-charts.js STATUS_COLORS)
+    function getStatusColor(status) {
+        const statusColors = {
+            'working': '#16a34a',
+            'idle': '#2563eb',
+            'paused': '#d97706',
+            'error': '#dc2626',
+            'blocked': '#dc2626',
+            'healthy': '#16a34a',
+            'active': '#16a34a',
+            'pending': '#d97706',
+            'failed': '#dc2626',
+            'open': '#2563eb',
+            'in_progress': '#7c3aed',
+            'closed': '#64748b',
+            'done': '#059669'
+        };
+        return statusColors[(status || '').toLowerCase()] || '#94a3b8';
+    }
+    
     // Filter out templates agent (it does nothing for now)
     const visibleAgents = state.agents.filter((a) => a.persona_name !== 'templates');
     const agents = q
@@ -1882,20 +1922,36 @@ function renderAgents() {
 
     const html = agents.map(agent => {
         const statusClass = agent.status;
-        const displayName = formatAgentDisplayName(agent.name || agent.persona_name || agent.id);
+        const displayName = agent.display_name || formatAgentDisplayName(agent.name || agent.persona_name || agent.id);
+        const statusColor = getStatusColor(agent.status);
+        const beadTitle = agent.current_bead ? getBeadTitle(agent.current_bead) : '';
+        
         return `
             <div class="agent-card ${statusClass}">
                 <div class="agent-header">
                     <span class="agent-name">${escapeHtml(displayName)}</span>
-                    <span class="agent-status ${statusClass}">${agent.status}</span>
+                    <span class="agent-status ${statusClass}" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${statusColor};"></span>
+                        ${agent.status}
+                    </span>
                 </div>
+                ${agent.motivation_summary ? `<div style="font-style: italic; color: var(--text-muted); font-size: 0.9rem; margin: 0.5rem 0;">${escapeHtml(agent.motivation_summary)}</div>` : ''}
                 <div>
                     <strong>Persona:</strong> ${escapeHtml(agent.persona_name)}<br>
                     <strong>Project:</strong> ${escapeHtml(resolveProjectName(agent.project_id))}<br>
-                    ${agent.current_bead ? `<strong>Working on:</strong> ${escapeHtml(agent.current_bead)}` : ''}
+                    ${agent.current_bead ? `<strong>Working on:</strong> ${escapeHtml(beadTitle)}` : ''}
                 </div>
+                ${agent.performance_grade ? `
+                <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <strong>Grade:</strong>
+                    <span class="badge" style="background-color: ${getGradeColor(agent.performance_grade)}; color: white; font-weight: bold; padding: 0.25rem 0.5rem; border-radius: 3px;">
+                        ${escapeHtml(agent.performance_grade)}
+                    </span>
+                </div>
+                ` : ''}
                 <div style="margin-top: 1rem;">
-                    ${agent.current_bead ? `<button class="secondary" onclick="viewAgentConversation('${escapeHtml(agent.current_bead)}')" title="View conversation log">Log</button>` : ''}
+                    ${agent.current_bead ? `<button class="secondary" onclick="viewAgentConversation('${escapeHtml(agent.current_bead)}')"`
+                        title="View conversation log">Log</button>` : ''}
                     <button class="secondary" onclick="cloneAgentPersona('${agent.id}')" ${isBusy(`cloneAgent:${agent.id}`) ? 'disabled' : ''}>${isBusy(`cloneAgent:${agent.id}`) ? 'Cloning…' : 'Clone Persona'}</button>
                     <button class="danger" onclick="stopAgent('${agent.id}')" ${isBusy(`stopAgent:${agent.id}`) ? 'disabled' : ''}>${isBusy(`stopAgent:${agent.id}`) ? 'Stopping…' : 'Stop Agent'}</button>
                 </div>
@@ -1933,20 +1989,6 @@ function renderAgents() {
         }
     }
 }
-
-function renderProjects() {
-    const html = state.projects.map(project => `
-        <div class="project-card">
-            <h3>${escapeHtml(project.name)}</h3>
-            <div>
-                <strong>Branch:</strong> ${escapeHtml(project.branch)}<br>
-                <strong>Repo:</strong> ${escapeHtml(project.git_repo)}<br>
-                <strong>Agents:</strong> ${project.agents ? project.agents.length : 0}
-            </div>
-            <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                <button type="button" class="secondary" onclick="viewProject('${escapeHtml(project.id)}')">View</button>
-                <button type="button" class="secondary" onclick="showEditProjectModal('${escapeHtml(project.id)}')">Edit</button>
-                <button type="button" class="danger" onclick="deleteProject('${escapeHtml(project.id)}')">Delete</button>
             </div>
         </div>
     `).join('');
