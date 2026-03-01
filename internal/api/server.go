@@ -361,6 +361,14 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.HandleFunc("/api/v1/decisions", s.handleDecisions)
 	mux.HandleFunc("/api/v1/decisions/", s.handleDecision)
 
+	// Reviews (performance reviews and agent grading)
+	mux.HandleFunc("/api/v1/reviews", s.handleReviews)
+	mux.HandleFunc("/api/v1/reviews/", s.handleReview)
+
+	// Performance Reviews (agent grading, trends, accountability)
+	mux.HandleFunc("/api/v1/performance-reviews", s.handlePerformanceReviews)
+	mux.HandleFunc("/api/v1/performance-reviews/", s.handlePerformanceReview)
+
 	// File locks
 	mux.HandleFunc("/api/v1/file-locks", s.handleFileLocks)
 	mux.HandleFunc("/api/v1/file-locks/", s.handleFileLock)
