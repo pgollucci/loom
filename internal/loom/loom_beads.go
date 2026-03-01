@@ -656,3 +656,79 @@ func (a *Loom) CreateStimulusBead(motivation *motivation.Motivation, triggerData
 	// TODO: Use proper bead creation API
 	return "", nil
 }
+
+// attemptSelfHeal tries to automatically fix common project readiness issues.
+// Returns true if any issues were healed, false otherwise.
+func (a *Loom) attemptSelfHeal(ctx context.Context, project *models.Project, issues []string) bool {
+	if project == nil || len(issues) == 0 {
+		return false
+	}
+
+	healed := false
+
+	// Try to heal each issue
+	for _, issue := range issues {
+		// Heal: beads path missing
+		if strings.Contains(issue, "beads path missing") {
+			if a.healBeadsPathMissing(ctx, project) {
+				healed = true
+			}
+		}
+
+		// Heal: git remote access failed
+		if strings.Contains(issue, "git remote access failed") {
+			if a.healGitRemoteAccess(ctx, project) {
+				healed = true
+			}
+		}
+
+		// Heal: SSH key issues
+		if strings.Contains(issue, "ssh key generation failed") {
+			if a.healSSHKeyIssue(ctx, project) {
+				healed = true
+			}
+		}
+	}
+
+	return healed
+}
+
+func (a *Loom) healBeadsPathMissing(ctx context.Context, project *models.Project) bool {
+	// Attempt to create the beads directory structure
+	beadsPath := project.BeadsPath
+	if beadsPath == "" {
+		beadsPath = ".beads"
+	}
+	if err := os.MkdirAll(beadsPath, 0755); err != nil {
+		log.Printf("[SelfHeal] Failed to create beads path %s: %v", beadsPath, err)
+		return false
+	}
+	log.Printf("[SelfHeal] Created beads path %s for project %s", beadsPath, project.ID)
+	return true
+}
+
+func (a *Loom) healGitRemoteAccess(ctx context.Context, project *models.Project) bool {
+	// Attempt to verify and fix git remote access
+	if a.gitopsManager == nil {
+		return false
+	}
+	if err := a.gitopsManager.CheckRemoteAccess(ctx, project); err == nil {
+		log.Printf("[SelfHeal] Git remote access verified for project %s", project.ID)
+		return true
+	}
+	return false
+}
+
+func (a *Loom) healSSHKeyIssue(ctx context.Context, project *models.Project) bool {
+	// Attempt to regenerate SSH key
+	if a.gitopsManager == nil {
+		return false
+	}
+	_, err := a.gitopsManager.EnsureProjectSSHKey(project.ID)
+	if err != nil {
+		log.Printf("[SelfHeal] Failed to regenerate SSH key for project %s: %v", project.ID, err)
+		return false
+	}
+	log.Printf("[SelfHeal] Regenerated SSH key for project %s", project.ID)
+	return true
+}
