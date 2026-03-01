@@ -2,20 +2,26 @@ package feedback
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jordanhubbard/loom/internal/database"
-	"github.com/jordanhubbard/loom/internal/eventbus"
 )
 
-// Manager handles feedback operations
+// Manager handles feedback operations using in-memory storage.
+// A persistent implementation should replace the map with database calls once
+// the database schema supports it (see internal/database/migrations_feedback.go).
 type Manager struct {
-	db       *database.Database
-	eventBus *eventbus.EventBus
+	mu       sync.RWMutex
+	items    map[string]*Feedback
+	eventBus eventPublisher
 }
 
-// Feedback represents user feedback on a bead or agent action
+type eventPublisher interface {
+	Publish(topic string, payload interface{}) error
+}
+
+// Feedback represents user feedback on a bead or agent action.
 type Feedback struct {
 	ID        string                 `json:"id"`
 	BeadID    string                 `json:"bead_id,omitempty"`
@@ -30,26 +36,25 @@ type Feedback struct {
 	UpdatedAt time.Time              `json:"updated_at"`
 }
 
-// NewManager creates a new feedback manager
-func NewManager(db *database.Database, eventBus *eventbus.EventBus) *Manager {
+// NewManager creates a new feedback manager.
+func NewManager(bus eventPublisher) *Manager {
 	return &Manager{
-		db:       db,
-		eventBus: eventBus,
+		items:    make(map[string]*Feedback),
+		eventBus: bus,
 	}
 }
 
-// CreateFeedback creates new feedback
+// CreateFeedback creates new feedback.
 func (m *Manager) CreateFeedback(beadID, agentID, authorID, author, category, content string, rating int, metadata map[string]interface{}) (*Feedback, error) {
 	if rating < 1 || rating > 5 {
 		return nil, fmt.Errorf("rating must be between 1 and 5")
 	}
-
 	if category == "" {
 		return nil, fmt.Errorf("category is required")
 	}
 
 	now := time.Now()
-	feedback := &Feedback{
+	fb := &Feedback{
 		ID:        uuid.New().String(),
 		BeadID:    beadID,
 		AgentID:   agentID,
@@ -63,207 +68,75 @@ func (m *Manager) CreateFeedback(beadID, agentID, authorID, author, category, co
 		UpdatedAt: now,
 	}
 
-	// Save to database
-	dbFeedback := &database.Feedback{
-		ID:        feedback.ID,
-		BeadID:    feedback.BeadID,
-		AgentID:   feedback.AgentID,
-		AuthorID:  feedback.AuthorID,
-		Author:    feedback.Author,
-		Rating:    feedback.Rating,
-		Category:  feedback.Category,
-		Content:   feedback.Content,
-		Metadata:  feedback.Metadata,
-		CreatedAt: feedback.CreatedAt,
-		UpdatedAt: feedback.UpdatedAt,
-	}
+	m.mu.Lock()
+	m.items[fb.ID] = fb
+	m.mu.Unlock()
 
-	if err := m.db.CreateFeedback(dbFeedback); err != nil {
-		return nil, err
-	}
-
-	// Publish event to EventBus
 	if m.eventBus != nil {
-		m.publishFeedbackEvent("feedback.created", feedback)
+		_ = m.eventBus.Publish("feedback.created", fb)
 	}
-
-	return feedback, nil
+	return fb, nil
 }
 
-// GetFeedback retrieves feedback by ID
+// GetFeedback retrieves feedback by ID.
 func (m *Manager) GetFeedback(feedbackID string) (*Feedback, error) {
-	dbFeedback, err := m.db.GetFeedback(feedbackID)
-	if err != nil {
-		return nil, err
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	fb, ok := m.items[feedbackID]
+	if !ok {
+		return nil, fmt.Errorf("feedback not found: %s", feedbackID)
 	}
-
-	return &Feedback{
-		ID:        dbFeedback.ID,
-		BeadID:    dbFeedback.BeadID,
-		AgentID:   dbFeedback.AgentID,
-		AuthorID:  dbFeedback.AuthorID,
-		Author:    dbFeedback.Author,
-		Rating:    dbFeedback.Rating,
-		Category:  dbFeedback.Category,
-		Content:   dbFeedback.Content,
-		Metadata:  dbFeedback.Metadata,
-		CreatedAt: dbFeedback.CreatedAt,
-		UpdatedAt: dbFeedback.UpdatedAt,
-	}, nil
+	return fb, nil
 }
 
-// GetFeedbackByBead retrieves all feedback for a bead
-func (m *Manager) GetFeedbackByBead(beadID string) ([]*Feedback, error) {
-	dbFeedbacks, err := m.db.GetFeedbackByBeadID(beadID)
-	if err != nil {
-		return nil, err
-	}
+// ListFeedback returns all feedback, optionally filtered.
+func (m *Manager) ListFeedback(projectID, beadID, agentID string, limit int) ([]*Feedback, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	var feedbacks []*Feedback
-	for _, dbFeedback := range dbFeedbacks {
-		feedbacks = append(feedbacks, &Feedback{
-			ID:        dbFeedback.ID,
-			BeadID:    dbFeedback.BeadID,
-			AgentID:   dbFeedback.AgentID,
-			AuthorID:  dbFeedback.AuthorID,
-			Author:    dbFeedback.Author,
-			Rating:    dbFeedback.Rating,
-			Category:  dbFeedback.Category,
-			Content:   dbFeedback.Content,
-			Metadata:  dbFeedback.Metadata,
-			CreatedAt: dbFeedback.CreatedAt,
-			UpdatedAt: dbFeedback.UpdatedAt,
-		})
-	}
-
-	return feedbacks, nil
-}
-
-// GetFeedbackByAgent retrieves all feedback for an agent
-func (m *Manager) GetFeedbackByAgent(agentID string) ([]*Feedback, error) {
-	dbFeedbacks, err := m.db.GetFeedbackByAgentID(agentID)
-	if err != nil {
-		return nil, err
-	}
-
-	var feedbacks []*Feedback
-	for _, dbFeedback := range dbFeedbacks {
-		feedbacks = append(feedbacks, &Feedback{
-			ID:        dbFeedback.ID,
-			BeadID:    dbFeedback.BeadID,
-			AgentID:   dbFeedback.AgentID,
-			AuthorID:  dbFeedback.AuthorID,
-			Author:    dbFeedback.Author,
-			Rating:    dbFeedback.Rating,
-			Category:  dbFeedback.Category,
-			Content:   dbFeedback.Content,
-			Metadata:  dbFeedback.Metadata,
-			CreatedAt: dbFeedback.CreatedAt,
-			UpdatedAt: dbFeedback.UpdatedAt,
-		})
-	}
-
-	return feedbacks, nil
-}
-
-// UpdateFeedback updates feedback
-func (m *Manager) UpdateFeedback(feedbackID, authorID, category, content string, rating int) error {
-	// Verify ownership
-	dbFeedback, err := m.db.GetFeedback(feedbackID)
-	if err != nil {
-		return err
-	}
-
-	if dbFeedback.AuthorID != authorID {
-		return fmt.Errorf("unauthorized: only the author can edit their feedback")
-	}
-
-	if rating < 1 || rating > 5 {
-		return fmt.Errorf("rating must be between 1 and 5")
-	}
-
-	// Update feedback
-	if err := m.db.UpdateFeedback(feedbackID, category, content, rating); err != nil {
-		return err
-	}
-
-	// Publish event
-	if m.eventBus != nil {
-		feedback := &Feedback{
-			ID:        feedbackID,
-			BeadID:    dbFeedback.BeadID,
-			AgentID:   dbFeedback.AgentID,
-			AuthorID:  authorID,
-			Rating:    rating,
-			Category:  category,
-			Content:   content,
-			UpdatedAt: time.Now(),
+	var result []*Feedback
+	for _, fb := range m.items {
+		if beadID != "" && fb.BeadID != beadID {
+			continue
 		}
-		m.publishFeedbackEvent("feedback.updated", feedback)
-	}
-
-	return nil
-}
-
-// DeleteFeedback deletes feedback
-func (m *Manager) DeleteFeedback(feedbackID, authorID string) error {
-	// Verify ownership
-	dbFeedback, err := m.db.GetFeedback(feedbackID)
-	if err != nil {
-		return err
-	}
-
-	if dbFeedback.AuthorID != authorID {
-		return fmt.Errorf("unauthorized: only the author can delete their feedback")
-	}
-
-	// Delete feedback
-	if err := m.db.DeleteFeedback(feedbackID); err != nil {
-		return err
-	}
-
-	// Publish event
-	if m.eventBus != nil {
-		feedback := &Feedback{
-			ID:       feedbackID,
-			BeadID:   dbFeedback.BeadID,
-			AgentID:  dbFeedback.AgentID,
-			AuthorID: authorID,
+		if agentID != "" && fb.AgentID != agentID {
+			continue
 		}
-		m.publishFeedbackEvent("feedback.deleted", feedback)
+		result = append(result, fb)
+		if limit > 0 && len(result) >= limit {
+			break
+		}
 	}
+	return result, nil
+}
 
+// UpdateFeedback updates existing feedback.
+func (m *Manager) UpdateFeedback(feedbackID, content string, rating int) (*Feedback, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	fb, ok := m.items[feedbackID]
+	if !ok {
+		return nil, fmt.Errorf("feedback not found: %s", feedbackID)
+	}
+	if content != "" {
+		fb.Content = content
+	}
+	if rating >= 1 && rating <= 5 {
+		fb.Rating = rating
+	}
+	fb.UpdatedAt = time.Now()
+	return fb, nil
+}
+
+// DeleteFeedback removes feedback by ID.
+func (m *Manager) DeleteFeedback(feedbackID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.items[feedbackID]; !ok {
+		return fmt.Errorf("feedback not found: %s", feedbackID)
+	}
+	delete(m.items, feedbackID)
 	return nil
-}
-
-// GetFeedbackStats returns statistics for feedback
-func (m *Manager) GetFeedbackStats(beadID, agentID string) (map[string]interface{}, error) {
-	stats, err := m.db.GetFeedbackStats(beadID, agentID)
-	if err != nil {
-		return nil, err
-	}
-
-	return stats, nil
-}
-
-// publishFeedbackEvent publishes a feedback event to the EventBus
-func (m *Manager) publishFeedbackEvent(eventType string, feedback *Feedback) {
-	event := &eventbus.Event{
-		ID:        uuid.New().String(),
-		Type:      eventbus.EventType(eventType),
-		Timestamp: time.Now(),
-		Source:    "feedback",
-		Data: map[string]interface{}{
-			"feedback_id": feedback.ID,
-			"bead_id":     feedback.BeadID,
-			"agent_id":    feedback.AgentID,
-			"author_id":   feedback.AuthorID,
-			"author":      feedback.Author,
-			"rating":      feedback.Rating,
-			"category":    feedback.Category,
-			"content":     feedback.Content,
-		},
-	}
-
-	_ = m.eventBus.Publish(event)
 }

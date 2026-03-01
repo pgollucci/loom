@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/jordanhubbard/loom/pkg/models"
 )
 
 // handlePerformanceReviews handles GET /api/v1/performance-reviews
@@ -36,8 +34,8 @@ func (s *Server) handleGetPerformanceReviews(w http.ResponseWriter, r *http.Requ
 			"F": 0,
 		},
 		"summary": map[string]interface{}{
-			"agents_on_warning":      0,
-			"agents_at_risk":         0,
+			"agents_on_warning":         0,
+			"agents_at_risk":            0,
 			"agents_eligible_promotion": 0,
 		},
 		"agents": make([]map[string]interface{}, 0),
@@ -53,14 +51,14 @@ func (s *Server) handleGetPerformanceReviews(w http.ResponseWriter, r *http.Requ
 // handleCreatePerformanceReview creates a new performance review
 func (s *Server) handleCreatePerformanceReview(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		AgentID              string  `json:"agent_id"`
-		ProjectID            string  `json:"project_id"`
-		Cycle                string  `json:"cycle"`
-		Grade                string  `json:"grade"`
-		CompletionPercent    float64 `json:"completion_percent"`
-		EfficiencyPercent    float64 `json:"efficiency_percent"`
-		AssistCredits        float64 `json:"assist_credits"`
-		Notes                string  `json:"notes"`
+		AgentID           string  `json:"agent_id"`
+		ProjectID         string  `json:"project_id"`
+		Cycle             string  `json:"cycle"`
+		Grade             string  `json:"grade"`
+		CompletionPercent float64 `json:"completion_percent"`
+		EfficiencyPercent float64 `json:"efficiency_percent"`
+		AssistCredits     float64 `json:"assist_credits"`
+		Notes             string  `json:"notes"`
 	}
 
 	if err := s.parseJSON(r, &req); err != nil {
@@ -74,17 +72,17 @@ func (s *Server) handleCreatePerformanceReview(w http.ResponseWriter, r *http.Re
 	}
 
 	review := map[string]interface{}{
-		"id":                   generateID("perf-review"),
-		"agent_id":             req.AgentID,
-		"project_id":           req.ProjectID,
-		"cycle":                req.Cycle,
-		"grade":                req.Grade,
-		"completion_percent":   req.CompletionPercent,
-		"efficiency_percent":   req.EfficiencyPercent,
-		"assist_credits":       req.AssistCredits,
-		"notes":                req.Notes,
-		"created_at":           time.Now(),
-		"updated_at":           time.Now(),
+		"id":                 generateID("perf-review"),
+		"agent_id":           req.AgentID,
+		"project_id":         req.ProjectID,
+		"cycle":              req.Cycle,
+		"grade":              req.Grade,
+		"completion_percent": req.CompletionPercent,
+		"efficiency_percent": req.EfficiencyPercent,
+		"assist_credits":     req.AssistCredits,
+		"notes":              req.Notes,
+		"created_at":         time.Now(),
+		"updated_at":         time.Now(),
 	}
 
 	s.respondJSON(w, http.StatusCreated, review)
@@ -117,19 +115,19 @@ func (s *Server) handlePerformanceReview(w http.ResponseWriter, r *http.Request)
 // handleGetPerformanceReview retrieves a single performance review
 func (s *Server) handleGetPerformanceReview(w http.ResponseWriter, r *http.Request, id string) {
 	review := map[string]interface{}{
-		"id":                   id,
-		"agent_id":             "",
-		"project_id":           "",
-		"cycle":                "",
-		"grade":                "B",
-		"completion_percent":   85.0,
-		"efficiency_percent":   90.0,
-		"assist_credits":       10.5,
-		"notes":                "",
-		"created_at":           time.Now(),
-		"updated_at":           time.Now(),
-		"history":              make([]map[string]interface{}, 0),
-		"events":               make([]map[string]interface{}, 0),
+		"id":                 id,
+		"agent_id":           "",
+		"project_id":         "",
+		"cycle":              "",
+		"grade":              "B",
+		"completion_percent": 85.0,
+		"efficiency_percent": 90.0,
+		"assist_credits":     10.5,
+		"notes":              "",
+		"created_at":         time.Now(),
+		"updated_at":         time.Now(),
+		"history":            make([]map[string]interface{}, 0),
+		"events":             make([]map[string]interface{}, 0),
 	}
 
 	s.respondJSON(w, http.StatusOK, review)
@@ -151,13 +149,13 @@ func (s *Server) handleUpdatePerformanceReview(w http.ResponseWriter, r *http.Re
 	}
 
 	review := map[string]interface{}{
-		"id":                   id,
-		"grade":                req.Grade,
-		"completion_percent":   req.CompletionPercent,
-		"efficiency_percent":   req.EfficiencyPercent,
-		"assist_credits":       req.AssistCredits,
-		"notes":                req.Notes,
-		"updated_at":           time.Now(),
+		"id":                 id,
+		"grade":              req.Grade,
+		"completion_percent": req.CompletionPercent,
+		"efficiency_percent": req.EfficiencyPercent,
+		"assist_credits":     req.AssistCredits,
+		"notes":              req.Notes,
+		"updated_at":         time.Now(),
 	}
 
 	s.respondJSON(w, http.StatusOK, review)
@@ -195,14 +193,14 @@ func (s *Server) handlePerformanceReviewHistory(w http.ResponseWriter, r *http.R
 		"agent_id": agentID,
 		"cycles": []map[string]interface{}{
 			{
-				"cycle":                "2026-Q1",
-				"grade":                "B",
-				"completion_percent":   85.0,
-				"efficiency_percent":   90.0,
-				"assist_credits":       10.5,
-				"beads_closed":         15,
-				"beads_blocked":        2,
-				"created_at":           time.Now().AddDate(0, -1, 0),
+				"cycle":              "2026-Q1",
+				"grade":              "B",
+				"completion_percent": 85.0,
+				"efficiency_percent": 90.0,
+				"assist_credits":     10.5,
+				"beads_closed":       15,
+				"beads_blocked":      2,
+				"created_at":         time.Now().AddDate(0, -1, 0),
 			},
 		},
 		"events": []map[string]interface{}{
@@ -240,9 +238,9 @@ func (s *Server) handleOverrideGrade(w http.ResponseWriter, r *http.Request, rev
 	}
 
 	result := map[string]interface{}{
-		"review_id":   reviewID,
-		"new_grade":   req.NewGrade,
-		"reason":      req.Reason,
+		"review_id":     reviewID,
+		"new_grade":     req.NewGrade,
+		"reason":        req.Reason,
 		"overridden_at": time.Now(),
 	}
 
@@ -266,10 +264,10 @@ func (s *Server) handleRetireAgent(w http.ResponseWriter, r *http.Request, revie
 	}
 
 	result := map[string]interface{}{
-		"review_id":    reviewID,
-		"status":       "retired",
-		"reason":       req.Reason,
-		"retired_at":   time.Now(),
+		"review_id":  reviewID,
+		"status":     "retired",
+		"reason":     req.Reason,
+		"retired_at": time.Now(),
 	}
 
 	s.respondJSON(w, http.StatusOK, result)

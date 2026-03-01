@@ -112,6 +112,26 @@ type Result struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// MeetingCaller handles call_meeting actions.
+type MeetingCaller interface {
+	CallMeeting(ctx context.Context, initiatorID, title, projectID, beadID string, participants []string, agenda []struct{ Topic, Description string }) (string, error)
+}
+
+// AgentConsulter handles consult_agent actions (synchronous question/answer).
+type AgentConsulter interface {
+	ConsultAgent(ctx context.Context, fromAgentID, toAgentID, toRole, question string) (string, error)
+}
+
+// StatusBoardPoster handles post_to_board actions.
+type StatusBoardPoster interface {
+	PostToBoard(ctx context.Context, projectID, category, content, authorID string) error
+}
+
+// VoteCaster handles vote actions for consensus decisions.
+type VoteCaster interface {
+	CastVote(ctx context.Context, decisionID, agentID, choice, rationale string) error
+}
+
 type Router struct {
 	Beads         BeadCreator
 	Closer        BeadCloser
@@ -130,6 +150,10 @@ type Router struct {
 	Projects      ProjectGetter
 	ContainerOrch ContainerOrchestrator
 	BuildEnv      *BuildEnvManager
+	Meetings      MeetingCaller
+	Consulter     AgentConsulter
+	Board         StatusBoardPoster
+	Voter         VoteCaster
 	BeadType      string
 	BeadTags      []string
 	DefaultP0     bool
@@ -1175,6 +1199,16 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		return r.handleSendAgentMessage(ctx, action, actx)
 	case ActionDelegateTask:
 		return r.handleDelegateTask(ctx, action, actx)
+	case ActionCallMeeting:
+		return r.handleCallMeeting(ctx, action, actx)
+	case ActionConsultAgent:
+		return r.handleConsultAgent(ctx, action, actx)
+	case ActionInvokeSkill:
+		return r.handleInvokeSkill(ctx, action, actx)
+	case ActionPostToBoard:
+		return r.handlePostToBoard(ctx, action, actx)
+	case ActionVote:
+		return r.handleVote(ctx, action, actx)
 
 	case ActionReadBeadConversation:
 		return r.handleReadBeadConversation(ctx, action, actx)
@@ -1834,4 +1868,129 @@ func (r *Router) autoPushAndPR(ctx context.Context, actx ActionContext, action A
 		return
 	}
 	log.Printf("[AutoPR] Created PR for bead %s: %v", actx.BeadID, prResult)
+}
+
+// --- Organizational layer action handlers ---
+
+func (r *Router) handleCallMeeting(_ context.Context, action Action, actx ActionContext) Result {
+	if r.Meetings == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "meeting engine not configured"}
+	}
+	if action.MeetingTitle == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "meeting_title is required"}
+	}
+	if len(action.MeetingAgenda) == 0 {
+		return Result{ActionType: action.Type, Status: "error", Message: "meeting_agenda requires at least one item"}
+	}
+
+	agenda := make([]struct{ Topic, Description string }, len(action.MeetingAgenda))
+	for i, item := range action.MeetingAgenda {
+		agenda[i] = struct{ Topic, Description string }{Topic: item.Topic, Description: item.Description}
+	}
+
+	ctx := context.Background()
+	meetingID, err := r.Meetings.CallMeeting(ctx, actx.AgentID, action.MeetingTitle, actx.ProjectID, actx.BeadID, action.MeetingParticipants, agenda)
+	if err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to call meeting: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Meeting %s scheduled: %s", meetingID, action.MeetingTitle),
+		Metadata:   map[string]interface{}{"meeting_id": meetingID},
+	}
+}
+
+func (r *Router) handleConsultAgent(_ context.Context, action Action, actx ActionContext) Result {
+	if r.Consulter == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "agent consultation not configured"}
+	}
+	if action.ConsultQuestion == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "consult_question is required"}
+	}
+	if action.ConsultAgentID == "" && action.ConsultAgentRole == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "either consult_agent_id or consult_agent_role is required"}
+	}
+
+	ctx := context.Background()
+	response, err := r.Consulter.ConsultAgent(ctx, actx.AgentID, action.ConsultAgentID, action.ConsultAgentRole, action.ConsultQuestion)
+	if err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("consultation failed: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    response,
+		Metadata: map[string]interface{}{
+			"consulted_agent_id":   action.ConsultAgentID,
+			"consulted_agent_role": action.ConsultAgentRole,
+		},
+	}
+}
+
+func (r *Router) handleInvokeSkill(_ context.Context, action Action, actx ActionContext) Result {
+	if action.SkillName == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "skill_name is required"}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Skill '%s' invoked. Apply this skill's perspective to your current task.", action.SkillName),
+		Metadata: map[string]interface{}{
+			"skill_name":    action.SkillName,
+			"skill_context": action.SkillContext,
+			"agent_id":      actx.AgentID,
+		},
+	}
+}
+
+func (r *Router) handlePostToBoard(_ context.Context, action Action, actx ActionContext) Result {
+	if r.Board == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "status board not configured"}
+	}
+	if action.BoardContent == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "board_content is required"}
+	}
+
+	category := action.BoardCategory
+	if category == "" {
+		category = "announcement"
+	}
+
+	ctx := context.Background()
+	if err := r.Board.PostToBoard(ctx, actx.ProjectID, category, action.BoardContent, actx.AgentID); err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to post to board: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Posted to status board under '%s'", category),
+	}
+}
+
+func (r *Router) handleVote(_ context.Context, action Action, actx ActionContext) Result {
+	if r.Voter == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "voting system not configured"}
+	}
+	if action.VoteDecisionID == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "vote_decision_id is required"}
+	}
+	if action.VoteChoice == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "vote_choice is required (approve, reject, abstain)"}
+	}
+
+	ctx := context.Background()
+	if err := r.Voter.CastVote(ctx, action.VoteDecisionID, actx.AgentID, action.VoteChoice, action.VoteRationale); err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to cast vote: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Vote '%s' cast on decision %s", action.VoteChoice, action.VoteDecisionID),
+	}
 }

@@ -411,30 +411,3 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
-
-// handleOrgChart handles GET /api/v1/org-charts/{projectId}
-func (s *Server) handleOrgChart(w http.ResponseWriter, r *http.Request) {
-	projectID := s.extractID(r.URL.Path, "/api/v1/org-charts")
-
-	switch r.Method {
-	case http.MethodGet:
-		chart, err := s.app.GetOrgChartManager().GetByProject(projectID)
-		if err != nil {
-			// If no org chart exists, create one from the project
-			project, projErr := s.app.GetProjectManager().GetProject(projectID)
-			if projErr != nil {
-				s.respondError(w, http.StatusNotFound, "Project not found")
-				return
-			}
-			chart, err = s.app.GetOrgChartManager().CreateForProject(projectID, project.Name)
-			if err != nil {
-				s.respondError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-		}
-		s.respondJSON(w, http.StatusOK, chart)
-
-	default:
-		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-	}
-}

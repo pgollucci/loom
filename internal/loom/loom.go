@@ -1544,6 +1544,21 @@ func (a *Loom) GetMeetingsManager() *meetings.Manager {
 	return a.meetingsManager
 }
 
+// GetFeedbackManager returns nil; feedback is handled via bead creation.
+func (a *Loom) GetFeedbackManager() interface{} {
+	return nil
+}
+
+// GetDepartmentManager returns nil; department management is via org chart.
+func (a *Loom) GetDepartmentManager() interface{} {
+	return nil
+}
+
+// GetStatusManager returns nil; status board entries are posted via statusboard package.
+func (a *Loom) GetStatusManager() interface{} {
+	return nil
+}
+
 // GetActivityManager returns the activity manager
 func (a *Loom) GetActivityManager() *activity.Manager {
 	return a.activityManager
@@ -3900,15 +3915,30 @@ func (a *Loom) StartTaskExecutor(ctx context.Context) {
 	// Wire in CEO escalation so irrecoverable beads get human attention.
 	exec.SetCEOEscalator(loomCEOEscalator{app: a})
 
+	// Wire in the WorkerManager so the executor uses named agents instead
+	// of anonymous goroutines. This makes agent status visible in the UI
+	// and enables role-based bead routing.
+	if a.agentManager != nil {
+		exec.SetAgentManager(a.agentManager)
+	}
+
+	// Wire in the org chart for role-based routing and manager escalation.
+	if a.orgChartManager != nil {
+		exec.SetOrgChart(taskexecutor.NewOrgChartAdapter(a.orgChartManager))
+	}
+
 	a.taskExecutor = exec
 
-	// Start watcher + initial workers for all currently registered projects
+	// Start watcher + initial workers + oversight loops for all currently registered projects
 	for _, proj := range a.projectManager.ListProjects() {
 		if proj == nil || proj.ID == "" {
 			continue
 		}
 		exec.Start(ctx, proj.ID)
 	}
+
+	// Start the weekly performance review system
+	exec.StartReviewSystem(ctx)
 
 	// Watch for newly registered projects
 	ticker := time.NewTicker(30 * time.Second)

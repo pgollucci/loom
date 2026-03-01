@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
-
-	"github.com/jordanhubbard/loom/pkg/models"
 )
 
 // handleStatus handles status operations

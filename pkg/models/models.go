@@ -34,8 +34,22 @@ type Persona struct {
 	DecisionInstructions string   `json:"decision_instructions,omitempty" yaml:"decision_instructions,omitempty"` // DEPRECATED: Use Instructions
 	PersistentTasks      string   `json:"persistent_tasks,omitempty" yaml:"persistent_tasks,omitempty"`           // DEPRECATED: Use Instructions
 
+	// Three-file persona system: SKILL + MOTIVATION + PERSONALITY
+	Motivation       string `json:"motivation,omitempty" yaml:"motivation,omitempty"`                 // From MOTIVATION.md: what drives this agent
+	PersonalityDesc  string `json:"personality_desc,omitempty" yaml:"personality_desc,omitempty"`     // From PERSONALITY.md: communication style
+	AgentDisplayName string `json:"agent_display_name,omitempty" yaml:"agent_display_name,omitempty"` // Unique human-readable name
+
+	// Performance review fields
+	CurrentGrade        string   `json:"current_grade,omitempty" yaml:"current_grade,omitempty"`                 // A, B, C, D, F
+	GradeHistory        []string `json:"grade_history,omitempty" yaml:"grade_history,omitempty"`                 // Last N review grades
+	ConsecutiveLowCount int      `json:"consecutive_low_count,omitempty" yaml:"consecutive_low_count,omitempty"` // Consecutive D/F count
+	SelfOptimized       bool     `json:"self_optimized,omitempty" yaml:"self_optimized,omitempty"`               // True if agent rewrote itself
+	ClonedFrom          string   `json:"cloned_from,omitempty" yaml:"cloned_from,omitempty"`                     // Parent persona if this is a clone
+
 	// File paths
 	PersonaFile      string `json:"persona_file,omitempty" yaml:"persona_file,omitempty"`           // Path to SKILL.md
+	MotivationFile   string `json:"motivation_file,omitempty" yaml:"motivation_file,omitempty"`     // Path to MOTIVATION.md
+	PersonalityFile  string `json:"personality_file,omitempty" yaml:"personality_file,omitempty"`   // Path to PERSONALITY.md
 	InstructionsFile string `json:"instructions_file,omitempty" yaml:"instructions_file,omitempty"` // DEPRECATED: No longer used
 
 	// Timestamps

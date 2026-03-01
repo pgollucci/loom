@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/jordanhubbard/loom/pkg/models"
 )
 
 // handleDepartment handles department operations

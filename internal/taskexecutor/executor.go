@@ -1,6 +1,7 @@
-// Package taskexecutor provides a direct bead execution engine that bypasses
-// Temporal, NATS, and the WorkerPool. It spawns goroutines per project that
-// claim beads from the bead manager and run them through worker.ExecuteTaskWithLoop.
+// Package taskexecutor provides a direct bead execution engine that uses
+// named agents from the WorkerManager. It spawns goroutines per project that
+// claim beads, match them to agents by role, and run them through the agent's
+// worker. Anonymous fallback workers are used when no named agent is available.
 package taskexecutor
 
 import (
@@ -66,6 +67,24 @@ type CEOEscalator interface {
 	EscalateBeadToCEO(beadID, reason, returnedTo string) error
 }
 
+// AgentManager is the interface for the WorkerManager that the executor uses
+// to look up named agents, update their status, and match beads to agents.
+type AgentManager interface {
+	ListAgentsByProject(projectID string) []*models.Agent
+	ListAgents() []*models.Agent
+	GetAgent(id string) (*models.Agent, error)
+	UpdateAgentStatus(id, status string) error
+	AssignBead(agentID, beadID string) error
+	GetIdleAgentsByProject(projectID string) []*models.Agent
+}
+
+// OrgChartProvider gives the executor access to the org chart for role-based
+// routing and manager escalation.
+type OrgChartProvider interface {
+	GetOrgChart(projectID string) *models.OrgChart
+	GetDefaultOrgChart() *models.OrgChart
+}
+
 // projectState tracks per-project executor state.
 type projectState struct {
 	activeWorkers  int
@@ -85,7 +104,10 @@ type Executor struct {
 	actionRouter     *actions.Router
 	projectManager   *project.Manager
 	personaManager   *persona.Manager
+	agentManager     AgentManager
+	orgChart         OrgChartProvider
 	ceoEscalator     CEOEscalator
+	reviewManager    *ReviewManager
 	db               *database.Database
 	lessonsProvider  worker.LessonsProvider
 	numWorkers       int
@@ -126,6 +148,55 @@ func (e *Executor) SetCEOEscalator(esc CEOEscalator) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.ceoEscalator = esc
+}
+
+// SetAgentManager wires in the WorkerManager so the executor uses named agents.
+func (e *Executor) SetAgentManager(am AgentManager) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.agentManager = am
+}
+
+// SetOrgChart wires in the org chart provider for role-based routing.
+func (e *Executor) SetOrgChart(oc OrgChartProvider) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.orgChart = oc
+}
+
+// StartReviewSystem initializes and launches the weekly performance review loop.
+// Agents are graded A-F based on bead completion rates. Agents with consecutive
+// D/F scores are asked to self-optimize their persona files, and those that fail
+// to improve after multiple cycles are fired.
+func (e *Executor) StartReviewSystem(ctx context.Context) {
+	e.mu.Lock()
+	am := e.agentManager
+	pm := e.personaManager
+	esc := e.ceoEscalator
+	e.mu.Unlock()
+
+	if am == nil {
+		log.Printf("[Reviews] Review system not started: no agent manager configured")
+		return
+	}
+
+	rm := NewReviewManager(am, e.beadManager, pm)
+	if esc != nil {
+		rm.SetCEOEscalator(esc)
+	}
+
+	e.mu.Lock()
+	e.reviewManager = rm
+	e.mu.Unlock()
+
+	go rm.StartReviewLoop(ctx)
+}
+
+// GetReviewManager returns the review manager for API access.
+func (e *Executor) GetReviewManager() *ReviewManager {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.reviewManager
 }
 
 // SetLessonsProvider wires in the lessons provider for build failure learning.
@@ -633,9 +704,16 @@ func (e *Executor) claimNextBead(ctx context.Context, projectID, workerID string
 	return nil
 }
 
-// executeBead runs the full action loop for a claimed bead.
 // executeBead runs a bead through the worker loop. Returns true if the worker
 // should back off before claiming the next bead (provider errors, rate limits).
+//
+// When an AgentManager is configured, the executor looks up a named agent that
+// matches the bead's required role and uses that agent's persona and provider.
+// The agent's status is updated to "working" during execution and restored to
+// "idle" afterward. This makes agent activity visible in the UI.
+//
+// When no AgentManager is configured (or no matching agent is found), it falls
+// back to creating an anonymous worker like the original implementation.
 func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID string) (needsBackoff bool) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -654,32 +732,73 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 			"status":      models.BeadStatusOpen,
 			"assigned_to": "",
 		})
-		return true // no providers = back off
+		return true
 	}
 	prov := providers[0]
 
-	personaName := personaForBead(bead)
-	var loadedPersona *models.Persona
-	if e.personaManager != nil {
-		loadedPersona, _ = e.personaManager.LoadPersona(personaName)
-	}
-	if loadedPersona == nil {
-		loadedPersona = &models.Persona{
-			Name:      personaName,
-			Character: personas[personaName],
+	// Try to find a named agent from the WorkerManager that matches this bead.
+	namedAgent := e.findAgentForBead(bead)
+	var agentObj *models.Agent
+	var agentID string
+
+	if namedAgent != nil {
+		agentID = namedAgent.ID
+		agentObj = namedAgent
+
+		// Update agent status to working + assign the bead
+		e.mu.Lock()
+		am := e.agentManager
+		e.mu.Unlock()
+		if am != nil {
+			_ = am.AssignBead(namedAgent.ID, bead.ID)
+		}
+		log.Printf("[TaskExecutor] Named agent %s (%s) working on bead %s",
+			namedAgent.Name, namedAgent.Role, bead.ID)
+	} else {
+		// Fallback: anonymous worker
+		agentID = workerID
+		personaName := personaForBead(bead)
+		var loadedPersona *models.Persona
+		if e.personaManager != nil {
+			loadedPersona, _ = e.personaManager.LoadPersona(personaName)
+		}
+		if loadedPersona == nil {
+			loadedPersona = &models.Persona{
+				Name:      personaName,
+				Character: personas[personaName],
+			}
+		}
+		agentObj = &models.Agent{
+			ID:          workerID,
+			Name:        personaName,
+			PersonaName: personaName,
+			ProjectID:   bead.ProjectID,
+			ProviderID:  prov.Config.ID,
+			Status:      "working",
+			Persona:     loadedPersona,
 		}
 	}
-	agent := &models.Agent{
-		ID:          workerID,
-		Name:        personaName,
-		PersonaName: personaName,
-		ProjectID:   bead.ProjectID,
-		ProviderID:  prov.Config.ID,
-		Status:      "working",
-		Persona:     loadedPersona,
+
+	// Restore agent to idle when done (named agents only)
+	if namedAgent != nil {
+		defer func() {
+			e.mu.Lock()
+			am := e.agentManager
+			e.mu.Unlock()
+			if am != nil {
+				_ = am.UpdateAgentStatus(namedAgent.ID, "idle")
+			}
+		}()
 	}
 
-	w := worker.NewWorker(workerID, agent, prov)
+	// Resolve provider — use agent's assigned provider if available
+	if agentObj.ProviderID != "" {
+		if agentProv, err := e.providerRegistry.Get(agentObj.ProviderID); err == nil {
+			prov = agentProv
+		}
+	}
+
+	w := worker.NewWorker(agentID, agentObj, prov)
 	if e.db != nil {
 		w.SetDatabase(e.db)
 	}
@@ -701,7 +820,7 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 		MaxIterations: 100,
 		Router:        e.actionRouter,
 		ActionContext: actions.ActionContext{
-			AgentID:   workerID,
+			AgentID:   agentID,
 			BeadID:    bead.ID,
 			ProjectID: bead.ProjectID,
 		},
@@ -719,23 +838,18 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 	if err != nil {
 		log.Printf("[TaskExecutor] ExecuteTaskWithLoop error for bead %s: %v", bead.ID, err)
 		e.handleBeadError(bead, err)
-		return true // provider error — caller should back off
+		return true
 	}
 
 	log.Printf("[TaskExecutor] Bead %s finished: %s (%d iterations)",
 		bead.ID, result.TerminalReason, result.Iterations)
 
 	if result.TerminalReason == "completed" {
-		// done/close_bead action signals success — explicitly mark closed
 		_ = e.beadManager.UpdateBead(bead.ID, map[string]interface{}{
 			"status":      models.BeadStatusClosed,
 			"assigned_to": "",
 		})
 	} else if result.TerminalReason == "parse_failures" {
-		// Model failed to produce valid actions repeatedly. Accumulated conversation
-		// history is usually the cause (model gets confused by prior failed attempts).
-		// Clear the conversation context so the next attempt starts fresh, then
-		// treat as a retryable error so loop detection tracks repeated failures.
 		if e.db != nil {
 			if _, err := e.db.DB().Exec(
 				"DELETE FROM conversation_contexts WHERE bead_id = $1", bead.ID,
@@ -746,15 +860,115 @@ func (e *Executor) executeBead(ctx context.Context, bead *models.Bead, workerID 
 			}
 		}
 		e.handleBeadError(bead, fmt.Errorf("parse_failures: model failed to produce valid actions after %d iterations", result.Iterations))
-		return true // back off before next attempt
+		return true
 	} else {
-		// Any other non-successful terminal reason: reset to open for retry
 		_ = e.beadManager.UpdateBead(bead.ID, map[string]interface{}{
 			"status":      models.BeadStatusOpen,
 			"assigned_to": "",
 		})
 	}
 	return false
+}
+
+// findAgentForBead looks up a named idle agent that matches the bead's required
+// role. Uses the org chart to map bead tags/type to the right position.
+// Returns nil if no AgentManager is configured or no matching agent is idle.
+func (e *Executor) findAgentForBead(bead *models.Bead) *models.Agent {
+	e.mu.Lock()
+	am := e.agentManager
+	e.mu.Unlock()
+	if am == nil {
+		return nil
+	}
+
+	idleAgents := am.GetIdleAgentsByProject(bead.ProjectID)
+	if len(idleAgents) == 0 {
+		// Try agents not pinned to a project
+		idleAgents = am.GetIdleAgentsByProject("")
+	}
+	if len(idleAgents) == 0 {
+		return nil
+	}
+
+	targetRole := roleForBead(bead)
+
+	// First pass: exact role match
+	for _, ag := range idleAgents {
+		if roleMatches(ag.Role, targetRole) {
+			return ag
+		}
+	}
+
+	// Second pass: prefer engineering manager as generalist fallback
+	for _, ag := range idleAgents {
+		if roleMatches(ag.Role, "engineering-manager") || roleMatches(ag.Role, "Engineering Manager") {
+			return ag
+		}
+	}
+
+	// Third pass: any idle agent (skill portability — any agent can do any work)
+	if len(idleAgents) > 0 {
+		return idleAgents[0]
+	}
+
+	return nil
+}
+
+// roleForBead determines which org chart role should handle this bead.
+func roleForBead(bead *models.Bead) string {
+	// Check bead tags for explicit role hints
+	for _, tag := range bead.Tags {
+		switch strings.ToLower(tag) {
+		case "devops", "infra", "infrastructure", "ci", "cd", "pipeline":
+			return "devops-engineer"
+		case "review", "pr", "code-review":
+			return "code-reviewer"
+		case "qa", "test", "testing":
+			return "qa-engineer"
+		case "docs", "documentation":
+			return "documentation-manager"
+		case "design", "ui", "ux":
+			return "web-designer"
+		case "frontend", "web":
+			return "web-designer-engineer"
+		case "product", "feature", "roadmap":
+			return "product-manager"
+		case "project", "release", "milestone":
+			return "project-manager"
+		case "security":
+			return "code-reviewer"
+		case "remediation", "stuck", "meta":
+			return "remediation-specialist"
+		}
+	}
+
+	// Check bead type
+	switch bead.Type {
+	case "decision":
+		return "decision-maker"
+	case "feedback":
+		return "product-manager"
+	case "delegated":
+		// Delegated beads may have a target role in context
+		if role := bead.Context["delegate_to_role"]; role != "" {
+			return role
+		}
+	}
+
+	// Default: engineering manager as generalist
+	return "engineering-manager"
+}
+
+// roleMatches checks if an agent's role matches a target role, handling
+// different naming conventions (kebab-case vs Title Case).
+func roleMatches(agentRole, targetRole string) bool {
+	normalize := func(s string) string {
+		s = strings.ToLower(s)
+		s = strings.ReplaceAll(s, " ", "-")
+		s = strings.ReplaceAll(s, "_", "-")
+		return s
+	}
+	return normalize(agentRole) == normalize(targetRole)
 }
 
 // handleBeadError records the error in bead context and detects dispatch loops.

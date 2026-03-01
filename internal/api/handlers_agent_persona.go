@@ -3,8 +3,6 @@ package api
 import (
 	"net/http"
 	"strings"
-
-	"github.com/jordanhubbard/loom/pkg/models"
 )
 
 // handleAgentPersonaDetail handles GET /api/v1/agents/{id}/persona
