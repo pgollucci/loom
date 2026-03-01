@@ -2271,8 +2271,11 @@ async function cloneAgentPersona(agentId) {
 }
 
 function renderDecisions() {
+function renderDecisions() {
     const items = (state.decisions || []).filter(d => d.status !== 'closed');
-    const html = items.map(decision => {
+    const filterValue = (uiState.decision && uiState.decision.filter) || 'all';
+    const filteredItems = filterValue === 'all' ? items : items.filter(d => d.status === filterValue);
+    const html = filteredItems.map(decision => {
         const p0Class = decision.priority === 0 ? 'p0' : '';
         const claimKey = `claimDecision:${decision.id}`;
         const decideKey = `makeDecision:${decision.id}`;
@@ -2293,8 +2296,8 @@ function renderDecisions() {
                 </div>
                 <div class="decision-actions">
                     <button class="secondary" onclick="viewBead('${decision.id}')">View</button>
-                    <button onclick="claimDecision('${decision.id}')" ${isBusy(claimKey) ? 'disabled' : ''}>${isBusy(claimKey) ? 'Claiming…' : 'Claim'}</button>
-                    ${decision.status === 'in_progress' ? `<button class="secondary" onclick="makeDecision('${decision.id}')" ${isBusy(decideKey) ? 'disabled' : ''}>${isBusy(decideKey) ? 'Submitting…' : 'Decide'}</button>` : ''}
+                    <button onclick="claimDecision('${decision.id}')" ${isBusy(claimKey) ? 'disabled' : ''}>${isBusy(claimKey) ? 'Claiming...' : 'Claim'}</button>
+                    ${decision.status === 'in_progress' ? `<button class="secondary" onclick="makeDecision('${decision.id}')" ${isBusy(decideKey) ? 'disabled' : ''}>${isBusy(decideKey) ? 'Submitting...' : 'Decide'}</button>` : ''}
                 </div>
             </div>
         `;
@@ -2306,7 +2309,6 @@ function renderDecisions() {
         html ||
         renderEmptyState('No pending decisions', 'When agents escalate work requiring human input, it appears here.');
 }
-
 function renderCeoDashboard() {
     const container = document.getElementById('ceo-dashboard-summary');
     if (!container) return;

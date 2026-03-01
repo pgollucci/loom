@@ -366,7 +366,7 @@ func New(cfg *config.Config) (*Loom, error) {
 		meetingsManager:       meetingsMgr,
 		motivationRegistry:    motivationRegistry,
 		idleDetector:          idleDetector,
-	motivationEngine:     motivationEngine,
+		motivationEngine:      motivationEngine,
 		workflowEngine:        workflowEngine,
 		patternManager:        patternMgr,
 		metrics:               metrics.NewMetrics(),
