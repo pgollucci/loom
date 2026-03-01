@@ -24,7 +24,7 @@ import (
 	"github.com/jordanhubbard/loom/internal/actions"
 	"github.com/jordanhubbard/loom/internal/beads"
 	"github.com/jordanhubbard/loom/internal/database"
-	"github.com/jordanhubbard/loom/internal/dispatch"
+	"github.com/jordanhubbard/loom/internal/loopdetector"
 	"github.com/jordanhubbard/loom/internal/persona"
 	"github.com/jordanhubbard/loom/internal/project"
 	"github.com/jordanhubbard/loom/internal/provider"
@@ -1023,7 +1023,7 @@ func (e *Executor) handleBeadError(bead *models.Bead, execErr error) {
 	fresh.Context["last_run_at"] = time.Now().UTC().Format(time.RFC3339)
 
 	// Run loop detection on the updated bead context.
-	ld := dispatch.NewLoopDetector()
+	ld := loopdetector.NewLoopDetector()
 	isStuck, loopReason := ld.IsStuckInLoop(fresh)
 
 	ctxUpdate := map[string]string{
