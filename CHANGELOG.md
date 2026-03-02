@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-03-01
+
+### Added
+- add agent/model/bead metadata to all agent-generated commits
+- Fix: Add defer statements to db.Close() calls in error paths
+- add circular dependency detection tool
+- Add attemptSelfHeal function to fix missing project readiness issues
+- Add validation for invoke_skill, post_to_board, and vote actions
+- Add ModelHint field to Task struct for model selection hints
+- bd-292: Add workflows, connectors, and persona-editor panels to main SPA
+- Add ephemeralstate, modelselection, and selfoptimization managers to ...
+- Add database migrations for org chart assignments, performance review...
+- expand CEO Command Center with organizational health sections
+- expand CEO Command Center with organizational health sections
+- Add meetings section to UI
+- Phase 4: Add organizational visibility UI sections
+- Add sortColumns function and columnPriority map
+- Add persona endpoint to agent action handler
+- Add Performance Reviews tab with agent grading and accountability
+- Add performance review API endpoints for agent grading and accountabi...
+- Add Blocked column to Kanban board
+- Add Blocked column to Kanban board with styling
+- add Phase 2 handlers for feedback, status, review, and department
+- register meetings API routes in SetupRoutes
+- add GetMeetingsManager accessor method
+- Add tests for collaboration and consensus managers
+- add org chart handler functions with PUT and POST support
+- Replace CEO decision loop with real LLM call
+- add mark-and-sweep recovery for blocked beads
+
+### Changed
+- apply go fmt to loom_coverage_test.go
+- split loom.go into domain-focused files
+- Apply remaining changes: update outputJSON/outputTable signatures and...
+
+### Fixed
+- resolve go vet errors from agent-generated code
+- resolve build errors from remote agent-pushed commits
+- motivation engine blocking + duplicate bead ID + type fixes
+- restore compilable loom package after agent-split file errors
+- Fix port mismatch: change default HTTPPort from 8080 to 8081 to match...
+- Fix: Remove duplicate renderDecisions function declaration
+- Fix indentation error in Loom struct initialization
+- Fix org chart agent population: use RoleName field and UpsertOrgChart...
+- resolve build errors from agent-generated code conflicts
+- DecodeLenient falls back to simple JSON format when frontier models use it
+- correct NewManager call to not pass db parameter
+- resolve container networking to external TokenHub
+
+### Other
+- Enhanced Shutdown function with proper resource cleanup
+- EM: Reset stuck bead loom-kr9e (provider infrastructure failure)
+- EM: Reset stuck bead loom-8tw0 (provider infrastructure failure)
+- bd-291: Mark dispatch package as parked
+- Mark dispatch package as parked
+- bd-291: Move LoopDetector to standalone loopdetector package
+- Remove dispatcher field from Loom struct and all references
+- UI: Reorganize Decisions tab to show human escalations, agent-handled...
+- Wire motivation engine into Initialize - start engine on loom startup
+- Wire meetings, status board, consensus, and collaboration into loom.go
+- Enhance AgentDetailModal with action handlers
+- bd-280: Enhance agent cards with display names, performance grades, a...
+- Wire collaboration and consensus managers into Loom
+
 ## [0.1.21] - 2026-02-27
 
 ### Added
