@@ -1075,6 +1075,9 @@ func (m *WorkerManager) ResetStuckAgents(maxWorkingDuration time.Duration) int {
 				count++
 			}
 		} else if agent.Status == "paused" && agent.ProviderID != "" {
+			// Set idle now (under the lock) so RestoreAgentWorker doesn't
+			// copy "paused" back when it finds the agent already in the map.
+			agent.Status = "idle"
 			toRestore = append(toRestore, agent)
 		}
 	}
