@@ -275,6 +275,9 @@ func New(cfg *config.Config) (*Loom, error) {
 	consensusManager := consensus.NewDecisionManager()
 	statusBoard := statusboard.New()
 
+	// Create shutdown context for goroutine lifecycle management
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+
 	// Create motivation engine (will be wired after arb is created)
 	var motivationEngine *motivation.Engine
 
@@ -315,6 +318,8 @@ func New(cfg *config.Config) (*Loom, error) {
 		messageBus:            messageBus,
 		bridge:                bridge,
 		statusBoard:           statusBoard,
+		shutdownCtx:           shutdownCtx,
+		shutdownCancel:        shutdownCancel,
 	}
 
 	buildEnv := actions.NewBuildEnvManager(providerRegistry)

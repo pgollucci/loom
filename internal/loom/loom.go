@@ -1,6 +1,7 @@
 package loom
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -52,7 +53,6 @@ type projectReadinessState struct {
 	checkedAt time.Time
 }
 
-// Loom is the main orchestrator
 type Loom struct {
 	config                *config.Config
 	agentManager          *agent.WorkerManager
@@ -104,4 +104,7 @@ type Loom struct {
 	readinessFailures     map[string]time.Time
 	shutdownOnce          sync.Once
 	startedAt             time.Time
+	shutdownCtx           context.Context
+	shutdownCancel        context.CancelFunc
+	goroutineWg           sync.WaitGroup
 }
