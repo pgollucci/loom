@@ -69,3 +69,6 @@ bootstrap.local
 
 # Claude Code local settings
 .claude/
+
+# Bead store runtime data (written by tests and live server)
+internal/beads/.beads/
