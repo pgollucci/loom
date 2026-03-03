@@ -241,18 +241,17 @@ func (d *Database) DeleteExpiredConversationContexts() (int64, error) {
 
 // ListConversationContextsByProject retrieves all conversation contexts for a project
 func (d *Database) ListConversationContextsByProject(ctx context.Context, projectID string, limit int) ([]*models.ConversationContext, error) {
-	// PostgreSQL doesn't support parameter placeholders for LIMIT, so we use string formatting
-	// The limit is validated to be a positive integer by the handler
-	query := fmt.Sprintf(`
+	// Use parameterized query with proper placeholder binding
+	query := `
 		SELECT session_id, bead_id, project_id, messages,
 			   created_at, updated_at, expires_at, token_count, metadata
 		FROM conversation_contexts
-		WHERE project_id = $1
+		WHERE project_id = ?
 		ORDER BY updated_at DESC
-		LIMIT %d
-	`, limit)
+		LIMIT ?
+	`
 
-	rows, err := d.db.QueryContext(ctx, query, projectID)
+	rows, err := d.db.QueryContext(ctx, rebind(query), projectID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list conversation contexts: %w", err)
 	}
