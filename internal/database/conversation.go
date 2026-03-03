@@ -213,7 +213,9 @@ func (d *Database) DeleteExpiredConversationContexts() (int64, error) {
 }
 
 func (d *Database) ListConversationContextsByProject(queryCtx context.Context, projectID string, limit int) ([]*models.ConversationContext, error) {
-	query := "SELECT session_id, bead_id, project_id, messages, created_at, updated_at, expires_at, token_count, metadata FROM conversation_contexts WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?"
+	// Query only the metadata columns, not the full messages JSON
+	// This avoids deserializing large message histories when just listing
+	query := "SELECT session_id, bead_id, project_id, created_at, updated_at, expires_at, token_count FROM conversation_contexts WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?"
 
 	rows, err := d.db.QueryContext(queryCtx, rebind(query), projectID, limit)
 	if err != nil {
@@ -224,30 +226,24 @@ func (d *Database) ListConversationContextsByProject(queryCtx context.Context, p
 	var contexts []*models.ConversationContext
 	for rows.Next() {
 		convCtx := &models.ConversationContext{}
-		var messagesJSON, metadataJSON []byte
 
 		err := rows.Scan(
 			&convCtx.SessionID,
 			&convCtx.BeadID,
 			&convCtx.ProjectID,
-			&messagesJSON,
 			&convCtx.CreatedAt,
 			&convCtx.UpdatedAt,
 			&convCtx.ExpiresAt,
 			&convCtx.TokenCount,
-			&metadataJSON,
 		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan conversation context: %w", err)
 		}
 
-		if err := convCtx.SetMessagesFromJSON(messagesJSON); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal messages: %w", err)
-		}
-		if err := convCtx.SetMetadataFromJSON(metadataJSON); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-		}
+		// Initialize empty messages and metadata for list view
+		convCtx.Messages = []models.ChatMessage{}
+		convCtx.Metadata = make(map[string]string)
 
 		initializeEntityMetadata(convCtx)
 
