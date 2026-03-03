@@ -247,7 +247,7 @@ func (d *Database) ListConversationContextsByProject(ctx context.Context, projec
 		FROM conversation_contexts
 		WHERE project_id = ?
 		ORDER BY updated_at DESC
-		LIMIT ? :: INTEGER
+		LIMIT ?
 	`
 
 	rows, err := d.db.QueryContext(ctx, rebind(query), projectID, limit)
