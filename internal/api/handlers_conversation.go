@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -229,8 +230,16 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Get limit from query parameters (default to 50)
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed := parseInt(limitStr); parsed > 0 {
+			limit = parsed
+		}
+	}
+
 	// List conversations for the project
-	conversations, err := db.ListConversationContextsByProject(projectID)
+	conversations, err := db.ListConversationContextsByProject(context.Background(), projectID, limit)
 	if err != nil {
 		log.Printf("Error listing conversations: %v", err)
 		s.respondJSON(w, http.StatusOK, []interface{}{})
@@ -238,7 +247,7 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	}
 
 	if conversations == nil {
-		conversations = []interface{}{}
+		conversations = []*interface{}{}
 	}
 
 	s.respondJSON(w, http.StatusOK, conversations)
