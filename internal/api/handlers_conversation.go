@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"errors"
 
 	"github.com/jordanhubbard/loom/internal/database"
 )
@@ -201,6 +202,11 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	db := s.app.GetDatabase()
 	if db == nil {
 		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
+		return
+	}
+
+	if err := db.Ping(); err != nil {
+		s.respondError(w, http.StatusServiceUnavailable, "Database connection failed")
 		return
 	}
 
