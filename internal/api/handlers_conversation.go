@@ -208,20 +208,10 @@ func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) 
 
 // handleConversationsList handles listing conversations
 // GET /api/v1/conversations - List all conversations for a project
+// Gracefully degrades: returns 200 with empty list if app/db unavailable
 func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	if s.app == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Application not initialized")
-		return
-	}
-
-	db := s.app.GetDatabase()
-	if db == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
 		return
 	}
 
@@ -240,6 +230,15 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	// Graceful degradation: if app or db is unavailable, return empty list
+	if s.app == nil || s.app.GetDatabase() == nil {
+		log.Printf("[WARN] Conversations list requested but app/db unavailable, returning empty list")
+		s.respondJSON(w, http.StatusOK, []*models.ConversationContext{})
+		return
+	}
+
+	db := s.app.GetDatabase()
+
 	// Create a context with a timeout derived from the request context
 	// Use the request context as the base, with a 30-second timeout
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -249,7 +248,8 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	conversations, err := db.ListConversationContextsByProject(ctx, projectID, limit)
 	if err != nil {
 		log.Printf("Error listing conversations: %v", err)
-		s.respondError(w, http.StatusServiceUnavailable, "Failed to list conversations")
+		// Graceful degradation: return empty list on error
+		s.respondJSON(w, http.StatusOK, []*models.ConversationContext{})
 		return
 	}
 
