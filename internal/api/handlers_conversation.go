@@ -224,8 +224,9 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Create a context with a 30-second timeout for the database query
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create a context with a timeout derived from the request context
+	// Use the request context as the base, with a 30-second timeout
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
 	// List conversations for the project
