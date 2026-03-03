@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-03-03
+
+### Added
+- Fix: Add graceful degradation to handleConversation for unavailable d...
+- Fix: Add proper test setup for conversation handlers
+- Add composite index on conversation_contexts(project_id, updated_at D...
+- Fix: Add nil check for s.app in conversation handlers
+- Fix P0 API 503 error: Add missing rows.Err() check in ListConversatio...
+- Fix P0 API 503 error: Add timeout context to conversation list query
+- Fix GET /api/v1/conversations 503 error - add missing context and lim...
+- Fix API 503 error in GET /api/v1/conversations - add proper database ...
+- Fix: Add nil checks for logManager in logging API handlers
+- Fix: Add conversation_contexts table to PostgreSQL schema
+- Add Ping() method to Database struct
+- Fix conversation handler context parameter and add retry logic
+- Fix 503 error for GET /api/v1/conversations by adding retry mechanism...
+- Add tests for GET /api/v1/conversations endpoint to verify method han...
+- Fix API failure for GET /api/v1/conversations by adding database conn...
+- Add delay to simulate retry logic in handleConversationsList to addre...
+- Add logging to confirm database connection in handleConversationsList
+- Add return statement after error response in handleConversationsList
+- Add fallback definition for apiCall in LogViewer to handle undefined ...
+- Fix goroutine leaks in Initialize() by adding WaitGroup tracking
+- Add proper defer cleanup in WriteFile error paths
+
+### Changed
+- Improve PostgreSQL connection pool configuration
+- apply go fmt to loom_coverage_test.go
+
+### Fixed
+- remove broken mockApp from conversation tests; use nil app instead
+- goroutine leaks in Ralph loop and motivation engine; propagate context in action handlers
+- Fix nil pointer dereference in handleBeadConversation
+- Fix: ListConversationContextsByProject SQL placeholder issue
+- Fix: ListConversationContextsByProject query formatting for PostgreSQL
+- Fix GET /api/v1/conversations endpoint returning 500 error
+- Fix 503 error on GET /api/v1/conversations - PostgreSQL LIMIT paramet...
+- Fix conversation handler 503 errors and clean up backup files
+- Fix conversations endpoint test expectations
+- Fix P0 API failure: GET /api/v1/conversations gracefully degrades to ...
+- Fix conversation list timeout by avoiding large JSON deserialization
+- Fix 503 error in conversation list handler by using request context
+- Fix handlers_conversation_test.go: align mockApp.GetDatabase() return...
+- Fix: Mock database for conversation handler tests
+- Fix context shadowing in ListConversationContextsByProject
+- Fix conversation list test expectation
+- Fix: Return 503 Service Unavailable on database errors in handleConve...
+- Fix: Initialize EntityMetadata in conversation context retrieval
+- Fix: Use rebind() for ListConversationContextsByProject placeholder c...
+- Fix ListConversationContextsByProject query parameter binding
+- Fix SQL injection vulnerability in ListConversationContextsByProject
+- Fix GET /api/v1/conversations 503 error - PostgreSQL LIMIT parameter ...
+- Fix: Replace undefined parseInt() with inline strconv.Atoi() in conve...
+- Fix type mismatch in handleConversationsList response
+- Fix: Route /api/v1/conversations/ to list handler when no ID provided
+- Fix: Skip conversation migrations for PostgreSQL to prevent SQLite sy...
+- Fix handleConversationsList to gracefully handle nil app/database
+- Fix: Remove invalid PostgreSQL cast syntax from LIMIT clause in ListC...
+- Fix handleConversationsList to return 200 with mock data when app is nil
+- Fix 503 error in ListConversationContextsByProject by casting LIMIT p...
+- Fix: Remove unnecessary db.Ping() call in handleConversationsList
+- Fix conversation handler context parameter bug
+- Fix nil pointer dereference in conversation handlers
+- Fix handleConversationsList: move db.Ping() after nil check
+- Fix: Remove context parameter from ListConversationContextsByProject ...
+- Fix: Remove problematic 2-second sleep from /api/v1/conversations end...
+- Fix API failure for GET /api/v1/conversations by ensuring database co...
+- Fix ReferenceError: apiCall is not defined in LogViewer
+- Fix ReferenceError: apiCall is not defined in LogViewer
+- Fix 'apiCall' reference in logs.js to use the 'apiCall' function from...
+- repair agent-broken app.js (syntax errors, deleted renderProjects, duplicate const)
+- Fix ReferenceError: apiCall is not defined in logs.js
+- Fix port mismatch: change Loom to listen on 8080 instead of 8081
+- remove agent-generated duplicate files (fix_errors.go, loom_shutdown.go)
+- repair multiple agent-introduced syntax errors in loom_lifecycle.go
+- stop paused agents with providers from cycling every Ralph beat
+- Fix defer placement in AuditLogger.LogOperationWithDuration
+- improve error handling in loom_lifecycle.go
+- Fix race condition in readinessMu locking - use defer for proper mute...
+- Fix race condition in EventBus.Close() shutdown sequence
+- resolve go vet errors from agent-generated code
+- add BatchMode=yes to SSH command to prevent interactive auth att...
+
+### Removed
+- harden: remove agent artifacts, fix code holes, add commit guardrails, model tier check
+- Fix P0 API failure: remove hardcoded sleep delays in conversations en...
+
+### Other
+- Reorder conversation handlers: move handleConversationsList before ha...
+- Remove redundant s.app nil checks in conversation handlers
+- Ensure apiCall is correctly referenced in logs.js
+
 ## [0.1.22] - 2026-03-01
 
 ### Added
