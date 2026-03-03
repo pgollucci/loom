@@ -1,6 +1,7 @@
 package api
 
 import "log"
+import "time"
 import (
 	"encoding/json"
 	"fmt"
@@ -203,7 +204,10 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-    log.Println("Database connection established successfully")
+	log.Println("Database connection established successfully")
+
+	// Add a delay to simulate retry logic
+	time.Sleep(2 * time.Second)
 
 	// Get query parameters
 	projectID := r.URL.Query().Get("project_id")
