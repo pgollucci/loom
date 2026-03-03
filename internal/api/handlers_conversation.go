@@ -19,6 +19,11 @@ import (
 // POST /api/v1/conversations/{id}/reset - Reset conversation history
 // POST /api/v1/conversations/{id}/inject - Inject a message into the conversation
 func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
+	if s.app == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "Application not initialized")
+		return
+	}
+
 	db := s.app.GetDatabase()
 	if db == nil {
 		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
@@ -163,6 +168,11 @@ func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.app == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "Application not initialized")
+		return
+	}
+
 	db := s.app.GetDatabase()
 	if db == nil {
 		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
@@ -197,6 +207,11 @@ func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	if s.app == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "Application not initialized")
 		return
 	}
 
