@@ -471,6 +471,9 @@ func (d *Dispatcher) releaseCommitLock() {
 
 // DispatchOnce finds at most one ready bead and asks an idle agent to work on it.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*DispatchResult, error) {
+	if d == nil {
+		return &DispatchResult{Dispatched: false, ProjectID: projectID}, nil
+	}
 	ctx, span := telemetry.Tracer.Start(ctx, "dispatch.DispatchOnce")
 	defer span.End()
 
