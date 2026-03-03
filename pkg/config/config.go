@@ -331,7 +331,7 @@ func LoadConfig() (*Config, error) {
 func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
-			HTTPPort:     8081,
+			HTTPPort:     8080,
 			HTTPSPort:    8443,
 			GRPCPort:     9090,
 			EnableHTTP:   true,
