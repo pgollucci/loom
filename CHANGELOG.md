@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-03-03
+
+### Fixed
+- validate log handler params before nil-checking logManager; guard nil Dispatcher
+
 ## [0.1.24] - 2026-03-03
 
 ### Fixed
