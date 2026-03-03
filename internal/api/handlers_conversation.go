@@ -84,11 +84,20 @@ func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db := s.app.GetDatabase()
-	if db == nil {
+	// Graceful degradation: if app or db is unavailable, return empty list for list requests
+	if s.app == nil || s.app.GetDatabase() == nil {
+		log.Printf("[WARN] Conversation operation requested but app/db unavailable")
+		// For GET requests without a specific ID, return empty list
+		if r.Method == http.MethodGet && (len(parts) == 0 || parts[0] == "") {
+			s.respondJSON(w, http.StatusOK, []*models.ConversationContext{})
+			return
+		}
+		// For other operations, return 503
 		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
 		return
 	}
+
+	db := s.app.GetDatabase()
 
 	sessionID := parts[0]
 
