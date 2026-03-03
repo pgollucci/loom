@@ -20,12 +20,6 @@ import (
 // POST /api/v1/conversations/{id}/reset - Reset conversation history
 // POST /api/v1/conversations/{id}/inject - Inject a message into the conversation
 func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
-	// Check if app is initialized first
-	if s.app == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Application not initialized")
-		return
-	}
-
 	// Extract session ID from path
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/conversations/")
 	parts := strings.Split(path, "/")
@@ -169,11 +163,6 @@ func (s *Server) handleInjectMessage(w http.ResponseWriter, r *http.Request, ses
 func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	if s.app == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Application not initialized")
 		return
 	}
 
