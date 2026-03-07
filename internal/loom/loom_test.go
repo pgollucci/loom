@@ -239,8 +239,10 @@ func TestLoom_GetDispatcher(t *testing.T) {
 	loom, tmpDir := testLoom(t)
 	defer os.RemoveAll(tmpDir)
 
-	if loom.GetDispatcher() == nil {
-		t.Error("GetDispatcher() returned nil")
+	// GetDispatcher is deprecated; the dispatch loop was replaced by TaskExecutor.
+	// It intentionally returns nil and callers must nil-check before use.
+	if loom.GetDispatcher() != nil {
+		t.Error("GetDispatcher() should return nil (deprecated)")
 	}
 }
 
@@ -832,4 +834,22 @@ func TestLoom_setupProviderMetrics(t *testing.T) {
 
 	// Should not panic
 	loom.setupProviderMetrics()
+}
+
+func TestLoom_GetCollaborationStore(t *testing.T) {
+	loom, tmpDir := testLoom(t)
+	defer os.RemoveAll(tmpDir)
+
+	if loom.GetCollaborationStore() == nil {
+		t.Error("GetCollaborationStore() returned nil")
+	}
+}
+
+func TestLoom_GetConsensusManager(t *testing.T) {
+	loom, tmpDir := testLoom(t)
+	defer os.RemoveAll(tmpDir)
+
+	if loom.GetConsensusManager() == nil {
+		t.Error("GetConsensusManager() returned nil")
+	}
 }

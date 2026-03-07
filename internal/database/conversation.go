@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -8,7 +9,6 @@ import (
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
-// CreateConversationContext inserts a new conversation context
 func (d *Database) CreateConversationContext(ctx *models.ConversationContext) error {
 	messagesJSON, err := ctx.MessagesJSON()
 	if err != nil {
@@ -20,12 +20,7 @@ func (d *Database) CreateConversationContext(ctx *models.ConversationContext) er
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `
-		INSERT INTO conversation_contexts (
-			session_id, bead_id, project_id, messages,
-			created_at, updated_at, expires_at, token_count, metadata
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	query := "INSERT INTO conversation_contexts (session_id, bead_id, project_id, messages, created_at, updated_at, expires_at, token_count, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	_, err = d.db.Exec(rebind(query),
 		ctx.SessionID,
@@ -45,14 +40,14 @@ func (d *Database) CreateConversationContext(ctx *models.ConversationContext) er
 	return nil
 }
 
-// GetConversationContext retrieves a conversation context by session ID
+func initializeEntityMetadata(ctx *models.ConversationContext) {
+	if ctx.EntityMetadata.Attributes == nil {
+		ctx.EntityMetadata = models.NewEntityMetadata(models.ConversationSchemaVersion)
+	}
+}
+
 func (d *Database) GetConversationContext(sessionID string) (*models.ConversationContext, error) {
-	query := `
-		SELECT session_id, bead_id, project_id, messages,
-			   created_at, updated_at, expires_at, token_count, metadata
-		FROM conversation_contexts
-		WHERE session_id = ?
-	`
+	query := "SELECT session_id, bead_id, project_id, messages, created_at, updated_at, expires_at, token_count, metadata FROM conversation_contexts WHERE session_id = ?"
 
 	ctx := &models.ConversationContext{}
 	var messagesJSON, metadataJSON []byte
@@ -76,7 +71,6 @@ func (d *Database) GetConversationContext(sessionID string) (*models.Conversatio
 		return nil, fmt.Errorf("failed to get conversation context: %w", err)
 	}
 
-	// Unmarshal JSON fields
 	if err := ctx.SetMessagesFromJSON(messagesJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal messages: %w", err)
 	}
@@ -84,19 +78,13 @@ func (d *Database) GetConversationContext(sessionID string) (*models.Conversatio
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
 
+	initializeEntityMetadata(ctx)
+
 	return ctx, nil
 }
 
-// GetConversationContextByBeadID retrieves the conversation context for a specific bead
 func (d *Database) GetConversationContextByBeadID(beadID string) (*models.ConversationContext, error) {
-	query := `
-		SELECT session_id, bead_id, project_id, messages,
-			   created_at, updated_at, expires_at, token_count, metadata
-		FROM conversation_contexts
-		WHERE bead_id = ?
-		ORDER BY updated_at DESC
-		LIMIT 1
-	`
+	query := "SELECT session_id, bead_id, project_id, messages, created_at, updated_at, expires_at, token_count, metadata FROM conversation_contexts WHERE bead_id = ? ORDER BY updated_at DESC LIMIT 1"
 
 	ctx := &models.ConversationContext{}
 	var messagesJSON, metadataJSON []byte
@@ -120,7 +108,6 @@ func (d *Database) GetConversationContextByBeadID(beadID string) (*models.Conver
 		return nil, fmt.Errorf("failed to get conversation context: %w", err)
 	}
 
-	// Unmarshal JSON fields
 	if err := ctx.SetMessagesFromJSON(messagesJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal messages: %w", err)
 	}
@@ -128,10 +115,11 @@ func (d *Database) GetConversationContextByBeadID(beadID string) (*models.Conver
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
 
+	initializeEntityMetadata(ctx)
+
 	return ctx, nil
 }
 
-// InjectMessageIntoConversation injects a message into an existing conversation context
 func (d *Database) InjectMessageIntoConversation(sessionID string, message string) error {
 	ctx, err := d.GetConversationContext(sessionID)
 	if err != nil {
@@ -151,7 +139,6 @@ func (d *Database) InjectMessageIntoConversation(sessionID string, message strin
 	return d.UpdateConversationContext(ctx)
 }
 
-// UpdateConversationContext updates an existing conversation context
 func (d *Database) UpdateConversationContext(ctx *models.ConversationContext) error {
 	messagesJSON, err := ctx.MessagesJSON()
 	if err != nil {
@@ -163,11 +150,7 @@ func (d *Database) UpdateConversationContext(ctx *models.ConversationContext) er
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `
-		UPDATE conversation_contexts
-		SET messages = ?, updated_at = ?, token_count = ?, metadata = ?
-		WHERE session_id = ?
-	`
+	query := "UPDATE conversation_contexts SET messages = ?, updated_at = ?, token_count = ?, metadata = ? WHERE session_id = ?"
 
 	result, err := d.db.Exec(rebind(query),
 		messagesJSON,
@@ -193,12 +176,8 @@ func (d *Database) UpdateConversationContext(ctx *models.ConversationContext) er
 	return nil
 }
 
-// DeleteConversationContext deletes a conversation context
 func (d *Database) DeleteConversationContext(sessionID string) error {
-	query := `
-		DELETE FROM conversation_contexts
-		WHERE session_id = ?
-	`
+	query := "DELETE FROM conversation_contexts WHERE session_id = ?"
 
 	result, err := d.db.Exec(rebind(query), sessionID)
 	if err != nil {
@@ -217,13 +196,8 @@ func (d *Database) DeleteConversationContext(sessionID string) error {
 	return nil
 }
 
-// DeleteExpiredConversationContexts removes all expired conversation contexts
-// This should be called periodically (e.g., hourly cron job)
 func (d *Database) DeleteExpiredConversationContexts() (int64, error) {
-	query := `
-		DELETE FROM conversation_contexts
-		WHERE expires_at < ?
-	`
+	query := "DELETE FROM conversation_contexts WHERE expires_at < ?"
 
 	result, err := d.db.Exec(rebind(query), time.Now())
 	if err != nil {
@@ -238,18 +212,20 @@ func (d *Database) DeleteExpiredConversationContexts() (int64, error) {
 	return rows, nil
 }
 
-// ListConversationContextsByProject retrieves all conversation contexts for a project
-func (d *Database) ListConversationContextsByProject(projectID string, limit int) ([]*models.ConversationContext, error) {
-	query := `
-		SELECT session_id, bead_id, project_id, messages,
-			   created_at, updated_at, expires_at, token_count, metadata
-		FROM conversation_contexts
-		WHERE project_id = ?
-		ORDER BY updated_at DESC
-		LIMIT ?
-	`
+func (d *Database) ListConversationContextsByProject(queryCtx context.Context, projectID string, limit int) ([]*models.ConversationContext, error) {
+	// Validate limit to prevent SQL injection
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
 
-	rows, err := d.db.Query(rebind(query), projectID, limit)
+	// Query only the metadata columns, not the full messages JSON
+	// This avoids deserializing large message histories when just listing
+	query := fmt.Sprintf("SELECT session_id, bead_id, project_id, created_at, updated_at, expires_at, token_count FROM conversation_contexts WHERE project_id = ? ORDER BY updated_at DESC LIMIT %d", limit)
+
+	rows, err := d.db.QueryContext(queryCtx, rebind(query), projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list conversation contexts: %w", err)
 	}
@@ -257,55 +233,50 @@ func (d *Database) ListConversationContextsByProject(projectID string, limit int
 
 	var contexts []*models.ConversationContext
 	for rows.Next() {
-		ctx := &models.ConversationContext{}
-		var messagesJSON, metadataJSON []byte
+		convCtx := &models.ConversationContext{}
 
 		err := rows.Scan(
-			&ctx.SessionID,
-			&ctx.BeadID,
-			&ctx.ProjectID,
-			&messagesJSON,
-			&ctx.CreatedAt,
-			&ctx.UpdatedAt,
-			&ctx.ExpiresAt,
-			&ctx.TokenCount,
-			&metadataJSON,
+			&convCtx.SessionID,
+			&convCtx.BeadID,
+			&convCtx.ProjectID,
+			&convCtx.CreatedAt,
+			&convCtx.UpdatedAt,
+			&convCtx.ExpiresAt,
+			&convCtx.TokenCount,
 		)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan conversation context: %w", err)
 		}
 
-		// Unmarshal JSON fields
-		if err := ctx.SetMessagesFromJSON(messagesJSON); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal messages: %w", err)
-		}
-		if err := ctx.SetMetadataFromJSON(metadataJSON); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-		}
+		// Initialize empty messages and metadata for list view
+		convCtx.Messages = []models.ChatMessage{}
+		convCtx.Metadata = make(map[string]string)
 
-		contexts = append(contexts, ctx)
+		initializeEntityMetadata(convCtx)
+
+		contexts = append(contexts, convCtx)
+	}
+
+	// Check for errors that occurred during iteration
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating conversation contexts: %w", err)
 	}
 
 	return contexts, nil
 }
 
-// ResetConversationMessages clears the conversation history but keeps the session
-// Optionally keeps the first system message
 func (d *Database) ResetConversationMessages(sessionID string, keepSystemMessage bool) error {
-	// First get the current context to check for system message
 	ctx, err := d.GetConversationContext(sessionID)
 	if err != nil {
 		return err
 	}
 
-	// Prepare new messages array
 	var newMessages []models.ChatMessage
 	if keepSystemMessage && len(ctx.Messages) > 0 && ctx.Messages[0].Role == "system" {
 		newMessages = []models.ChatMessage{ctx.Messages[0]}
 	}
 
-	// Update the context
 	ctx.Messages = newMessages
 	ctx.TokenCount = 0
 	for _, msg := range newMessages {

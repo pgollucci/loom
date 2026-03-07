@@ -601,6 +601,17 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 			}
 		}
 
+		// Determine the model name for commit metadata.
+		modelName := ""
+		if agent.ProviderID != "" && m.providerRegistry != nil {
+			if rp, err := m.providerRegistry.Get(agent.ProviderID); err == nil && rp.Config != nil {
+				modelName = rp.Config.SelectedModel
+				if modelName == "" {
+					modelName = rp.Config.Model
+				}
+			}
+		}
+
 		loopConfig := &worker.LoopConfig{
 			MaxIterations: maxIter,
 			Router:        router,
@@ -608,6 +619,7 @@ func (m *WorkerManager) ExecuteTask(ctx context.Context, agentID string, task *w
 				AgentID:   agentID,
 				BeadID:    task.BeadID,
 				ProjectID: task.ProjectID,
+				Model:     modelName,
 			},
 			LessonsProvider: m.lessonsProvider,
 			DB:              m.db,
@@ -1063,6 +1075,9 @@ func (m *WorkerManager) ResetStuckAgents(maxWorkingDuration time.Duration) int {
 				count++
 			}
 		} else if agent.Status == "paused" && agent.ProviderID != "" {
+			// Set idle now (under the lock) so RestoreAgentWorker doesn't
+			// copy "paused" back when it finds the agent already in the map.
+			agent.Status = "idle"
 			toRestore = append(toRestore, agent)
 		}
 	}

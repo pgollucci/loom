@@ -1,1 +1,9 @@
-{"database":"dolt","jsonl_export":"issues.jsonl","backend":"dolt","dolt_server_port":3307,"dolt_server_host":"localhost"}
+{
+  "database": "dolt",
+  "jsonl_export": "issues.jsonl",
+  "backend": "dolt",
+  "dolt_server_port": 3307,
+  "dolt_server_host": "127.0.0.1",
+  "dolt_database": "beads",
+  "dolt_mode": "server"
+}

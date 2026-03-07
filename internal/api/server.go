@@ -348,6 +348,11 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Actually, we'll use a pattern that matches /beads/{id}/comments
 	mux.HandleFunc("/api/v1/comments/", s.handleComment)
 
+	// Meetings
+	mux.HandleFunc("/api/v1/meetings", s.handleMeetings)
+	mux.HandleFunc("/api/v1/meetings/", s.handleMeeting)
+	mux.HandleFunc("/api/v1/meetings/active", s.handleActiveMeetings)
+
 	// Conversations
 	mux.HandleFunc("/api/v1/conversations", s.handleConversationsList)
 	mux.HandleFunc("/api/v1/conversations/", s.handleConversation)
@@ -355,6 +360,14 @@ func (s *Server) SetupRoutes() http.Handler {
 	// Decisions
 	mux.HandleFunc("/api/v1/decisions", s.handleDecisions)
 	mux.HandleFunc("/api/v1/decisions/", s.handleDecision)
+
+	// Reviews (performance reviews and agent grading)
+	mux.HandleFunc("/api/v1/reviews", s.handleReviews)
+	mux.HandleFunc("/api/v1/reviews/", s.handleReview)
+
+	// Performance Reviews (agent grading, trends, accountability)
+	mux.HandleFunc("/api/v1/performance-reviews", s.handlePerformanceReviews)
+	mux.HandleFunc("/api/v1/performance-reviews/", s.handlePerformanceReview)
 
 	// File locks
 	mux.HandleFunc("/api/v1/file-locks", s.handleFileLocks)

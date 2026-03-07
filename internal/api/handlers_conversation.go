@@ -1,13 +1,72 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jordanhubbard/loom/internal/database"
+	"github.com/jordanhubbard/loom/pkg/models"
 )
+
+// handleConversationsList handles listing conversations
+// GET /api/v1/conversations - List all conversations for a project
+// Gracefully degrades: returns 200 with empty list if app/db unavailable
+func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	// Get project ID from query parameters
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		s.respondError(w, http.StatusBadRequest, "project_id query parameter is required")
+		return
+	}
+
+	// Get limit from query parameters (default to 50)
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	// Graceful degradation: if app or db is unavailable, return empty list
+	if s.app == nil || s.app.GetDatabase() == nil {
+		log.Printf("[WARN] Conversations list requested but app/db unavailable, returning empty list")
+		s.respondJSON(w, http.StatusOK, []*models.ConversationContext{})
+		return
+	}
+
+	db := s.app.GetDatabase()
+
+	// Create a context with a timeout derived from the request context
+	// Use the request context as the base, with a 30-second timeout
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	// List conversations for the project
+	conversations, err := db.ListConversationContextsByProject(ctx, projectID, limit)
+	if err != nil {
+		log.Printf("Error listing conversations: %v", err)
+		// Graceful degradation: return empty list on error
+		s.respondJSON(w, http.StatusOK, []*models.ConversationContext{})
+		return
+	}
+
+	if conversations == nil {
+		conversations = []*models.ConversationContext{}
+	}
+
+	s.respondJSON(w, http.StatusOK, conversations)
+}
 
 // handleConversation handles operations on a specific conversation session
 // GET /api/v1/conversations/{id} - Get full conversation
@@ -15,19 +74,30 @@ import (
 // POST /api/v1/conversations/{id}/reset - Reset conversation history
 // POST /api/v1/conversations/{id}/inject - Inject a message into the conversation
 func (s *Server) handleConversation(w http.ResponseWriter, r *http.Request) {
-	db := s.app.GetDatabase()
-	if db == nil {
+	// Extract session ID from path
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/conversations/")
+	parts := strings.Split(path, "/")
+	
+	// If no ID is provided, route to the list handler
+	if len(parts) == 0 || parts[0] == "" {
+		s.handleConversationsList(w, r)
+		return
+	}
+
+	// Graceful degradation: if app or db is unavailable, return empty list for list requests
+	if s.app == nil || s.app.GetDatabase() == nil {
+		log.Printf("[WARN] Conversation operation requested but app/db unavailable")
+		// For GET requests without a specific ID, return empty list
+		if r.Method == http.MethodGet && (len(parts) == 0 || parts[0] == "") {
+			s.respondJSON(w, http.StatusOK, []*models.ConversationContext{})
+			return
+		}
+		// For other operations, return 503
 		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
 		return
 	}
 
-	// Extract session ID from path
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/conversations/")
-	parts := strings.Split(path, "/")
-	if len(parts) == 0 || parts[0] == "" {
-		s.respondError(w, http.StatusBadRequest, "Session ID is required")
-		return
-	}
+	db := s.app.GetDatabase()
 
 	sessionID := parts[0]
 
@@ -159,6 +229,12 @@ func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Check if app is available before accessing it
+	if s.app == nil {
+		s.respondError(w, http.StatusServiceUnavailable, "Application not available")
+		return
+	}
+
 	db := s.app.GetDatabase()
 	if db == nil {
 		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
@@ -178,7 +254,7 @@ func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) 
 	session, err := db.GetConversationContextByBeadID(beadID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			s.respondError(w, http.StatusNotFound, fmt.Sprintf("No conversation found for bead: %s", beadID))
+			s.respondError(w, http.StatusNotFound, fmt.Sprintf("Conversation for bead not found: %s", beadID))
 			return
 		}
 		s.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get conversation: %v", err))
@@ -186,53 +262,4 @@ func (s *Server) handleBeadConversation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	s.respondJSON(w, http.StatusOK, session)
-}
-
-// handleConversationsList lists conversations with optional filters
-// GET /api/v1/conversations?project_id=<id>&limit=<n>
-func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		s.respondError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	db := s.app.GetDatabase()
-	if db == nil {
-		s.respondError(w, http.StatusServiceUnavailable, "Database not available")
-		return
-	}
-
-	// Get query parameters
-	projectID := r.URL.Query().Get("project_id")
-	limitStr := r.URL.Query().Get("limit")
-
-	limit := 50 // Default limit
-	if limitStr != "" {
-		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err != nil {
-			s.respondError(w, http.StatusBadRequest, "Invalid limit parameter")
-			return
-		}
-		if limit < 1 || limit > 1000 {
-			s.respondError(w, http.StatusBadRequest, "Limit must be between 1 and 1000")
-			return
-		}
-	}
-
-	// If no project_id specified, require it
-	if projectID == "" {
-		s.respondError(w, http.StatusBadRequest, "project_id parameter is required")
-		return
-	}
-
-	conversations, err := db.ListConversationContextsByProject(projectID, limit)
-	if err != nil {
-		s.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to list conversations: %v", err))
-		return
-	}
-
-	s.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"project_id":    projectID,
-		"limit":         limit,
-		"conversations": conversations,
-	})
 }

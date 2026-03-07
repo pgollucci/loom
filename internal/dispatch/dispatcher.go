@@ -1,5 +1,10 @@
 package dispatch
 
+// PARKED: This package is not active in production.
+// The TaskExecutor in internal/taskexecutor/ is the active execution engine.
+// LoopDetector has been moved to internal/loopdetector/.
+// This package exists for reference only and is not instantiated.
+
 import (
 	"context"
 	"encoding/json"
@@ -466,6 +471,9 @@ func (d *Dispatcher) releaseCommitLock() {
 
 // DispatchOnce finds at most one ready bead and asks an idle agent to work on it.
 func (d *Dispatcher) DispatchOnce(ctx context.Context, projectID string) (*DispatchResult, error) {
+	if d == nil {
+		return &DispatchResult{Dispatched: false, ProjectID: projectID}, nil
+	}
 	ctx, span := telemetry.Tracer.Start(ctx, "dispatch.DispatchOnce")
 	defer span.End()
 
