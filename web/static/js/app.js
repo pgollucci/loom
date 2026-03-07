@@ -2674,7 +2674,7 @@ function renderCeoDashboard() {
         }
 
         // Add all projects
-        for (const project of (state.projects || [])) {
+        for (const project of projects) {
             const option = document.createElement('option');
             option.value = project.id;
             option.textContent = project.name || project.id;
