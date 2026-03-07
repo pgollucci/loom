@@ -539,7 +539,7 @@ async function apiCall(endpoint, options = {}) {
 }
 
 // Ensure shared scripts can call apiCall regardless of script scoping semantics.
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && window.apiCall == null) {
     window.apiCall = apiCall;
 }
 
