@@ -9,6 +9,11 @@ func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := s.app.GetDispatcher().GetSystemStatus()
+	d := s.app.GetDispatcher()
+	if d == nil {
+		s.respondJSON(w, http.StatusOK, map[string]interface{}{"status": "ok", "dispatcher": "unavailable"})
+		return
+	}
+	status := d.GetSystemStatus()
 	s.respondJSON(w, http.StatusOK, status)
 }

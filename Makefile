@@ -40,8 +40,7 @@ DOCKER_RUN := docker run --rm \
 
 # TokenHub auto-detection for start/restart/run.
 TOKENHUB_RUNNING := $(shell curl -sf --connect-timeout 2 --max-time 3 http://localhost:8090/healthz > /dev/null 2>&1 && echo yes || echo no)
-DOCKER_HOST_GATEWAY := $(shell docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || echo 172.17.0.1)
-EXTERNAL_PROVIDER_URL := http://$(DOCKER_HOST_GATEWAY):8090
+EXTERNAL_PROVIDER_URL := http://host.docker.internal:8090/v1
 
 all: build
 

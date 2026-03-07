@@ -9,6 +9,8 @@ import (
 
 	"github.com/jordanhubbard/loom/internal/executor"
 	"github.com/jordanhubbard/loom/internal/files"
+	"github.com/jordanhubbard/loom/internal/persona"
+	"github.com/jordanhubbard/loom/pkg/config"
 	"github.com/jordanhubbard/loom/pkg/models"
 )
 
@@ -103,6 +105,7 @@ type ActionContext struct {
 	AgentID   string
 	BeadID    string
 	ProjectID string
+	Model     string // LLM model used for this agent execution (e.g. "claude-opus-4-5")
 }
 
 type Result struct {
@@ -112,27 +115,53 @@ type Result struct {
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// MeetingCaller handles call_meeting actions.
+type MeetingCaller interface {
+	CallMeeting(ctx context.Context, initiatorID, title, projectID, beadID string, participants []string, agenda []struct{ Topic, Description string }) (string, error)
+}
+
+// AgentConsulter handles consult_agent actions (synchronous question/answer).
+type AgentConsulter interface {
+	ConsultAgent(ctx context.Context, fromAgentID, toAgentID, toRole, question string) (string, error)
+}
+
+// StatusBoardPoster handles post_to_board actions.
+type StatusBoardPoster interface {
+	PostToBoard(ctx context.Context, projectID, category, content, authorID string) error
+}
+
+// VoteCaster handles vote actions for consensus decisions.
+type VoteCaster interface {
+	CastVote(ctx context.Context, decisionID, agentID, choice, rationale string) error
+}
+
 type Router struct {
-	Beads         BeadCreator
-	Closer        BeadCloser
-	Escalator     BeadEscalator
-	Commands      CommandExecutor
-	Tests         TestRunner
-	Linter        LinterRunner
-	Builder       BuildRunner
-	Files         FileManager
-	Git           GitOperator
-	Logger        ActionLogger
-	Workflow      WorkflowOperator
-	LSP           LSPOperator
-	MessageBus    MessageSender
-	BeadReader    BeadReader
-	Projects      ProjectGetter
-	ContainerOrch ContainerOrchestrator
-	BuildEnv      *BuildEnvManager
-	BeadType      string
-	BeadTags      []string
-	DefaultP0     bool
+	Beads          BeadCreator
+	Closer         BeadCloser
+	Escalator      BeadEscalator
+	Commands       CommandExecutor
+	Tests          TestRunner
+	Linter         LinterRunner
+	Builder        BuildRunner
+	Files          FileManager
+	Git            GitOperator
+	Logger         ActionLogger
+	Workflow       WorkflowOperator
+	LSP            LSPOperator
+	MessageBus     MessageSender
+	BeadReader     BeadReader
+	Projects       ProjectGetter
+	ContainerOrch  ContainerOrchestrator
+	BuildEnv       *BuildEnvManager
+	Meetings       MeetingCaller
+	Consulter      AgentConsulter
+	Board          StatusBoardPoster
+	Voter          VoteCaster
+	PersonaManager *persona.Manager
+	BeadType       string
+	BeadTags       []string
+	DefaultP0      bool
+	Cfg            *config.Config
 }
 
 // getProjectWorkDir returns the working directory for a project
@@ -177,6 +206,21 @@ func (r *Router) runBuildForProject(ctx context.Context, actx ActionContext, exp
 		Command:    buildCmd,
 		WorkingDir: workDir,
 		Timeout:    300,
+	})
+}
+
+// runCommandInProject runs an arbitrary shell command in the project work directory.
+func (r *Router) runCommandInProject(ctx context.Context, actx ActionContext, command string, timeoutSecs int) (*executor.ExecuteCommandResult, error) {
+	if r.Commands == nil {
+		return nil, nil
+	}
+	return r.Commands.ExecuteCommand(ctx, executor.ExecuteCommandRequest{
+		AgentID:    actx.AgentID,
+		BeadID:     actx.BeadID,
+		ProjectID:  actx.ProjectID,
+		Command:    command,
+		WorkingDir: r.getProjectWorkDir(actx.ProjectID),
+		Timeout:    timeoutSecs,
 	})
 }
 
@@ -480,8 +524,12 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		// Auto-generate commit message if not provided
 		message := action.CommitMessage
 		if message == "" {
-			message = fmt.Sprintf("feat: Update from bead %s\n\nBead: %s\nAgent: %s\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>",
-				actx.BeadID, actx.BeadID, actx.AgentID)
+			message = fmt.Sprintf("feat: Update from bead %s\n\nBead: %s\nAgent: %s\nModel: %s\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+				actx.BeadID, actx.BeadID, actx.AgentID, actx.Model)
+		} else if !strings.Contains(message, "Bead:") {
+			// Append metadata trailers to agent-provided message if missing
+			message = fmt.Sprintf("%s\n\nBead: %s\nAgent: %s\nModel: %s",
+				message, actx.BeadID, actx.AgentID, actx.Model)
 		}
 
 		result, err := r.Git.Commit(ctx, actx.BeadID, actx.AgentID, message, action.Files, len(action.Files) == 0)
@@ -507,8 +555,8 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		message := action.CommitMessage
 		if message == "" {
 			// Auto-generate checkpoint message with [WIP] prefix
-			message = fmt.Sprintf("[WIP] Checkpoint commit\n\nBead: %s\nAgent: %s\n\nThis is a work-in-progress checkpoint commit to preserve incremental changes.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>",
-				actx.BeadID, actx.AgentID)
+			message = fmt.Sprintf("[WIP] Checkpoint commit\n\nBead: %s\nAgent: %s\nModel: %s\n\nThis is a work-in-progress checkpoint commit to preserve incremental changes.\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+				actx.BeadID, actx.AgentID, actx.Model)
 		} else {
 			// Ensure WIP prefix is present
 			if !strings.HasPrefix(message, "[WIP]") {
@@ -1175,6 +1223,16 @@ func (r *Router) executeAction(ctx context.Context, action Action, actx ActionCo
 		return r.handleSendAgentMessage(ctx, action, actx)
 	case ActionDelegateTask:
 		return r.handleDelegateTask(ctx, action, actx)
+	case ActionCallMeeting:
+		return r.handleCallMeeting(ctx, action, actx)
+	case ActionConsultAgent:
+		return r.handleConsultAgent(ctx, action, actx)
+	case ActionInvokeSkill:
+		return r.handleInvokeSkill(ctx, action, actx)
+	case ActionPostToBoard:
+		return r.handlePostToBoard(ctx, action, actx)
+	case ActionVote:
+		return r.handleVote(ctx, action, actx)
 
 	case ActionReadBeadConversation:
 		return r.handleReadBeadConversation(ctx, action, actx)
@@ -1761,7 +1819,16 @@ func (r *Router) runQualityGate(ctx context.Context, actx ActionContext, action 
 			buildResult.ExitCode, buildResult.Stdout, buildResult.Stderr)
 	}
 
-	// Test gate (best-effort, non-blocking for now)
+	// go vet gate (blocking for Go projects when enabled)
+	if r.Cfg == nil || r.Cfg.Agents.PreCommitChecks.Vet {
+		vetResult, _ := r.runCommandInProject(ctx, actx, "if [ -f go.mod ]; then go vet ./...; fi", 120)
+		if vetResult != nil && !vetResult.Success && vetResult.ExitCode > 0 {
+			return fmt.Sprintf("commit blocked: go vet failed (exit %d).\n\nFix all vet errors before committing.\n\nstdout:\n%s\nstderr:\n%s",
+				vetResult.ExitCode, vetResult.Stdout, vetResult.Stderr)
+		}
+	}
+
+	// Test gate (blocking when TestsBlocking=true, non-blocking otherwise)
 	if r.Tests != nil {
 		projectPath := r.getProjectWorkDir(actx.ProjectID)
 		testResult, testErr := r.Tests.Run(ctx, projectPath, "", "", 120)
@@ -1769,8 +1836,20 @@ func (r *Router) runQualityGate(ctx context.Context, actx ActionContext, action 
 			log.Printf("[QualityGate] Test runner error (non-blocking): %v", testErr)
 		} else if testResult != nil {
 			if passed, ok := testResult["passed"].(bool); ok && !passed {
+				if r.Cfg != nil && r.Cfg.Agents.PreCommitChecks.TestsBlocking {
+					return fmt.Sprintf("commit blocked: tests failed.\n\n%v", testResult)
+				}
 				log.Printf("[QualityGate] Tests failed for %s (non-blocking): %v", actx.ProjectID, testResult)
 			}
+		}
+	}
+
+	// JS syntax gate (blocking when SyntaxError detected)
+	if r.Cfg == nil || r.Cfg.Agents.PreCommitChecks.SyntaxCheckJS {
+		jsResult, _ := r.runCommandInProject(ctx, actx,
+			`git diff --staged --name-only --diff-filter=ACMR | grep '\.js$' | xargs -r node --check 2>&1 || true`, 30)
+		if jsResult != nil && strings.Contains(jsResult.Stdout, "SyntaxError") {
+			return fmt.Sprintf("commit blocked: JavaScript syntax error detected.\n\n%s", jsResult.Stdout)
 		}
 	}
 
@@ -1834,4 +1913,141 @@ func (r *Router) autoPushAndPR(ctx context.Context, actx ActionContext, action A
 		return
 	}
 	log.Printf("[AutoPR] Created PR for bead %s: %v", actx.BeadID, prResult)
+}
+
+// --- Organizational layer action handlers ---
+
+func (r *Router) handleCallMeeting(ctx context.Context, action Action, actx ActionContext) Result {
+	if r.Meetings == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "meeting engine not configured"}
+	}
+	if action.MeetingTitle == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "meeting_title is required"}
+	}
+	if len(action.MeetingAgenda) == 0 {
+		return Result{ActionType: action.Type, Status: "error", Message: "meeting_agenda requires at least one item"}
+	}
+
+	agenda := make([]struct{ Topic, Description string }, len(action.MeetingAgenda))
+	for i, item := range action.MeetingAgenda {
+		agenda[i] = struct{ Topic, Description string }{Topic: item.Topic, Description: item.Description}
+	}
+
+	meetingID, err := r.Meetings.CallMeeting(ctx, actx.AgentID, action.MeetingTitle, actx.ProjectID, actx.BeadID, action.MeetingParticipants, agenda)
+	if err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to call meeting: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Meeting %s scheduled: %s", meetingID, action.MeetingTitle),
+		Metadata:   map[string]interface{}{"meeting_id": meetingID},
+	}
+}
+
+func (r *Router) handleConsultAgent(ctx context.Context, action Action, actx ActionContext) Result {
+	if r.Consulter == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "agent consultation not configured"}
+	}
+	if action.ConsultQuestion == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "consult_question is required"}
+	}
+	if action.ConsultAgentID == "" && action.ConsultAgentRole == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "either consult_agent_id or consult_agent_role is required"}
+	}
+
+	response, err := r.Consulter.ConsultAgent(ctx, actx.AgentID, action.ConsultAgentID, action.ConsultAgentRole, action.ConsultQuestion)
+	if err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("consultation failed: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    response,
+		Metadata: map[string]interface{}{
+			"consulted_agent_id":   action.ConsultAgentID,
+			"consulted_agent_role": action.ConsultAgentRole,
+		},
+	}
+}
+
+func (r *Router) handleInvokeSkill(_ context.Context, action Action, actx ActionContext) Result {
+	if action.SkillName == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "skill_name is required"}
+	}
+
+	if r.PersonaManager == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "persona manager not configured"}
+	}
+
+	personaObj, err := r.PersonaManager.LoadPersona(action.SkillName)
+	if err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to load skill '%s': %v", action.SkillName, err)}
+	}
+
+	skillContent := personaObj.Instructions
+	if action.SkillContext != "" {
+		skillContent = fmt.Sprintf("%s\n\n---\n\nContext for this invocation:\n%s", skillContent, action.SkillContext)
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Skill '%s' loaded and ready to apply.", action.SkillName),
+		Metadata: map[string]interface{}{
+			"skill_name":    action.SkillName,
+			"skill_content": skillContent,
+			"agent_id":      actx.AgentID,
+			"persona_name":  personaObj.Name,
+			"persona_desc":  personaObj.Description,
+		},
+	}
+}
+
+func (r *Router) handlePostToBoard(ctx context.Context, action Action, actx ActionContext) Result {
+	if r.Board == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "status board not configured"}
+	}
+	if action.BoardContent == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "board_content is required"}
+	}
+
+	category := action.BoardCategory
+	if category == "" {
+		category = "announcement"
+	}
+
+	if err := r.Board.PostToBoard(ctx, actx.ProjectID, category, action.BoardContent, actx.AgentID); err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to post to board: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Posted to status board under '%s'", category),
+	}
+}
+
+func (r *Router) handleVote(ctx context.Context, action Action, actx ActionContext) Result {
+	if r.Voter == nil {
+		return Result{ActionType: action.Type, Status: "error", Message: "voting system not configured"}
+	}
+	if action.VoteDecisionID == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "vote_decision_id is required"}
+	}
+	if action.VoteChoice == "" {
+		return Result{ActionType: action.Type, Status: "error", Message: "vote_choice is required (approve, reject, abstain)"}
+	}
+
+	if err := r.Voter.CastVote(ctx, action.VoteDecisionID, actx.AgentID, action.VoteChoice, action.VoteRationale); err != nil {
+		return Result{ActionType: action.Type, Status: "error", Message: fmt.Sprintf("failed to cast vote: %v", err)}
+	}
+
+	return Result{
+		ActionType: action.Type,
+		Status:     "executed",
+		Message:    fmt.Sprintf("Vote '%s' cast on decision %s", action.VoteChoice, action.VoteDecisionID),
+	}
 }

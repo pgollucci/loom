@@ -389,17 +389,13 @@ func (m *Manager) WriteFile(ctx context.Context, projectID, relPath, content str
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
+	defer tmpFile.Close()
 	tmpPath := tmpFile.Name()
 
 	n, writeErr := tmpFile.WriteString(content)
-	closeErr := tmpFile.Close()
 	if writeErr != nil {
 		os.Remove(tmpPath)
 		return nil, fmt.Errorf("failed to write file: %w", writeErr)
-	}
-	if closeErr != nil {
-		os.Remove(tmpPath)
-		return nil, fmt.Errorf("failed to close file: %w", closeErr)
 	}
 
 	// Rename temp file to target (atomic on most filesystems)
@@ -413,8 +409,6 @@ func (m *Manager) WriteFile(ctx context.Context, projectID, relPath, content str
 		BytesWritten: int64(n),
 	}, nil
 }
-
-// MoveFile moves a file from source to target path within the project
 func (m *Manager) MoveFile(ctx context.Context, projectID, sourceRelPath, targetRelPath string) error {
 	if strings.TrimSpace(sourceRelPath) == "" {
 		return fmt.Errorf("source path is required")
