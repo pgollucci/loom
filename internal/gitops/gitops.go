@@ -702,7 +702,7 @@ func (m *Manager) configureAuth(cmd *exec.Cmd, project *models.Project) error {
 		escapedKeyPath := shellEscape(sshKeyPath)
 		cmd.Env = append(cmd.Env,
 			"GIT_TERMINAL_PROMPT=0",
-			fmt.Sprintf("GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o UserKnownHostsFile=/home/loom/.ssh/known_hosts", escapedKeyPath),
+			fmt.Sprintf("GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile=/home/loom/.ssh/known_hosts", escapedKeyPath),
 		)
 		return nil
 

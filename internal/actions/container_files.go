@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/jordanhubbard/loom/internal/containers"
 )
@@ -188,8 +189,11 @@ func (r *Router) containerGitCommit(ctx context.Context, actx ActionContext, act
 
 	message := action.CommitMessage
 	if message == "" {
-		message = fmt.Sprintf("feat: Update from bead %s\n\nBead: %s\nAgent: %s",
-			actx.BeadID, actx.BeadID, actx.AgentID)
+		message = fmt.Sprintf("feat: Update from bead %s\n\nBead: %s\nAgent: %s\nModel: %s",
+			actx.BeadID, actx.BeadID, actx.AgentID, actx.Model)
+	} else if !strings.Contains(message, "Bead:") {
+		message = fmt.Sprintf("%s\n\nBead: %s\nAgent: %s\nModel: %s",
+			message, actx.BeadID, actx.AgentID, actx.Model)
 	}
 
 	res, err := agent.GitCommit(ctx, message, action.Files)
