@@ -927,6 +927,18 @@ func (m *Manager) LoadBeadsFromFilesystem(projectID, beadsPath string) error {
 		if bead.ProjectID == "" && projectID != "" {
 			bead.ProjectID = projectID
 		}
+		// Duplicate-ID guard: if we already have this bead and it is open/in_progress,
+		// don't overwrite it with a closed version (e.g. a test-artifact file with a
+		// recycled ID). Prefer the active state so live work isn't silently hidden.
+		if existing, ok := m.beads[bead.ID]; ok {
+			existingActive := existing.Status == models.BeadStatusOpen || existing.Status == models.BeadStatusInProgress
+			newClosed := bead.Status == models.BeadStatusClosed
+			if existingActive && newClosed {
+				fmt.Fprintf(os.Stderr, "Warning: duplicate bead ID %s: keeping %s (active) over %s (closed)\n",
+					bead.ID, m.beadFiles[bead.ID], beadPath)
+				continue
+			}
+		}
 		m.beads[bead.ID] = &bead
 		m.workGraph.Beads[bead.ID] = &bead
 		m.beadFiles[bead.ID] = beadPath

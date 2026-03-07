@@ -10,43 +10,38 @@ type SchemaVersion string
 
 const (
 	// Current schema versions for each entity type
-	AgentSchemaVersion    SchemaVersion = "1.0"
-	ProjectSchemaVersion  SchemaVersion = "1.0"
-	ProviderSchemaVersion SchemaVersion = "1.0"
-	OrgChartSchemaVersion SchemaVersion = "1.0"
-	PositionSchemaVersion SchemaVersion = "1.0"
-	PersonaSchemaVersion  SchemaVersion = "1.0"
-	BeadSchemaVersion     SchemaVersion = "1.0"
+	AgentSchemaVersion             SchemaVersion = "1.0"
+	ProjectSchemaVersion           SchemaVersion = "1.0"
+	ProviderSchemaVersion          SchemaVersion = "1.0"
+	OrgChartSchemaVersion          SchemaVersion = "1.0"
+	PositionSchemaVersion          SchemaVersion = "1.0"
+	PersonaSchemaVersion           SchemaVersion = "1.0"
+	BeadSchemaVersion              SchemaVersion = "1.0"
+	ReviewSchemaVersion            SchemaVersion = "1.0"
+	PerformanceReviewSchemaVersion SchemaVersion = "1.0"
 )
 
 // EntityType identifies the type of entity for migration purposes
 type EntityType string
 
 const (
-	EntityTypeAgent    EntityType = "agent"
-	EntityTypeProject  EntityType = "project"
-	EntityTypeProvider EntityType = "provider"
-	EntityTypeOrgChart EntityType = "orgchart"
-	EntityTypePosition EntityType = "position"
-	EntityTypePersona  EntityType = "persona"
-	EntityTypeBead     EntityType = "bead"
+	EntityTypeAgent             EntityType = "agent"
+	EntityTypeProject           EntityType = "project"
+	EntityTypeProvider          EntityType = "provider"
+	EntityTypeOrgChart          EntityType = "orgchart"
+	EntityTypePosition          EntityType = "position"
+	EntityTypePersona           EntityType = "persona"
+	EntityTypeBead              EntityType = "bead"
+	EntityTypeReview            EntityType = "review"
+	EntityTypePerformanceReview EntityType = "performance_review"
 )
 
 // EntityMetadata contains versioning and extensibility fields for all entities
 type EntityMetadata struct {
-	// SchemaVersion tracks the schema version when this entity was created/updated
-	SchemaVersion SchemaVersion `json:"schema_version,omitempty"`
-
-	// Attributes provides extensible key-value storage for fields that don't
-	// require schema changes. Use this for optional, additive fields.
-	// Keys should be namespaced (e.g., "ui.color", "metrics.last_run")
-	Attributes map[string]any `json:"attributes,omitempty"`
-
-	// MigratedAt records when this entity was last migrated (if ever)
-	MigratedAt *time.Time `json:"migrated_at,omitempty"`
-
-	// MigratedFrom records the previous schema version before migration
-	MigratedFrom SchemaVersion `json:"migrated_from,omitempty"`
+	SchemaVersion SchemaVersion  `json:"schema_version,omitempty"`
+	Attributes    map[string]any `json:"attributes,omitempty"`
+	MigratedAt    *time.Time     `json:"migrated_at,omitempty"`
+	MigratedFrom  SchemaVersion  `json:"migrated_from,omitempty"`
 }
 
 // NewEntityMetadata creates metadata with the given schema version
@@ -138,7 +133,7 @@ func (e *EntityMetadata) HasAttribute(key string) bool {
 	return ok
 }
 
-// MergeAttributes merges new attributes into existing ones (new values win)
+// MergeAttributes merges new attributes into existing ones
 func (e *EntityMetadata) MergeAttributes(attrs map[string]any) {
 	if e.Attributes == nil {
 		e.Attributes = make(map[string]any)
@@ -167,19 +162,10 @@ func (e *EntityMetadata) SetAttributesFromJSON(data []byte) error {
 
 // VersionedEntity is the interface that all versioned entities must implement
 type VersionedEntity interface {
-	// GetEntityType returns the type of this entity
 	GetEntityType() EntityType
-
-	// GetSchemaVersion returns the current schema version
 	GetSchemaVersion() SchemaVersion
-
-	// SetSchemaVersion updates the schema version
 	SetSchemaVersion(version SchemaVersion)
-
-	// GetEntityMetadata returns the entity's metadata
 	GetEntityMetadata() *EntityMetadata
-
-	// GetID returns the entity's unique identifier
 	GetID() string
 }
 
@@ -187,32 +173,24 @@ type VersionedEntity interface {
 func NeedsMigration(entity VersionedEntity, targetVersion SchemaVersion) bool {
 	currentVersion := entity.GetSchemaVersion()
 	if currentVersion == "" {
-		return true // Unversioned entities always need migration
+		return true
 	}
 	return currentVersion != targetVersion
 }
 
-// Common attribute key constants for consistency
 const (
-	// UI-related attributes
-	AttrUIColor       = "ui.color"
-	AttrUIIcon        = "ui.icon"
-	AttrUIDisplayName = "ui.display_name"
-	AttrUIHidden      = "ui.hidden"
-
-	// Metrics attributes
+	AttrUIColor            = "ui.color"
+	AttrUIIcon             = "ui.icon"
+	AttrUIDisplayName      = "ui.display_name"
+	AttrUIHidden           = "ui.hidden"
 	AttrMetricsLastRun     = "metrics.last_run"
 	AttrMetricsRunCount    = "metrics.run_count"
 	AttrMetricsErrorCount  = "metrics.error_count"
 	AttrMetricsAvgDuration = "metrics.avg_duration_ms"
-
-	// Feature flags
-	AttrFeatureEnabled  = "feature.enabled"
-	AttrFeatureBeta     = "feature.beta"
-	AttrFeatureInternal = "feature.internal"
-
-	// Custom behavior
-	AttrBehaviorPriority  = "behavior.priority"
-	AttrBehaviorRetryable = "behavior.retryable"
-	AttrBehaviorTimeout   = "behavior.timeout_ms"
+	AttrFeatureEnabled     = "feature.enabled"
+	AttrFeatureBeta        = "feature.beta"
+	AttrFeatureInternal    = "feature.internal"
+	AttrBehaviorPriority   = "behavior.priority"
+	AttrBehaviorRetryable  = "behavior.retryable"
+	AttrBehaviorTimeout    = "behavior.timeout_ms"
 )

@@ -214,6 +214,12 @@ func (s *GitService) Push(ctx context.Context, req PushRequest) (*PushResult, er
 		}
 	}
 
+	// Block direct push to protected branches (main/master).
+	if isProtectedBranch(branch) {
+		s.auditLogger.LogOperation("push", req.BeadID, branch, false, fmt.Errorf("blocked: direct push to protected branch"))
+		return nil, fmt.Errorf("direct push to protected branch %q is not allowed; create a pull request", branch)
+	}
+
 	// Pre-push gate: run tests before allowing push.
 	// This prevents agents from pushing code that breaks CI/CD.
 	if err := s.runPrePushTests(ctx); err != nil {
@@ -696,10 +702,10 @@ func (l *AuditLogger) LogOperationWithDuration(operation, beadID, ref string, su
 	// Write to log file
 	data, _ := json.Marshal(entry)
 	f, err := os.OpenFile(l.logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer f.Close()
 	if err != nil {
 		return
 	}
-	defer f.Close()
 
 	_, _ = f.Write(data)
 	_, _ = f.Write([]byte("\n"))

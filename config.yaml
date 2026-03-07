@@ -8,7 +8,7 @@ self_project_id: loom
 debug_level: extreme
 
 server:
-  http_port: 8081
+  http_port: 8080
   https_port: 8443
   enable_http: true
   enable_https: false
@@ -53,6 +53,30 @@ agents:
     - devops-engineer
     - remediation-specialist
     - public-relations-manager
+  pre_commit_checks:
+    build: true
+    vet: true
+    syntax_check_js: true
+    tests_blocking: false
+  model_check:
+    enabled: true
+    min_tier: "sonnet"
+    allowlist: []
+    denylist_patterns:
+      - "*-mini"
+      - "*-nano"
+      - "*-tiny"
+      - "*-small"
+      - "minimax*"
+      - "claude-haiku-*"
+      - "gemini-*-flash-lite"
+      - "gemini-*-flash-thinking-exp"
+      - "phi-*"
+      - "*-1b"
+      - "*-3b"
+      - "*-7b"
+      - "*-8b"
+    on_violation: "warn"
 
 dispatch:
   max_hops: 20
@@ -178,7 +202,7 @@ models:
 providers: []
   # Providers are registered via API, not in this file.
   # Create a bootstrap.local file (gitignored) with curl commands:
-  #   curl -X POST http://localhost:8081/api/v1/providers \
+  #   curl -X POST http://localhost:8080/api/v1/providers \
   #     -H "Content-Type: application/json" \
   #     -d '{"id":"my-provider","name":"My Provider","type":"openai",
   #          "endpoint":"http://localhost:8000/v1","model":"my-model",

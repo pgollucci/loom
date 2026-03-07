@@ -11,8 +11,12 @@
     <script src="/static/js/projects-table.js"></script>
     <script src="/static/js/conversations.js"></script>
     <script src="/static/js/create-bead.js"></script>
+    <script src="/static/js/meetings.js"></script>
     <script src="/static/js/file-locks.js"></script>
     <script src="/static/js/pair.js?v=1"></script>
+    <script src="/static/js/workflows.js"></script>
+    <script src="/static/js/connectors.js"></script>
+    <script src="/static/js/persona-editor.js"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -64,6 +68,7 @@
             <!-- Projects & Infrastructure -->
             <button class="view-tab" data-target="projects" role="tab" aria-selected="false">📁 Projects</button>
             <button class="view-tab" data-target="conversations" role="tab" aria-selected="false">💬 Conversations</button>
+            <button class="view-tab" data-target="meetings" role="tab" aria-selected="false">🤝 Meetings</button>
 
             <!-- Admin & Monitoring -->
             <button class="view-tab" data-target="ceo" role="tab" aria-selected="false">🧭 CEO</button>
@@ -71,6 +76,13 @@
             <button class="view-tab" data-target="motivations" role="tab" aria-selected="false">⚡ Motivations</button>
             <button class="view-tab" data-target="logs" role="tab" aria-selected="false">📜 Logs</button>
             <button class="view-tab" data-target="export-import" role="tab" aria-selected="false">💾 Export/Import</button>
+
+            <!-- Phase 4: Organizational -->
+            <button class="view-tab" data-target="status-board" role="tab" aria-selected="false">📈 Status Board</button>
+            <button class="view-tab" data-target="performance-reviews" role="tab" aria-selected="false">⭐ Performance</button>
+            <button class="view-tab" data-target="customer-feedback" role="tab" aria-selected="false">💭 Feedback</button>
+
+
 
             <!-- Debug & Dev -->
             <button class="view-tab" data-target="diagrams" role="tab" aria-selected="false">🔀 Diagrams</button>
@@ -203,6 +215,12 @@
                         <!-- Beads will be loaded here -->
                     </div>
                 </div>
+                <div class="kanban-column kanban-dropzone" data-status="blocked">
+                    <h3>Blocked</h3>
+                    <div id="blocked-beads" class="bead-list">
+                        <!-- Beads will be loaded here -->
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -259,6 +277,36 @@
                 <h3>Assigned to CEO</h3>
                 <div id="ceo-assigned-beads-unified" class="ceo-beads-list"></div>
             </div>
+            <!-- Active Meetings -->
+            <div class="ceo-section" role="region" aria-label="Active meetings">
+                <h3>Active Meetings</h3>
+                <div id="active-meetings-container" class="ceo-subsection"></div>
+            </div>
+
+            <!-- Status Board Feed -->
+            <div class="ceo-section" role="region" aria-label="Status board feed">
+                <h3>Status Board Feed</h3>
+                <div id="status-board-feed-container" class="ceo-subsection"></div>
+            </div>
+
+            <!-- Escalation Queue -->
+            <div class="ceo-section" role="region" aria-label="Escalation queue">
+                <h3>Escalation Queue</h3>
+                <div id="escalation-queue-container" class="ceo-subsection"></div>
+            </div>
+
+            <!-- Org Health -->
+            <div class="ceo-section" role="region" aria-label="Organizational health">
+                <h3>Org Health</h3>
+                <div id="org-health-container" class="ceo-subsection"></div>
+            </div>
+
+            <!-- Review Summary -->
+            <div class="ceo-section" role="region" aria-label="Review summary">
+                <h3>Review Summary</h3>
+                <div id="review-summary-container" class="ceo-subsection"></div>
+            </div>
+
         </section>
 
         <!-- Agents Section -->
@@ -343,6 +391,114 @@
         <span><span class="conv-legend-dot" style="background:#7c3aed;"></span> Done / Commit</span>
     </div>
 </section>
+
+<!-- Meetings Section -->
+<section id="meetings" class="view-panel" role="tabpanel" aria-label="Meetings" hidden>
+    <h2><span aria-hidden="true">🤝</span> Meetings</h2>
+    <p class="small" style="margin-bottom: 1rem;">Schedule, manage, and track team meetings and sync sessions.</p>
+    <div class="toolbar" role="region" aria-label="Meeting controls">
+        <div class="toolbar-row">
+            <button type="button" class="primary" onclick="showCreateMeetingModal()" aria-haspopup="dialog">Schedule Meeting</button>
+            <div class="field" style="flex: 1; margin-left: 1rem;">
+                <label for="meeting-filter">Filter</label>
+                <select id="meeting-filter">
+                    <option value="all">All Meetings</option>
+                    <option value="upcoming">Upcoming</option>
+                    <option value="past">Past</option>
+                    <option value="my-meetings">My Meetings</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="meetings-container">
+        <div class="meetings-list">
+            <h3>Scheduled Meetings</h3>
+            <div id="meetings-list" class="meeting-items">
+                <!-- Meetings will be loaded here -->
+            </div>
+        </div>
+        <div class="meetings-detail">
+            <div id="meeting-detail" class="meeting-detail-panel">
+                <div class="empty-state"><p>Select a meeting to view details</p></div>
+            </div>
+        </div>
+    </div>
+    <div class="meetings-stats" style="margin-top: 2rem;">
+        <h3>Meeting Statistics</h3>
+        <div class="analytics-summary">
+            <div class="analytics-card">
+                <h4>Total Meetings</h4>
+                <div id="meetings-total" style="font-size: 2rem; font-weight: bold;">0</div>
+            </div>
+            <div class="analytics-card">
+                <h4>Upcoming</h4>
+                <div id="meetings-upcoming" style="font-size: 2rem; font-weight: bold;">0</div>
+            </div>
+            <div class="analytics-card">
+                <h4>Avg Duration</h4>
+                <div id="meetings-avg-duration" style="font-size: 2rem; font-weight: bold;">--</div>
+            </div>
+            <div class="analytics-card">
+                <h4>Attendance Rate</h4>
+                <div id="meetings-attendance" style="font-size: 2rem; font-weight: bold;">--%</div>
+            </div>
+        </div>
+    </div>
+</section>
+<!-- Workflows Section -->
+<section id="workflows" class="view-panel" role="tabpanel" aria-label="Workflows" hidden>
+    <h2><span aria-hidden="true">⚙️</span> Workflows</h2>
+    <p class="small" style="margin-bottom: 1rem;">Define, manage, and monitor automated workflows and automation rules.</p>
+    <div class="toolbar" role="region" aria-label="Workflow controls">
+        <div class="toolbar-row">
+            <button type="button" class="primary" onclick="showCreateWorkflowModal()" aria-haspopup="dialog">Create Workflow</button>
+            <div class="field" style="flex: 1; margin-left: 1rem;">
+                <label for="workflow-search">Search</label>
+                <input type="text" id="workflow-search" placeholder="Search workflows..." autocomplete="off">
+            </div>
+        </div>
+    </div>
+    <div id="workflows-list" class="workflows-container">
+        <!-- Workflows will be loaded here -->
+    </div>
+</section>
+
+<!-- Connectors Section -->
+<section id="connectors" class="view-panel" role="tabpanel" aria-label="Connectors" hidden>
+    <h2><span aria-hidden="true">🔌</span> Connectors</h2>
+    <p class="small" style="margin-bottom: 1rem;">Manage integrations and external service connectors.</p>
+    <div class="toolbar" role="region" aria-label="Connector controls">
+        <div class="toolbar-row">
+            <button type="button" class="primary" onclick="showCreateConnectorModal()" aria-haspopup="dialog">Add Connector</button>
+            <div class="field" style="flex: 1; margin-left: 1rem;">
+                <label for="connector-search">Search</label>
+                <input type="text" id="connector-search" placeholder="Search connectors..." autocomplete="off">
+            </div>
+        </div>
+    </div>
+    <div id="connectors-list" class="connectors-container">
+        <!-- Connectors will be loaded here -->
+    </div>
+</section>
+
+<!-- Persona Editor Section -->
+<section id="persona-editor" class="view-panel" role="tabpanel" aria-label="Persona Editor" hidden>
+    <h2><span aria-hidden="true">✏️</span> Persona Editor</h2>
+    <p class="small" style="margin-bottom: 1rem;">Create and edit agent personas with skill, motivation, and personality definitions.</p>
+    <div class="toolbar" role="region" aria-label="Persona editor controls">
+        <div class="toolbar-row">
+            <button type="button" class="primary" onclick="showCreatePersonaModal()" aria-haspopup="dialog">New Persona</button>
+            <div class="field" style="flex: 1; margin-left: 1rem;">
+                <label for="persona-editor-search">Search</label>
+                <input type="text" id="persona-editor-search" placeholder="Search personas..." autocomplete="off">
+            </div>
+        </div>
+    </div>
+    <div id="persona-editor-list" class="persona-editor-container">
+        <!-- Personas will be loaded here -->
+    </div>
+</section>
+
 
         <!-- Personas Section -->
         <section id="personas" class="view-panel" role="tabpanel" aria-label="Personas" hidden>
@@ -534,6 +690,122 @@ loomctl import backup.json --dry-run</code></pre>
                     </div>
                 </details>
             </div>
+        <!-- Status Board Section -->
+        <section id="status-board" class="view-panel" role="tabpanel" aria-label="Status Board" hidden>
+            <h2><span aria-hidden="true">📈</span> Status Board</h2>
+            <p class="small" style="margin-bottom: 1rem;">Manager reports, org health metrics, and team velocity trends.</p>
+            
+            <div class="toolbar" role="region" aria-label="Status board filters">
+                <div class="toolbar-row">
+                    <div class="field">
+                        <label for="status-manager-filter">Manager</label>
+                        <select id="status-manager-filter"></select>
+                    </div>
+                    <div class="field">
+                        <label for="status-period-filter">Period</label>
+                        <select id="status-period-filter">
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="quarter">This Quarter</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="analytics-summary" style="margin: 1rem 0;">
+                <div class="analytics-card">
+                    <h3>Team Velocity</h3>
+                    <div id="d3-status-velocity-chart"></div>
+                </div>
+                <div class="analytics-card">
+                    <h3>Org Health</h3>
+                    <div id="d3-status-health-gauge"></div>
+                </div>
+            </div>
+            
+            <h3>Manager Reports</h3>
+            <div id="status-reports-list" class="status-reports-container"></div>
+        </section>
+
+        <!-- Performance Reviews Section -->
+        <section id="performance-reviews" class="view-panel" role="tabpanel" aria-label="Performance Reviews" hidden>
+            <h2><span aria-hidden="true">⭐</span> Performance Reviews</h2>
+            <p class="small" style="margin-bottom: 1rem;">Agent grades, performance trends, and historical fire/warn events.</p>
+            
+            <div class="toolbar" role="region" aria-label="Performance filters">
+                <div class="toolbar-row">
+                    <div class="field">
+                        <label for="perf-agent-filter">Agent</label>
+                        <select id="perf-agent-filter"></select>
+                    </div>
+                    <div class="field">
+                        <label for="perf-grade-filter">Grade</label>
+                        <select id="perf-grade-filter">
+                            <option value="all">All</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                            <option value="F">F</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="perf-status-filter">Status</label>
+                        <select id="perf-status-filter">
+                            <option value="all">All</option>
+                            <option value="active">Active</option>
+                            <option value="warned">Warned</option>
+                            <option value="fired">Fired</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="analytics-summary" style="margin: 1rem 0;">
+                <div class="analytics-card">
+                    <h3>Grade Distribution</h3>
+                    <div id="d3-perf-grade-distribution"></div>
+                </div>
+                <div class="analytics-card">
+                    <h3>Performance Trends</h3>
+                    <div id="d3-perf-trends-chart"></div>
+                </div>
+            </div>
+            
+            <h3>Agent Reviews</h3>
+            <div id="perf-reviews-list" class="performance-reviews-container"></div>
+        </section>
+
+        <!-- Customer Feedback Section -->
+        <section id="customer-feedback" class="view-panel" role="tabpanel" aria-label="Customer Feedback" hidden>
+            <h2><span aria-hidden="true">💭</span> Customer Feedback</h2>
+            <p class="small" style="margin-bottom: 1rem;">User feedback queue, feature requests, and issue reports.</p>
+            
+            <div class="toolbar" role="region" aria-label="Feedback filters">
+                <div class="toolbar-row">
+                    <div class="field">
+                        <label for="feedback-type-filter">Type</label>
+                        <select id="feedback-type-filter">
+                            <option value="all">All</option>
+                            <option value="bug">Bug Report</option>
+                            <option value="feature">Feature Request</option>
+                            <option value="feedback">General Feedback</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="feedback-status-filter">Status</label>
+                        <select id="feedback-status-filter">
+                            <option value="all">All</option>
+                            <option value="new">New</option>
+                            <option value="in_review">In Review</option>
+                            <option value="addressed">Addressed</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>Feedback Queue</h3>
+            <div id="feedback-queue" class="feedback-container"></div>
         </section>
 
         <!-- Dev Tools Section -->

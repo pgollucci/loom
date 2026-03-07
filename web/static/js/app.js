@@ -96,7 +96,12 @@ let state = {
     decisions: [],
     systemStatus: null,
     users: [],
-    apiKeys: []
+    apiKeys: [],
+    activeMeetings: [],
+    statusBoardFeed: [],
+    orgHealth: {},
+    reviewSummary: {},
+    escalationQueue: []
 };
 window.state = state;
 
@@ -420,6 +425,11 @@ async function loadAll() {
             loadMotivations().catch(err => { console.error('[Loom] Failed to load motivations:', err); })
         ]);
         await loadCeoBeads().catch(err => { console.error('[Loom] Failed to load CEO beads:', err); state.ceoBeads = []; });
+        await loadActiveMeetings().catch(err => { console.error('[Loom] Failed to load active meetings:', err); state.activeMeetings = []; });
+        await loadStatusBoardFeed().catch(err => { console.error('[Loom] Failed to load status board feed:', err); state.statusBoardFeed = []; });
+        await loadOrgHealth().catch(err => { console.error('[Loom] Failed to load org health:', err); state.orgHealth = {}; });
+        await loadReviewSummary().catch(err => { console.error('[Loom] Failed to load review summary:', err); state.reviewSummary = {}; });
+        await loadEscalationQueue().catch(err => { console.error('[Loom] Failed to load escalation queue:', err); state.escalationQueue = []; });
         console.log('[Loom] Data loaded successfully:', {
             beads: state.beads?.length || 0,
             projects: state.projects?.length || 0,
@@ -770,6 +780,11 @@ function render() {
     renderDiagrams();
 
     // New UI components
+    renderActiveMeetings();
+    renderStatusBoardFeed();
+    renderOrgHealth();
+    renderReviewSummary();
+    renderEscalationQueue();
     if (typeof renderProjectsTable === 'function') {
         renderProjectsTable();
     }
@@ -1438,12 +1453,14 @@ function renderKanban() {
     const filtered = getFilteredBeads();
     const openBeads = filtered.filter((b) => b.status === 'open');
     const inProgressBeads = filtered.filter((b) => b.status === 'in_progress');
+    const blockedBeads = filtered.filter((b) => b.status === 'blocked');
     const closedBeads = filtered.filter((b) => b.status === 'closed');
 
     const openEl = document.getElementById('open-beads');
     const ipEl = document.getElementById('in-progress-beads');
+    const blockedEl = document.getElementById('blocked-beads');
     const closedEl = document.getElementById('closed-beads');
-    if (!openEl || !ipEl || !closedEl) return;
+    if (!openEl || !ipEl || !blockedEl || !closedEl) return;
 
     openEl.innerHTML =
         openBeads.length > 0
@@ -1453,424 +1470,57 @@ function renderKanban() {
         inProgressBeads.length > 0
             ? inProgressBeads.map(renderBeadCard).join('')
             : renderEmptyState('Nothing in progress', 'Claim a bead to move it into progress.');
+    blockedEl.innerHTML =
+        blockedBeads.length > 0
+            ? blockedBeads.map(renderBeadCard).join('')
+            : renderEmptyState('No blocked beads', 'Beads that encounter blockers will appear here.');
     closedEl.innerHTML =
         closedBeads.length > 0
             ? closedBeads.map(renderBeadCard).join('')
             : renderEmptyState('No closed beads yet', 'Completed beads will appear here.');
 }
-
-function initKanbanDnD() {
-    const dropzones = document.querySelectorAll('.kanban-dropzone');
-    dropzones.forEach((zone) => {
-        zone.addEventListener('dragover', handleKanbanDragOver);
-        zone.addEventListener('dragleave', handleKanbanDragLeave);
-        zone.addEventListener('drop', handleKanbanDrop);
-    });
-}
-
-function handleBeadDragStart(event) {
-    const beadId = event.currentTarget?.dataset?.beadId;
-    if (!beadId) return;
-    event.dataTransfer.setData('text/plain', beadId);
-    event.dataTransfer.effectAllowed = 'move';
-    event.currentTarget.classList.add('dragging');
-}
-
-function handleBeadDragEnd(event) {
-    event.currentTarget.classList.remove('dragging');
-}
-
-function handleKanbanDragOver(event) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    event.currentTarget.classList.add('drag-over');
-}
-
-function handleKanbanDragLeave(event) {
-    event.currentTarget.classList.remove('drag-over');
-}
-
-async function handleKanbanDrop(event) {
-    event.preventDefault();
-    event.currentTarget.classList.remove('drag-over');
-    const beadId = event.dataTransfer.getData('text/plain');
-    const status = event.currentTarget.dataset.status;
-    if (!beadId || !status) return;
-
-    const bead = state.beads.find((b) => b.id === beadId);
-    if (!bead || bead.status === status) return;
-
-    try {
-        await saveBeadUpdate(beadId, { status: status }, { successMessage: `Bead moved to ${status}` });
-    } catch (error) {
-        // Error already handled
-    }
-}
-
-async function sendStreamingTest() {
-    const input = document.getElementById('stream-test-input');
-    const responseEl = document.getElementById('stream-test-response');
-    const statsEl = document.getElementById('stream-test-stats');
-    const sendBtn = document.getElementById('stream-test-send');
-    const streamToggle = document.getElementById('stream-test-streaming');
-    
-    if (!input || !responseEl || !sendBtn) return;
-
-    const message = (input.value || '').trim();
-    const useStreaming = streamToggle ? streamToggle.checked : true;
-
-    if (!message) {
-        showToast('Please enter a message', 'error');
-        return;
-    }
-
-    try {
-        setBusy('streamTest', true);
-        sendBtn.disabled = true;
-        sendBtn.textContent = useStreaming ? 'Streaming…' : 'Sending…';
-        responseEl.textContent = '';
-        responseEl.classList.remove('complete');
-        statsEl.textContent = 'Starting...';
-
-        const startTime = Date.now();
-        let firstChunkTime = null;
-        let chunkCount = 0;
-        let totalChars = 0;
-
-        const requestBody = {
-            messages: [
-                { role: 'user', content: message }
-            ]
-        };
-
-        if (useStreaming) {
-            // Use streaming
-            responseEl.classList.add('streaming');
-            
-            await createStreamingRequest('/chat/completions', requestBody, {
-                useStreaming: true,
-                onChunk: (chunk, fullContent) => {
-                    if (firstChunkTime === null) {
-                        firstChunkTime = Date.now();
-                    }
-                    chunkCount++;
-                    totalChars += chunk.length;
-                    
-                    responseEl.textContent = fullContent;
-                    responseEl.scrollTop = responseEl.scrollHeight;
-                    
-                    const elapsed = Date.now() - startTime;
-                    const ttfb = firstChunkTime - startTime;
-                    statsEl.textContent = `Streaming... ${chunkCount} chunks, ${totalChars} chars, TTFB: ${ttfb}ms, Elapsed: ${elapsed}ms`;
-                },
-                onComplete: (fullContent) => {
-                    const totalTime = Date.now() - startTime;
-                    const ttfb = firstChunkTime ? firstChunkTime - startTime : 0;
-                    const charsPerSec = totalTime > 0 ? Math.round((totalChars / totalTime) * 1000) : 0;
-                    
-                    responseEl.classList.remove('streaming');
-                    responseEl.classList.add('complete');
-                    statsEl.textContent = `✓ Complete: ${chunkCount} chunks, ${totalChars} chars, TTFB: ${ttfb}ms, Total: ${totalTime}ms, Speed: ${charsPerSec} chars/sec`;
-                    showToast('Stream complete', 'success');
-                },
-                onError: (error) => {
-                    responseEl.classList.remove('streaming');
-                    responseEl.textContent += `\n\n[Error: ${error}]`;
-                    statsEl.textContent = `✗ Error: ${error}`;
-                }
-            });
-        } else {
-            // Use non-streaming
-            const res = await apiCall('/chat/completions', {
-                method: 'POST',
-                body: JSON.stringify(requestBody)
-            });
-
-            const totalTime = Date.now() - startTime;
-            
-            if (res.choices && res.choices[0] && res.choices[0].message) {
-                const content = res.choices[0].message.content || 'No response';
-                responseEl.textContent = content;
-                totalChars = content.length;
-            } else {
-                responseEl.textContent = 'No response returned.';
-            }
-            
-            responseEl.classList.add('complete');
-            statsEl.textContent = `✓ Complete (non-streaming): ${totalChars} chars, Total: ${totalTime}ms`;
-        }
-    } catch (e) {
-        responseEl.classList.remove('streaming');
-        responseEl.textContent = `Request failed: ${e.message || 'Unknown error'}`;
-        statsEl.textContent = `✗ Failed: ${e.message || 'Unknown error'}`;
-    } finally {
-        setBusy('streamTest', false);
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'Send';
-    }
-}
-
-function getFilteredBeads() {
-    const q = (uiState.bead.search || '').trim().toLowerCase();
-    const priority = uiState.bead.priority;
-    const type = (uiState.bead.type || '').trim();
-    const assigned = (uiState.bead.assigned || '').trim().toLowerCase();
-    const tag = (uiState.bead.tag || '').trim().toLowerCase();
-    const projectFilter = (uiState.bead.project || 'all').trim();
-
-    const filtered = state.beads.filter((b) => {
-        if (projectFilter !== 'all' && (b.project_id || '') !== projectFilter) return false;
-        if (priority !== 'all' && String(b.priority) !== priority) return false;
-        if (type !== 'all' && (b.type || '') !== type) return false;
-        if (assigned && !(b.assigned_to || '').toLowerCase().includes(assigned)) return false;
-        if (tag) {
-            const tags = Array.isArray(b.tags) ? b.tags : [];
-            if (!tags.some((t) => String(t).toLowerCase().includes(tag))) return false;
-        }
-        if (q) {
-            const hay = `${b.id || ''} ${b.title || ''} ${b.description || ''}`.toLowerCase();
-            if (!hay.includes(q)) return false;
-        }
-        return true;
-    });
-
-    const sort = uiState.bead.sort;
-    filtered.sort((a, b) => {
-        if (sort === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
-        if (sort === 'updated_at') {
-            return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
-        }
-        // priority default
-        return (a.priority ?? 99) - (b.priority ?? 99);
-    });
-
-    return filtered;
-}
-
-function renderEmptyState(title, description, actionsHtml = '') {
-    return `
-        <div class="empty-state" role="note">
-            <h4>${escapeHtml(title)}</h4>
-            <p>${escapeHtml(description)}</p>
-            ${actionsHtml}
-        </div>
-    `;
-}
-
-function resolveAgentName(agentId) {
-    if (!agentId) return '';
-    const agent = (state.agents || []).find(a => a.id === agentId);
-    return agent ? (agent.name || agent.role || agentId) : agentId;
-}
-
-function resolveProjectName(projectId) {
-    if (!projectId) return '';
-    const project = (state.projects || []).find(p => p.id === projectId);
-    return project ? project.name : projectId;
-}
-
-function renderBeadCard(bead) {
-    const priorityClass = `priority-${bead.priority}`;
-    const typeClass = bead.type === 'decision' ? 'decision' : '';
-    const assigneeName = bead.assigned_to ? resolveAgentName(bead.assigned_to) : '';
-    const showAllProjects = !uiState.bead.project || uiState.bead.project === 'all';
-    const projectLabel = showAllProjects && bead.project_id ? resolveProjectName(bead.project_id) : '';
-
-    return `
-        <button type="button" class="bead-card ${priorityClass} ${typeClass}" draggable="true" data-bead-id="${escapeHtml(bead.id)}" ondragstart="handleBeadDragStart(event)" ondragend="handleBeadDragEnd(event)" onclick="viewBead('${bead.id}')" ondblclick="openBeadDetails('${bead.id}')" aria-label="View bead: ${escapeHtml(bead.title)}">
-            <div class="bead-title">${escapeHtml(bead.title)}</div>
-            <div class="bead-meta">
-                <span class="badge priority-${bead.priority}">P${bead.priority}</span>
-                <span class="badge">${escapeHtml(bead.type)}</span>
-                ${assigneeName ? `<span class="badge">👤 ${escapeHtml(assigneeName)}</span>` : '<span class="badge">unassigned</span>'}
-            </div>
-            ${projectLabel ? `<div class="bead-meta"><span class="badge" style="font-size:0.75rem;">📁 ${escapeHtml(projectLabel)}</span></div>` : ''}
-        </button>
-    `;
-}
-
-function updateBeadCache(updatedBead) {
-    if (!updatedBead || !updatedBead.id) return;
-    const applyUpdate = (list) => {
-        if (!Array.isArray(list)) return list;
-        return list.map((bead) => (bead.id === updatedBead.id ? { ...bead, ...updatedBead } : bead));
-    };
-    state.beads = applyUpdate(state.beads);
-    if (Array.isArray(state.ceoBeads)) {
-        state.ceoBeads = applyUpdate(state.ceoBeads);
-    }
-}
-
-async function saveBeadUpdate(beadId, payload, { successMessage = 'Bead updated' } = {}) {
-    const existing = state.beads.find((b) => b.id === beadId);
-    const previous = existing ? JSON.parse(JSON.stringify(existing)) : null;
-    if (existing) {
-        updateBeadCache({ ...existing, ...payload });
-        render();
-    }
-
-    try {
-        const updated = await apiCall(`/beads/${beadId}`, {
-            method: 'PATCH',
-            body: JSON.stringify(payload)
-        });
-        updateBeadCache(updated);
-        render();
-        showToast(successMessage, 'success');
-        return updated;
-    } catch (error) {
-        if (previous) {
-            updateBeadCache(previous);
-            render();
-        }
-        throw error;
-    }
-}
-
-function normalizeAssignee(value) {
-    return String(value || '').trim().toLowerCase();
-}
-
-function isCeoAssignee(value) {
-    const normalized = normalizeAssignee(value);
-    return normalized && (normalized === 'ceo' || normalized === 'user-ceo' || normalized === 'human-ceo' || normalized.includes('ceo'));
-}
-
-function getCeoAgentIds() {
-    return (state.agents || [])
-        .filter((agent) => {
-            const persona = normalizeAssignee(agent.persona_name);
-            const name = normalizeAssignee(agent.name);
-            const role = normalizeAssignee(agent.role);
-            return persona.endsWith('/ceo') || persona === 'ceo' || role === 'ceo' || name.includes('ceo');
-        })
-        .map((agent) => normalizeAssignee(agent.id));
-}
-
-function parseBeadComments(context) {
-    if (!context || !context.comments) return [];
-    try {
-        const parsed = JSON.parse(context.comments);
-        return Array.isArray(parsed) ? parsed : [];
-    } catch {
-        return [];
-    }
-}
-
-function getBeadCommentCount(bead) {
-    return parseBeadComments(bead.context || {}).length;
-}
-
-function getLatestBeadComment(bead) {
-    const comments = parseBeadComments(bead.context || {});
-    if (comments.length === 0) return null;
-    return comments[comments.length - 1];
-}
-
-function renderCeoBeads() {
-    const container = document.getElementById('ceo-assigned-beads') || document.getElementById('ceo-assigned-beads-unified');
-    if (!container) return;
-
-    // Also populate the unified CEO section if it exists
-    const unifiedContainer = document.getElementById('ceo-assigned-beads-unified');
-    if (unifiedContainer && unifiedContainer !== container) {
-        // Will be populated below after rendering
-    }
-
-    const ceoAgentIds = new Set(getCeoAgentIds());
-    const sourceBeads = Array.isArray(state.ceoBeads) ? state.ceoBeads : state.beads;
-    const allBeads = state.beads || [];
-
-    // Collect beads that need CEO attention:
-    // 1. Beads explicitly assigned to a CEO agent
-    // 2. Decision-type beads (require human input, agents skip them)
-    // 3. Beads escalated to CEO (context.escalated_to === "ceo")
-    const seen = new Set();
-    const beads = [];
-
-    for (const bead of sourceBeads || []) {
-        const assigned = normalizeAssignee(bead.assigned_to);
-        if (assigned && (ceoAgentIds.has(assigned) || isCeoAssignee(assigned))) {
-            if (!seen.has(bead.id)) { seen.add(bead.id); beads.push(bead); }
-        }
-    }
-    for (const bead of allBeads) {
-        if (seen.has(bead.id)) continue;
-        const isDecision = bead.type === 'decision' && bead.status !== 'closed';
-        const isEscalated = bead.context && bead.context.escalated_to === 'ceo' && bead.status !== 'closed';
-        if (isDecision || isEscalated) {
-            seen.add(bead.id);
-            beads.push(bead);
-        }
-    }
-
-    if (beads.length === 0) {
-        container.innerHTML = renderEmptyState('No beads requiring CEO attention', 'Decision beads, escalations, and assigned items appear here.');
-        return;
-    }
-
-    const agents = (state.agents || []).filter((a) => (a.persona_name || '') !== 'templates');
-    const agentOptions = agents
-        .map((agent) => {
-            const displayName = formatAgentDisplayName(agent.name || extractRoleName(agent.persona_name || ''));
-            return `<option value="${escapeHtml(agent.id)}">${escapeHtml(displayName)} (${escapeHtml(agent.id)})</option>`;
-        })
-        .join('');
-
-    container.innerHTML = beads
-        .map((bead) => {
-            const commentCount = getBeadCommentCount(bead);
-            const latestComment = getLatestBeadComment(bead);
-            const dispatchKey = `dispatchBead:${bead.id}`;
-            const closeKey = `closeBead:${bead.id}`;
-            const commentKey = `commentBead:${bead.id}`;
-
-            return `
-                <div class="ceo-bead-card">
-                    <div class="ceo-bead-header">
-                        <button type="button" class="ceo-bead-title" onclick="viewBead('${escapeHtml(bead.id)}')" aria-label="View bead ${escapeHtml(bead.title)}">
-                            ${escapeHtml(bead.title)}
-                        </button>
-                        <div class="ceo-bead-meta">
-                            <span class="badge priority-${bead.priority}">P${bead.priority}</span>
-                            <span class="badge">${escapeHtml(bead.type || 'task')}</span>
-                            <span class="badge">${escapeHtml(bead.status || 'open')}</span>
-                            <span class="badge">${commentCount} comment${commentCount === 1 ? '' : 's'}</span>
-                        </div>
-                    </div>
-                    <div class="small"><strong>ID:</strong> ${escapeHtml(bead.id)} • <strong>Project:</strong> ${escapeHtml(bead.project_id || 'n/a')}</div>
-                    ${latestComment ? `
-                        <div class="ceo-bead-comment">
-                            <div class="small"><strong>Latest comment</strong> · ${escapeHtml(latestComment.author || 'unknown')} · ${escapeHtml((latestComment.timestamp || '').substring(0, 19).replace('T', ' '))}</div>
-                            <div class="small ceo-bead-comment-text">${escapeHtml(latestComment.comment || '')}</div>
-                        </div>
-                    ` : ''}
-                    <div class="ceo-bead-actions">
-                        <select id="ceo-dispatch-${escapeHtml(bead.id)}" aria-label="Select agent to dispatch bead ${escapeHtml(bead.id)}">
-                            <option value="">Select agent…</option>
-                            ${agentOptions}
-                        </select>
-                        <button type="button" class="secondary" onclick="dispatchBeadToAgent('${escapeHtml(bead.id)}')" ${isBusy(dispatchKey) ? 'disabled' : ''}>
-                            ${isBusy(dispatchKey) ? 'Dispatching…' : 'Dispatch'}
-                        </button>
-                        <button type="button" class="secondary" onclick="showAllBeadCommentsModal('${escapeHtml(bead.id)}')">
-                            View all comments
-                        </button>
-                        <button type="button" class="secondary" onclick="showBeadCommentModal('${escapeHtml(bead.id)}')" ${isBusy(commentKey) ? 'disabled' : ''}>
-                            ${isBusy(commentKey) ? 'Saving…' : 'Add comment'}
-                        </button>
-                        <button type="button" class="danger" onclick="closeBeadFromCeo('${escapeHtml(bead.id)}')" ${isBusy(closeKey) ? 'disabled' : ''}>
-                            ${isBusy(closeKey) ? 'Closing…' : 'Close'}
-                        </button>
-                    </div>
-                </div>
-            `;
-        })
-        .join('');
-}
-
 function renderAgents() {
     const q = (uiState.agent.search || '').trim().toLowerCase();
+    
+    // Helper function to get bead title by ID
+    function getBeadTitle(beadId) {
+        if (!beadId) return '';
+        const bead = state.beads.find(b => b.id === beadId);
+        return bead ? bead.title : beadId;
+    }
+    
+    // Helper function to get performance grade color
+    function getGradeColor(grade) {
+        const gradeColors = {
+            'A': '#16a34a',  // green
+            'B': '#2563eb',  // blue
+            'C': '#eab308',  // yellow
+            'D': '#ea580c',  // orange
+            'F': '#dc2626'   // red
+        };
+        return gradeColors[grade] || '#94a3b8';
+    }
+    
+    // Helper function to get status color (from d3-charts.js STATUS_COLORS)
+    function getStatusColor(status) {
+        const statusColors = {
+            'working': '#16a34a',
+            'idle': '#2563eb',
+            'paused': '#d97706',
+            'error': '#dc2626',
+            'blocked': '#dc2626',
+            'healthy': '#16a34a',
+            'active': '#16a34a',
+            'pending': '#d97706',
+            'failed': '#dc2626',
+            'open': '#2563eb',
+            'in_progress': '#7c3aed',
+            'closed': '#64748b',
+            'done': '#059669'
+        };
+        return statusColors[(status || '').toLowerCase()] || '#94a3b8';
+    }
+    
     // Filter out templates agent (it does nothing for now)
     const visibleAgents = state.agents.filter((a) => a.persona_name !== 'templates');
     const agents = q
@@ -1882,18 +1532,33 @@ function renderAgents() {
 
     const html = agents.map(agent => {
         const statusClass = agent.status;
-        const displayName = formatAgentDisplayName(agent.name || agent.persona_name || agent.id);
+        const displayName = agent.display_name || formatAgentDisplayName(agent.name || agent.persona_name || agent.id);
+        const statusColor = getStatusColor(agent.status);
+        const beadTitle = agent.current_bead ? getBeadTitle(agent.current_bead) : '';
+        
         return `
             <div class="agent-card ${statusClass}">
                 <div class="agent-header">
                     <span class="agent-name">${escapeHtml(displayName)}</span>
-                    <span class="agent-status ${statusClass}">${agent.status}</span>
+                    <span class="agent-status ${statusClass}" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: ${statusColor};"></span>
+                        ${agent.status}
+                    </span>
                 </div>
+                ${agent.motivation_summary ? `<div style="font-style: italic; color: var(--text-muted); font-size: 0.9rem; margin: 0.5rem 0;">${escapeHtml(agent.motivation_summary)}</div>` : ''}
                 <div>
                     <strong>Persona:</strong> ${escapeHtml(agent.persona_name)}<br>
                     <strong>Project:</strong> ${escapeHtml(resolveProjectName(agent.project_id))}<br>
-                    ${agent.current_bead ? `<strong>Working on:</strong> ${escapeHtml(agent.current_bead)}` : ''}
+                    ${agent.current_bead ? `<strong>Working on:</strong> ${escapeHtml(beadTitle)}` : ''}
                 </div>
+                ${agent.performance_grade ? `
+                <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <strong>Grade:</strong>
+                    <span class="badge" style="background-color: ${getGradeColor(agent.performance_grade)}; color: white; font-weight: bold; padding: 0.25rem 0.5rem; border-radius: 3px;">
+                        ${escapeHtml(agent.performance_grade)}
+                    </span>
+                </div>
+                ` : ''}
                 <div style="margin-top: 1rem;">
                     ${agent.current_bead ? `<button class="secondary" onclick="viewAgentConversation('${escapeHtml(agent.current_bead)}')" title="View conversation log">Log</button>` : ''}
                     <button class="secondary" onclick="cloneAgentPersona('${agent.id}')" ${isBusy(`cloneAgent:${agent.id}`) ? 'disabled' : ''}>${isBusy(`cloneAgent:${agent.id}`) ? 'Cloning…' : 'Clone Persona'}</button>
@@ -1950,7 +1615,7 @@ function renderProjects() {
             </div>
         </div>
     `).join('');
-    
+
     const projectList = document.getElementById('project-list');
     if (!projectList) return;
     projectList.innerHTML =
@@ -2297,8 +1962,6 @@ async function sendReplQuery() {
 // Assign agent to project from CEO REPL
 async function assignAgentFromCeoRepl() {
     const agentSelect = document.getElementById('ceo-repl-agent-select');
-const projectSelect = document.getElementById('ceo-repl-project-select');
-const projectSelect = document.getElementById('ceo-repl-project-select');
     const projectSelect = document.getElementById('ceo-repl-project-select');
     
     const agentId = agentSelect ? agentSelect.value : '';
@@ -2620,7 +2283,14 @@ async function cloneAgentPersona(agentId) {
 
 function renderDecisions() {
     const items = (state.decisions || []).filter(d => d.status !== 'closed');
-    const html = items.map(decision => {
+    const filterValue = (uiState.decision && uiState.decision.filter) || 'all';
+    
+    // Separate decisions by type
+    const humanEscalations = items.filter(d => d.context && d.context.requires_human === 'true');
+    const agentHandled = items.filter(d => !(d.context && d.context.requires_human === 'true'));
+    
+    // Render human escalation section
+    const humanHtml = humanEscalations.map(decision => {
         const p0Class = decision.priority === 0 ? 'p0' : '';
         const claimKey = `claimDecision:${decision.id}`;
         const decideKey = `makeDecision:${decision.id}`;
@@ -2641,20 +2311,74 @@ function renderDecisions() {
                 </div>
                 <div class="decision-actions">
                     <button class="secondary" onclick="viewBead('${decision.id}')">View</button>
-                    <button onclick="claimDecision('${decision.id}')" ${isBusy(claimKey) ? 'disabled' : ''}>${isBusy(claimKey) ? 'Claiming…' : 'Claim'}</button>
-                    ${decision.status === 'in_progress' ? `<button class="secondary" onclick="makeDecision('${decision.id}')" ${isBusy(decideKey) ? 'disabled' : ''}>${isBusy(decideKey) ? 'Submitting…' : 'Decide'}</button>` : ''}
+                    <button onclick="claimDecision('${decision.id}')" ${isBusy(claimKey) ? 'disabled' : ''}>${isBusy(claimKey) ? 'Claiming...' : 'Claim'}</button>
+                    ${decision.status === 'in_progress' ? `<button class="secondary" onclick="makeDecision('${decision.id}')" ${isBusy(decideKey) ? 'disabled' : ''}>${isBusy(decideKey) ? 'Submitting...' : 'Decide'}</button>` : ''}
                 </div>
             </div>
         `;
     }).join('');
-
+    
+    // Render agent-handled section
+    const agentHtml = agentHandled.map(decision => {
+        const p0Class = decision.priority === 0 ? 'p0' : '';
+        const displayText = decision.question || decision.title || decision.description || '(no description)';
+        const assignedAgent = decision.assigned_to || 'system';
+        const agentObj = (state.agents || []).find(a => a.id === assignedAgent);
+        const agentName = agentObj ? (agentObj.display_name || agentObj.name || assignedAgent) : assignedAgent;
+        return `
+            <div class="decision-card ${p0Class}">
+                <div class="decision-question">${escapeHtml(displayText)}</div>
+                <div>
+                    <strong>Priority:</strong> P${decision.priority}
+                    <strong>Status:</strong> ${escapeHtml(decision.status || 'open')}
+                    <br><strong>Handled by:</strong> ${escapeHtml(agentName)}
+                    ${decision.recommendation ? `<br><strong>Recommendation:</strong> ${escapeHtml(decision.recommendation)}` : ''}
+                </div>
+                <div class="decision-actions">
+                    <button class="secondary" onclick="viewBead('${decision.id}')">View</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Render recently closed decisions
+    const closedDecisions = (state.decisions || []).filter(d => d.status === 'closed').slice(0, 10);
+    const closedHtml = closedDecisions.map(decision => {
+        const displayText = decision.question || decision.title || decision.description || '(no description)';
+        const assignedAgent = decision.assigned_to || 'system';
+        const agentObj = (state.agents || []).find(a => a.id === assignedAgent);
+        const agentName = agentObj ? (agentObj.display_name || agentObj.name || assignedAgent) : assignedAgent;
+        const rationale = decision.context && decision.context.rationale ? decision.context.rationale : '';
+        return `
+            <div class="decision-card" style="opacity: 0.8;">
+                <div class="decision-question">${escapeHtml(displayText)}</div>
+                <div>
+                    <strong>Decided by:</strong> ${escapeHtml(agentName)}
+                    ${rationale ? `<br><strong>Rationale:</strong> ${escapeHtml(rationale)}` : ''}
+                </div>
+                <div class="decision-actions">
+                    <button class="secondary" onclick="viewBead('${decision.id}')">View</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+ 
     const decisionListEl = document.getElementById('decision-list');
     if (!decisionListEl) return;
-    decisionListEl.innerHTML =
-        html ||
-        renderEmptyState('No pending decisions', 'When agents escalate work requiring human input, it appears here.');
+    
+    let content = '';
+    if (humanEscalations.length > 0) {
+        content += `<div style="margin-bottom: 2rem;"><h3 style="color: var(--primary-color); margin-top: 0;">Requires Human Review (${humanEscalations.length})</h3>${humanHtml}</div>`;
+    }
+    if (agentHandled.length > 0) {
+        content += `<div style="margin-bottom: 2rem;"><h3 style="color: var(--primary-color); margin-top: 0;">In Progress by Agent (${agentHandled.length})</h3>${agentHtml}</div>`;
+    }
+    if (closedDecisions.length > 0) {
+        content += `<div style="margin-bottom: 2rem;"><h3 style="color: var(--primary-color); margin-top: 0;">Recently Decided (${closedDecisions.length})</h3>${closedHtml}</div>`;
+    }
+    
+    decisionListEl.innerHTML = content || renderEmptyState('No decisions pending human review', 'Agents are handling decisions autonomously.');
 }
-
 function renderCeoDashboard() {
     const container = document.getElementById('ceo-dashboard-summary');
     if (!container) return;
@@ -4681,6 +4405,70 @@ async function loadMotivations() {
 function populateMotivationRoleFilter() {
     const select = document.getElementById('motivation-role-filter');
     if (!select || !motivationsState.roles) return;
+
+// Load Active Meetings
+async function loadActiveMeetings() {
+    try {
+        state.activeMeetings = await apiCall('/api/v1/meetings/active');
+    } catch (err) {
+        console.error('[Loom] Failed to load active meetings:', err);
+        state.activeMeetings = [];
+    }
+}
+
+// Load Status Board Feed
+async function loadStatusBoardFeed() {
+    try {
+        state.statusBoardFeed = await apiCall('/api/v1/statusboard');
+    } catch (err) {
+        console.error('[Loom] Failed to load status board feed:', err);
+        state.statusBoardFeed = [];
+    }
+}
+
+// Load Org Health
+async function loadOrgHealth() {
+    try {
+        state.orgHealth = await apiCall('/api/v1/org-chart/live');
+    } catch (err) {
+        console.error('[Loom] Failed to load org health:', err);
+        state.orgHealth = {};
+    }
+}
+
+// Load Review Summary
+async function loadReviewSummary() {
+    try {
+        state.reviewSummary = await apiCall('/api/v1/reviews');
+    } catch (err) {
+        console.error('[Loom] Failed to load review summary:', err);
+        state.reviewSummary = {};
+    }
+}
+
+// Load Escalation Queue
+async function loadEscalationQueue() {
+    try {
+        // Filter decisions that require human input
+        const allDecisions = state.decisions || [];
+        state.escalationQueue = allDecisions.filter(d => d.requires_human === true);
+    } catch (err) {
+        console.error('[Loom] Failed to load escalation queue:', err);
+        state.escalationQueue = [];
+    }
+}
+
+// Load Escalation Queue
+async function loadEscalationQueue() {
+    try {
+        // Filter decisions that require human input
+        const allDecisions = state.decisions || [];
+        state.escalationQueue = allDecisions.filter(d => d.requires_human === true);
+    } catch (err) {
+        console.error('[Loom] Failed to load escalation queue:', err);
+        state.escalationQueue = [];
+    }
+}
     
     // Keep the "All Roles" option
     select.innerHTML = '<option value="">All Roles</option>';
@@ -5060,3 +4848,171 @@ document.addEventListener('click', function(event) {
 // This should be detected, auto-filed, investigated, and fixed by Loom agents
 // FIXED: Commented out to prevent UI errors on every page load
 // testSelfHealingWorkflow();
+
+// Render Active Meetings
+function renderActiveMeetings() {
+    const container = document.getElementById('active-meetings-container');
+    if (!container) return;
+    
+    const meetings = state.activeMeetings || [];
+    if (meetings.length === 0) {
+        container.innerHTML = renderEmptyState('No active meetings', 'Meetings will appear here.');
+        return;
+    }
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            ${meetings.map(m => `
+                <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);">
+                    <h4>${escapeHtml(m.title || 'Untitled Meeting')}</h4>
+                    <p class="small" style="margin: 0.5rem 0; color: var(--text-muted);">Started: ${new Date(m.start_time).toLocaleString()}</p>
+                    <p class="small" style="margin: 0.5rem 0;"><strong>Participants:</strong> ${(m.participants || []).join(', ')}</p>
+                    ${m.transcript ? `<button type="button" class="secondary" onclick="alert('Transcript: ' + ${JSON.stringify(m.transcript)})" style="margin-top: 0.5rem;">View Transcript</button>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Render Status Board Feed
+function renderStatusBoardFeed() {
+    const container = document.getElementById('status-board-feed-container');
+    if (!container) return;
+    
+    const feed = state.statusBoardFeed || [];
+    if (feed.length === 0) {
+        container.innerHTML = renderEmptyState('No status updates', 'Status board entries will appear here.');
+        return;
+    }
+    
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            ${feed.slice(0, 10).map(entry => `
+                <div style="padding: 1rem; border-left: 3px solid #0ea5e9; background: var(--bg-secondary); border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>${escapeHtml(entry.author_display_name || 'Unknown')}</strong>
+                        <span class="small" style="color: var(--text-muted);">${new Date(entry.timestamp).toLocaleString()}</span>
+                    </div>
+                    <p style="margin: 0; white-space: pre-wrap;">${escapeHtml(entry.content || '')}</p>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Render Org Health
+function renderOrgHealth() {
+    const container = document.getElementById('org-health-container');
+    if (!container) return;
+    
+    const health = state.orgHealth || {};
+    const working = health.working || [];
+    const idle = health.idle || [];
+    const blocked = health.blocked || [];
+    const vacant = health.vacant_positions || [];
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <div style="padding: 1rem; border: 1px solid #16a34a; border-radius: 4px; background: rgba(22, 163, 74, 0.05);">
+                <h4 style="margin: 0 0 0.5rem 0; color: #16a34a;">Working (${working.length})</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    ${working.slice(0, 5).map(a => `<span class="small">${escapeHtml(a.name || a.id)}</span>`).join('')}
+                    ${working.length > 5 ? `<span class="small" style="color: var(--text-muted);">+${working.length - 5} more</span>` : ''}
+                </div>
+            </div>
+            <div style="padding: 1rem; border: 1px solid #f59e0b; border-radius: 4px; background: rgba(245, 158, 11, 0.05);">
+                <h4 style="margin: 0 0 0.5rem 0; color: #f59e0b;">Idle (${idle.length})</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    ${idle.slice(0, 5).map(a => `<span class="small">${escapeHtml(a.name || a.id)}</span>`).join('')}
+                    ${idle.length > 5 ? `<span class="small" style="color: var(--text-muted);">+${idle.length - 5} more</span>` : ''}
+                </div>
+            </div>
+            <div style="padding: 1rem; border: 1px solid #dc2626; border-radius: 4px; background: rgba(220, 38, 38, 0.05);">
+                <h4 style="margin: 0 0 0.5rem 0; color: #dc2626;">Blocked (${blocked.length})</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    ${blocked.slice(0, 5).map(a => `<span class="small">${escapeHtml(a.name || a.id)}</span>`).join('')}
+                    ${blocked.length > 5 ? `<span class="small" style="color: var(--text-muted);">+${blocked.length - 5} more</span>` : ''}
+                </div>
+            </div>
+            <div style="padding: 1rem; border: 1px solid #6b7280; border-radius: 4px; background: rgba(107, 114, 128, 0.05);">
+                <h4 style="margin: 0 0 0.5rem 0; color: #6b7280;">Vacant Positions (${vacant.length})</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    ${vacant.slice(0, 5).map(p => `<span class="small">${escapeHtml(p.title || p.id)}</span>`).join('')}
+                    ${vacant.length > 5 ? `<span class="small" style="color: var(--text-muted);">+${vacant.length - 5} more</span>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Render Review Summary
+function renderReviewSummary() {
+    const container = document.getElementById('review-summary-container');
+    if (!container) return;
+    
+    const summary = state.reviewSummary || {};
+    const grades = summary.grade_distribution || {};
+    const warning = summary.agents_on_warning || [];
+    const risk = summary.agents_at_risk || [];
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <h4>Grade Distribution</h4>
+                <div id="review-grades-chart" style="width: 100%; height: 200px;"></div>
+            </div>
+            <div>
+                <h4>Agents on Warning (${warning.length})</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    ${warning.slice(0, 5).map(a => `
+                        <div style="padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border-radius: 4px;">
+                            <span class="small"><strong>${escapeHtml(a.name || a.id)}</strong></span>
+                            <span class="small" style="color: var(--text-muted);"> - Grade: ${a.grade}</span>
+                        </div>
+                    `).join('')}
+                    ${warning.length > 5 ? `<span class="small" style="color: var(--text-muted);">+${warning.length - 5} more</span>` : ''}
+                </div>
+            </div>
+        </div>
+        <div style="margin-top: 1rem;">
+            <h4>Agents at Risk of Firing (${risk.length})</h4>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                ${risk.slice(0, 5).map(a => `
+                    <div style="padding: 0.5rem; background: rgba(220, 38, 38, 0.1); border-radius: 4px;">
+                        <span class="small"><strong>${escapeHtml(a.name || a.id)}</strong></span>
+                        <span class="small" style="color: var(--text-muted);"> - Grade: ${a.grade}</span>
+                    </div>
+                `).join('')}
+                ${risk.length > 5 ? `<span class="small" style="color: var(--text-muted);">+${risk.length - 5} more</span>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Render Escalation Queue
+function renderEscalationQueue() {
+    const container = document.getElementById('escalation-queue-container');
+    if (!container) return;
+    
+    const escalations = (state.decisions || []).filter(d => d.requires_human === true);
+    if (escalations.length === 0) {
+        container.innerHTML = renderEmptyState('No escalations', 'Human decisions will appear here.');
+        return;
+    }
+    
+    container.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            ${escalations.map(e => `
+                <div style="padding: 1rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                        <h4 style="margin: 0;">${escapeHtml(e.question || e.title || 'Decision')}</h4>
+                        <span class="badge priority-${e.priority || 2}" style="white-space: nowrap;">P${e.priority || 2}</span>
+                    </div>
+                    <p class="small" style="margin: 0.5rem 0; color: var(--text-muted);"><strong>From:</strong> ${escapeHtml(e.requester_id || 'Unknown')}</p>
+                    ${e.recommendation ? `<p class="small" style="margin: 0.5rem 0;"><strong>Recommendation:</strong> ${escapeHtml(e.recommendation)}</p>` : ''}
+                    <button type="button" class="primary" onclick="viewDecision('${escapeHtml(e.id)}')" style="margin-top: 0.5rem; width: 100%;">Review & Decide</button>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}

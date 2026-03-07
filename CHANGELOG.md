@@ -7,6 +7,177 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.26] - 2026-03-03
+
+### Fixed
+- update stale test assertions after dispatcher deprecation and repl error change
+
+## [0.1.25] - 2026-03-03
+
+### Fixed
+- validate log handler params before nil-checking logManager; guard nil Dispatcher
+
+## [0.1.24] - 2026-03-03
+
+### Fixed
+- DefaultConfig HTTP port 8081 → 8080 to match actual server binding
+
+## [0.1.23] - 2026-03-03
+
+### Added
+- Fix: Add graceful degradation to handleConversation for unavailable d...
+- Fix: Add proper test setup for conversation handlers
+- Add composite index on conversation_contexts(project_id, updated_at D...
+- Fix: Add nil check for s.app in conversation handlers
+- Fix P0 API 503 error: Add missing rows.Err() check in ListConversatio...
+- Fix P0 API 503 error: Add timeout context to conversation list query
+- Fix GET /api/v1/conversations 503 error - add missing context and lim...
+- Fix API 503 error in GET /api/v1/conversations - add proper database ...
+- Fix: Add nil checks for logManager in logging API handlers
+- Fix: Add conversation_contexts table to PostgreSQL schema
+- Add Ping() method to Database struct
+- Fix conversation handler context parameter and add retry logic
+- Fix 503 error for GET /api/v1/conversations by adding retry mechanism...
+- Add tests for GET /api/v1/conversations endpoint to verify method han...
+- Fix API failure for GET /api/v1/conversations by adding database conn...
+- Add delay to simulate retry logic in handleConversationsList to addre...
+- Add logging to confirm database connection in handleConversationsList
+- Add return statement after error response in handleConversationsList
+- Add fallback definition for apiCall in LogViewer to handle undefined ...
+- Fix goroutine leaks in Initialize() by adding WaitGroup tracking
+- Add proper defer cleanup in WriteFile error paths
+
+### Changed
+- Improve PostgreSQL connection pool configuration
+- apply go fmt to loom_coverage_test.go
+
+### Fixed
+- remove broken mockApp from conversation tests; use nil app instead
+- goroutine leaks in Ralph loop and motivation engine; propagate context in action handlers
+- Fix nil pointer dereference in handleBeadConversation
+- Fix: ListConversationContextsByProject SQL placeholder issue
+- Fix: ListConversationContextsByProject query formatting for PostgreSQL
+- Fix GET /api/v1/conversations endpoint returning 500 error
+- Fix 503 error on GET /api/v1/conversations - PostgreSQL LIMIT paramet...
+- Fix conversation handler 503 errors and clean up backup files
+- Fix conversations endpoint test expectations
+- Fix P0 API failure: GET /api/v1/conversations gracefully degrades to ...
+- Fix conversation list timeout by avoiding large JSON deserialization
+- Fix 503 error in conversation list handler by using request context
+- Fix handlers_conversation_test.go: align mockApp.GetDatabase() return...
+- Fix: Mock database for conversation handler tests
+- Fix context shadowing in ListConversationContextsByProject
+- Fix conversation list test expectation
+- Fix: Return 503 Service Unavailable on database errors in handleConve...
+- Fix: Initialize EntityMetadata in conversation context retrieval
+- Fix: Use rebind() for ListConversationContextsByProject placeholder c...
+- Fix ListConversationContextsByProject query parameter binding
+- Fix SQL injection vulnerability in ListConversationContextsByProject
+- Fix GET /api/v1/conversations 503 error - PostgreSQL LIMIT parameter ...
+- Fix: Replace undefined parseInt() with inline strconv.Atoi() in conve...
+- Fix type mismatch in handleConversationsList response
+- Fix: Route /api/v1/conversations/ to list handler when no ID provided
+- Fix: Skip conversation migrations for PostgreSQL to prevent SQLite sy...
+- Fix handleConversationsList to gracefully handle nil app/database
+- Fix: Remove invalid PostgreSQL cast syntax from LIMIT clause in ListC...
+- Fix handleConversationsList to return 200 with mock data when app is nil
+- Fix 503 error in ListConversationContextsByProject by casting LIMIT p...
+- Fix: Remove unnecessary db.Ping() call in handleConversationsList
+- Fix conversation handler context parameter bug
+- Fix nil pointer dereference in conversation handlers
+- Fix handleConversationsList: move db.Ping() after nil check
+- Fix: Remove context parameter from ListConversationContextsByProject ...
+- Fix: Remove problematic 2-second sleep from /api/v1/conversations end...
+- Fix API failure for GET /api/v1/conversations by ensuring database co...
+- Fix ReferenceError: apiCall is not defined in LogViewer
+- Fix ReferenceError: apiCall is not defined in LogViewer
+- Fix 'apiCall' reference in logs.js to use the 'apiCall' function from...
+- repair agent-broken app.js (syntax errors, deleted renderProjects, duplicate const)
+- Fix ReferenceError: apiCall is not defined in logs.js
+- Fix port mismatch: change Loom to listen on 8080 instead of 8081
+- remove agent-generated duplicate files (fix_errors.go, loom_shutdown.go)
+- repair multiple agent-introduced syntax errors in loom_lifecycle.go
+- stop paused agents with providers from cycling every Ralph beat
+- Fix defer placement in AuditLogger.LogOperationWithDuration
+- improve error handling in loom_lifecycle.go
+- Fix race condition in readinessMu locking - use defer for proper mute...
+- Fix race condition in EventBus.Close() shutdown sequence
+- resolve go vet errors from agent-generated code
+- add BatchMode=yes to SSH command to prevent interactive auth att...
+
+### Removed
+- harden: remove agent artifacts, fix code holes, add commit guardrails, model tier check
+- Fix P0 API failure: remove hardcoded sleep delays in conversations en...
+
+### Other
+- Reorder conversation handlers: move handleConversationsList before ha...
+- Remove redundant s.app nil checks in conversation handlers
+- Ensure apiCall is correctly referenced in logs.js
+
+## [0.1.22] - 2026-03-01
+
+### Added
+- add agent/model/bead metadata to all agent-generated commits
+- Fix: Add defer statements to db.Close() calls in error paths
+- add circular dependency detection tool
+- Add attemptSelfHeal function to fix missing project readiness issues
+- Add validation for invoke_skill, post_to_board, and vote actions
+- Add ModelHint field to Task struct for model selection hints
+- bd-292: Add workflows, connectors, and persona-editor panels to main SPA
+- Add ephemeralstate, modelselection, and selfoptimization managers to ...
+- Add database migrations for org chart assignments, performance review...
+- expand CEO Command Center with organizational health sections
+- expand CEO Command Center with organizational health sections
+- Add meetings section to UI
+- Phase 4: Add organizational visibility UI sections
+- Add sortColumns function and columnPriority map
+- Add persona endpoint to agent action handler
+- Add Performance Reviews tab with agent grading and accountability
+- Add performance review API endpoints for agent grading and accountabi...
+- Add Blocked column to Kanban board
+- Add Blocked column to Kanban board with styling
+- add Phase 2 handlers for feedback, status, review, and department
+- register meetings API routes in SetupRoutes
+- add GetMeetingsManager accessor method
+- Add tests for collaboration and consensus managers
+- add org chart handler functions with PUT and POST support
+- Replace CEO decision loop with real LLM call
+- add mark-and-sweep recovery for blocked beads
+
+### Changed
+- apply go fmt to loom_coverage_test.go
+- split loom.go into domain-focused files
+- Apply remaining changes: update outputJSON/outputTable signatures and...
+
+### Fixed
+- resolve go vet errors from agent-generated code
+- resolve build errors from remote agent-pushed commits
+- motivation engine blocking + duplicate bead ID + type fixes
+- restore compilable loom package after agent-split file errors
+- Fix port mismatch: change default HTTPPort from 8080 to 8081 to match...
+- Fix: Remove duplicate renderDecisions function declaration
+- Fix indentation error in Loom struct initialization
+- Fix org chart agent population: use RoleName field and UpsertOrgChart...
+- resolve build errors from agent-generated code conflicts
+- DecodeLenient falls back to simple JSON format when frontier models use it
+- correct NewManager call to not pass db parameter
+- resolve container networking to external TokenHub
+
+### Other
+- Enhanced Shutdown function with proper resource cleanup
+- EM: Reset stuck bead loom-kr9e (provider infrastructure failure)
+- EM: Reset stuck bead loom-8tw0 (provider infrastructure failure)
+- bd-291: Mark dispatch package as parked
+- Mark dispatch package as parked
+- bd-291: Move LoopDetector to standalone loopdetector package
+- Remove dispatcher field from Loom struct and all references
+- UI: Reorganize Decisions tab to show human escalations, agent-handled...
+- Wire motivation engine into Initialize - start engine on loom startup
+- Wire meetings, status board, consensus, and collaboration into loom.go
+- Enhance AgentDetailModal with action handlers
+- bd-280: Enhance agent cards with display names, performance grades, a...
+- Wire collaboration and consensus managers into Loom
+
 ## [0.1.21] - 2026-02-27
 
 ### Added

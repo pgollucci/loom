@@ -38,7 +38,10 @@ type SkillFrontmatter struct {
 	Metadata      map[string]interface{} `yaml:"metadata"`
 }
 
-// LoadPersona loads a persona from a directory (SKILL.md format)
+// LoadPersona loads a persona from a directory. Reads up to 3 files:
+// SKILL.md (required), MOTIVATION.md (optional), PERSONALITY.md (optional).
+// The three files are independently evolvable — agents can rewrite any of them
+// to self-optimize after a poor performance review.
 func (m *Manager) LoadPersona(name string) (*models.Persona, error) {
 	personaPath := filepath.Join(m.personaDir, name)
 
@@ -47,22 +50,20 @@ func (m *Manager) LoadPersona(name string) (*models.Persona, error) {
 		return persona, nil
 	}
 
-	// Load SKILL.md (Agent Skills format)
+	// Load SKILL.md (required)
 	skillFile := filepath.Join(personaPath, "SKILL.md")
 	skillContent, err := os.ReadFile(skillFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SKILL.md: %w", err)
 	}
 
-	// Parse frontmatter and body
 	frontmatter, body, err := m.parseSkillMd(string(skillContent))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SKILL.md: %w", err)
 	}
 
-	// Create persona from frontmatter (Agent Skills format)
 	persona := &models.Persona{
-		Name:          name, // Use directory path as unique identifier
+		Name:          name,
 		Description:   frontmatter.Description,
 		Instructions:  body,
 		License:       frontmatter.License,
@@ -73,15 +74,14 @@ func (m *Manager) LoadPersona(name string) (*models.Persona, error) {
 		UpdatedAt:     time.Now(),
 	}
 
-	// Populate deprecated fields for backward compatibility
-	// TODO: Remove after full migration
+	// Populate backward-compat fields
 	persona.Character = frontmatter.Description
 	persona.Mission = body
 
 	if autonomy, ok := frontmatter.Metadata["autonomy_level"].(string); ok {
 		persona.AutonomyLevel = autonomy
 	} else {
-		persona.AutonomyLevel = string(models.AutonomyFull) // Default — Loom agents are autonomous
+		persona.AutonomyLevel = string(models.AutonomyFull)
 	}
 
 	if specialties, ok := frontmatter.Metadata["specialties"].([]interface{}); ok {
@@ -92,10 +92,69 @@ func (m *Manager) LoadPersona(name string) (*models.Persona, error) {
 		}
 	}
 
-	// Cache it
-	m.personas[name] = persona
+	// Extract unique display name from frontmatter
+	if displayName, ok := frontmatter.Metadata["display_name"].(string); ok {
+		persona.AgentDisplayName = displayName
+	}
 
+	// Load MOTIVATION.md (optional)
+	motivationFile := filepath.Join(personaPath, "MOTIVATION.md")
+	if motivContent, err := os.ReadFile(motivationFile); err == nil {
+		persona.Motivation = strings.TrimSpace(string(motivContent))
+		persona.MotivationFile = motivationFile
+	}
+
+	// Load PERSONALITY.md (optional)
+	personalityFile := filepath.Join(personaPath, "PERSONALITY.md")
+	if persContent, err := os.ReadFile(personalityFile); err == nil {
+		persona.PersonalityDesc = strings.TrimSpace(string(persContent))
+		persona.PersonalityFile = personalityFile
+	}
+
+	// Merge all three into the Instructions field so the LLM sees everything
+	persona.Instructions = m.mergePersonaFiles(body, persona.Motivation, persona.PersonalityDesc)
+
+	m.personas[name] = persona
 	return persona, nil
+}
+
+// mergePersonaFiles combines SKILL body, MOTIVATION, and PERSONALITY into a
+// single instructions string for the LLM prompt. Each section is clearly labeled.
+func (m *Manager) mergePersonaFiles(skill, motivation, personality string) string {
+	var sb strings.Builder
+	sb.WriteString(skill)
+	if motivation != "" {
+		sb.WriteString("\n\n---\n\n")
+		sb.WriteString(motivation)
+	}
+	if personality != "" {
+		sb.WriteString("\n\n---\n\n")
+		sb.WriteString(personality)
+	}
+	return sb.String()
+}
+
+// SavePersonaFile writes a single persona file (SKILL.md, MOTIVATION.md, or PERSONALITY.md).
+// Used by the self-optimization system when an agent rewrites its own persona.
+func (m *Manager) SavePersonaFile(personaName, filename, content string) error {
+	personaPath := filepath.Join(m.personaDir, personaName)
+	if _, err := os.Stat(personaPath); os.IsNotExist(err) {
+		return fmt.Errorf("persona directory does not exist: %s", personaName)
+	}
+
+	validFiles := map[string]bool{"SKILL.md": true, "MOTIVATION.md": true, "PERSONALITY.md": true}
+	if !validFiles[filename] {
+		return fmt.Errorf("invalid persona file: %s (must be SKILL.md, MOTIVATION.md, or PERSONALITY.md)", filename)
+	}
+
+	filePath := filepath.Join(personaPath, filename)
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", filename, err)
+	}
+
+	// Invalidate cache so the next load picks up the change
+	m.InvalidateCache(personaName)
+	return nil
 }
 
 // parseSkillMd parses SKILL.md format with YAML frontmatter
@@ -249,11 +308,9 @@ func (m *Manager) extractAutonomyLevel(content string) string {
 	return string(models.AutonomyFull) // default — Loom agents are autonomous
 }
 
-// SavePersona saves a persona back to disk in SKILL.md format
+// SavePersona saves a persona back to disk in SKILL.md format.
 func (m *Manager) SavePersona(persona *models.Persona) error {
-	// TODO: Implement SKILL.md generation with YAML frontmatter
-	// For now, return an error to prevent corruption
-	return fmt.Errorf("SavePersona not yet implemented for SKILL.md format - edit SKILL.md files directly")
+	return fmt.Errorf("SavePersona not yet implemented for SKILL.md format — use SavePersonaFile for individual files")
 }
 
 // generatePersonaContent generates PERSONA.md content from a persona

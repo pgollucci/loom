@@ -144,7 +144,7 @@ services:
       # profile and may not be present. Loom's heartbeat loop retries provider
       # health — if tokenhub isn't up yet (or is external), Loom handles it.
     ports:
-      - "8081:8081"
+      - "8080:8080"
       - "3307:3307"
     environment:
       - LOOM_PASSWORD=${LOOM_PASSWORD:-}            # optional: web UI password; blank = no password
@@ -171,6 +171,7 @@ services:
     networks:
       - loom-network
     extra_hosts:
+      - "host.docker.internal:host-gateway"
       - "plubbit.local:10.11.101.250"
       - "sparky.local:10.11.100.116"
     volumes:
@@ -204,7 +205,7 @@ services:
         condition: service_healthy
     environment:
       - PROJECT_ID=${PROJECT_ID:-loom}
-      - CONTROL_PLANE_URL=http://loom:8081
+      - CONTROL_PLANE_URL=http://loom:8080
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=coder
       - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL (e.g. http://tokenhub:8080/v1)
@@ -238,7 +239,7 @@ services:
         condition: service_healthy
     environment:
       - PROJECT_ID=${PROJECT_ID:-loom}
-      - CONTROL_PLANE_URL=http://loom:8081
+      - CONTROL_PLANE_URL=http://loom:8080
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=reviewer
       - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL
@@ -272,7 +273,7 @@ services:
         condition: service_healthy
     environment:
       - PROJECT_ID=${PROJECT_ID:-loom}
-      - CONTROL_PLANE_URL=http://loom:8081
+      - CONTROL_PLANE_URL=http://loom:8080
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=qa
       - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL
@@ -340,7 +341,7 @@ services:
         condition: service_healthy
     environment:
       - PROJECT_ID=${PROJECT_ID:-loom}
-      - CONTROL_PLANE_URL=http://loom:8081
+      - CONTROL_PLANE_URL=http://loom:8080
       - NATS_URL=nats://nats:4222
       - AGENT_ROLE=public-relations-manager
       - PROVIDER_ENDPOINT=${PROVIDER_ENDPOINT:-}    # required for agents: OpenAI-compatible URL

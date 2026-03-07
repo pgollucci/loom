@@ -18,7 +18,7 @@ func (s *Server) HandleLogsRecent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse query parameters
+	// Parse and validate query parameters before checking service availability.
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100
 	if limitStr != "" {
@@ -35,10 +35,6 @@ func (s *Server) HandleLogsRecent(w http.ResponseWriter, r *http.Request) {
 	beadID := r.URL.Query().Get("bead_id")
 	projectID := r.URL.Query().Get("project_id")
 
-	var logs []logging.LogEntry
-	var err error
-
-	// If 'since' is provided, query from database
 	var since time.Time
 	var until time.Time
 	if sinceStr != "" {
@@ -84,6 +80,12 @@ func (s *Server) HandleLogsRecent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleLogsStream(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check if logging manager is available
+	if s.logManager == nil {
+		http.Error(w, "Logging service not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -204,7 +206,7 @@ func (s *Server) HandleLogsExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse query parameters
+	// Parse and validate query parameters before checking service availability.
 	format := r.URL.Query().Get("format")
 	if format == "" {
 		format = "json"
@@ -235,6 +237,12 @@ func (s *Server) HandleLogsExport(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Invalid 'end_time' parameter: %v", err), http.StatusBadRequest)
 			return
 		}
+	}
+
+	// Check if logging manager is available.
+	if s.logManager == nil {
+		http.Error(w, "Logging service not available", http.StatusServiceUnavailable)
+		return
 	}
 
 	// Query logs
